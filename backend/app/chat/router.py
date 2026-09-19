@@ -1,7 +1,8 @@
 """POST /chat/stream -- SSE chat completion. Depends only on the InferenceBackend
-interface, not a specific backend -- get_backend() is where a `backend` name gets resolved
-to a concrete implementation. Only "api" exists today; llama.cpp/transformers (local,
-requiring model-loading/lifecycle management) are separate follow-ups that plug in there.
+interface, not a specific backend -- get_backend() is where a (`backend`, `model_id`)
+pair gets resolved to a concrete implementation. "api" is remote; "gguf" runs a
+downloaded local file via llama.cpp. transformers (for models without a GGUF build) is
+the remaining follow-up that plugs in there.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ async def _sse_events(
 
 @router.post("/stream")
 def stream_chat(request: ChatRequest) -> StreamingResponse:
-    backend = get_backend(request.backend, get_settings().hf_api_key)
+    backend = get_backend(request.backend, request.model_id, get_settings().hf_api_key)
     return StreamingResponse(
         _sse_events(backend, request.model_id, request.messages),
         media_type="text/event-stream",
