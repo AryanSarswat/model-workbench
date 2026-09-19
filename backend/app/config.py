@@ -8,6 +8,7 @@ machine.
 from __future__ import annotations
 
 import platform
+import subprocess
 
 import psutil
 from pydantic import BaseModel
@@ -38,6 +39,19 @@ class HardwareInfo(BaseModel):
     total_ram_gb: float
     gpu: GPUInfo
 
+    @property
+    def usable_memory_gb(self) -> float:
+        """Memory a model actually gets loaded into, for the feasibility check.
+
+        NVIDIA with known VRAM: the GPU's dedicated memory. Everything else — Apple
+        Silicon (unified memory), no GPU at all, or an NVIDIA card whose VRAM we
+        couldn't read — falls back to system RAM, since that's where the model has
+        to be loaded regardless of whether a GPU is accelerating compute.
+        """
+        if self.gpu.kind == "nvidia" and self.gpu.vram_gb is not None:
+            return self.gpu.vram_gb
+        return self.total_ram_gb
+
 
 def _platform_info() -> tuple[str, str]:
     return platform.system().lower(), platform.machine().lower()
@@ -47,26 +61,35 @@ def _total_ram_gb() -> float:
     return round(psutil.virtual_memory().total / (1024**3), 1)
 
 
+def _detect_nvidia_gpu() -> GPUInfo | None:
+    """Returns GPUInfo if `nvidia-smi` reports a GPU, else None. No torch dependency."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+
+    first_line = result.stdout.strip().splitlines()[0]
+    name, vram_mib = (part.strip() for part in first_line.split(","))
+    return GPUInfo(kind="nvidia", name=name, vram_gb=round(float(vram_mib) / 1024, 1))
+
+
 def _detect_gpu() -> GPUInfo:
-    # TODO(human): detect available GPU acceleration and return a GPUInfo.
-    #
-    # This feeds the feasibility check in design doc §8 ("comfortable / tight / wont_fit"),
-    # so it needs to distinguish:
-    #   - Apple Silicon (darwin + arm64): unified memory, so there's no separate VRAM figure —
-    #     return GPUInfo(kind="apple_silicon", vram_gb=None) and the feasibility checker will
-    #     use total_ram_gb instead.
-    #   - NVIDIA GPU present: return GPUInfo(kind="nvidia", name=..., vram_gb=...).
-    #   - Nothing usable: return GPUInfo(kind="none").
-    #
-    # Constraint: keep this dependency-light. We deliberately did NOT add torch to this
-    # module's dependencies just to ask "is there a GPU" — that's a huge install for a
-    # yes/no question. Consider subprocess-ing `nvidia-smi` (already on the PATH on any
-    # machine with an NVIDIA driver installed) for the NVIDIA case, e.g.:
-    #   nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits
-    # and platform.system()/platform.machine() (see _platform_info above) for Apple Silicon.
-    # Handle the "nvidia-smi not found" case (FileNotFoundError) as kind="none" on non-NVIDIA
-    # machines rather than raising.
-    raise NotImplementedError
+    system, machine = _platform_info()
+    if system == "darwin" and machine == "arm64":
+        # Unified memory — no separate VRAM figure; feasibility checks use total_ram_gb.
+        return GPUInfo(kind="apple_silicon", vram_gb=None)
+
+    nvidia_gpu = _detect_nvidia_gpu()
+    if nvidia_gpu is not None:
+        return nvidia_gpu
+
+    return GPUInfo(kind="none")
 
 
 def get_hardware_info() -> HardwareInfo:
