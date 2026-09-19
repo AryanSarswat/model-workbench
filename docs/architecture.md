@@ -89,12 +89,23 @@ needs real aggregation (`GROUP BY model, backend, category`).
 ```python
 class InferenceBackend(Protocol):
     def capabilities(self) -> BackendCapabilities: ...
-    async def stream_chat(self, messages, tools=None, output_schema=None) -> AsyncIterator[ChatChunk]: ...
+    def stream_chat(self, model_id: str, messages: list[ChatMessage]) -> AsyncIterator[ChatChunk]: ...
 ```
 
-Three implementations: `LlamaCppBackend` (GGUF via llama-cpp-python, runs on any hardware),
-`TransformersBackend` (fallback for models without a GGUF build; MPS/CUDA/CPU
-auto-detected), `HFInferenceAPIBackend` (remote, via `huggingface_hub.InferenceClient`).
+`tools`/`output_schema` params are added once tool calling and structured output land —
+left off for now rather than accepted-and-ignored.
+
+Three implementations, one built so far: `HFInferenceAPIBackend` (remote, via
+`huggingface_hub.AsyncInferenceClient` — genuinely async, so a slow provider response
+doesn't block the event loop; which `model_id`s actually work depends on HF routing to an
+enabled provider, surfaced as a normal 4xx rather than a crash). `LlamaCppBackend` (GGUF via
+llama-cpp-python, runs on any hardware) and `TransformersBackend` (fallback for models
+without a GGUF build; MPS/CUDA/CPU auto-detected) are still planned — both need
+model-loading/lifecycle management the remote backend doesn't.
+
+`POST /chat/stream` wires the HF API backend to an SSE endpoint today (no session
+persistence yet — `chat_sessions`/`chat_messages` and `GET/DELETE /chat/sessions[/{id}]`
+are a separate follow-up once there's more than one backend to make sessions worth having).
 
 **Structured output:**
 
