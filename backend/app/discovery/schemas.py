@@ -14,3 +14,12 @@ class DiscoveredModel(BaseModel):
     trending_score: float | None = None
     created_at: datetime | None = None
     gated: bool | str | None = None  # HF returns False, or a string reason like "auto"/"manual"
+
+
+class GgufFile(BaseModel):
+    filename: str
+    size_bytes: int
+
+
+class ModelDetail(DiscoveredModel):
+    gguf_files: list[GgufFile] = []
