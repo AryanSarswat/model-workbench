@@ -23,6 +23,9 @@ def _fake_model(**overrides):
         "trending_score": 91.2,
         "created_at": datetime(2024, 1, 1, tzinfo=UTC),
         "gated": False,
+        "tags": ["text-generation", "conversational"],
+        "library_name": "transformers",
+        "safetensors": None,
     }
     return SimpleNamespace(**{**defaults, **overrides})
 
@@ -45,6 +48,8 @@ def test_maps_hub_fields_onto_discovered_model():
     assert result.id == "meta-llama/Llama-3-8B"
     assert result.downloads == 12345
     assert result.trending_score == 91.2
+    assert result.library_name == "transformers"
+    assert result.tags == ["text-generation", "conversational"]
 
 
 def test_hub_connection_failure_becomes_workbench_error():
