@@ -89,8 +89,8 @@ def run_download(job_id: int, repo_id: str, filename: str) -> None:
 
 def run_snapshot_download(job_id: int, repo_id: str, files: list[SnapshotFile]) -> None:
     """Downloads every file of a transformers snapshot into `models/<repo>/snapshot/`,
-    preserving repo-relative subdirectories. The job row's `filename` tracks the file
-    currently downloading; `percent` is aggregate bytes over the summed Hub sizes
+    preserving repo-relative subdirectories. The job row's `current_file` tracks the
+    file being downloaded; `percent` is aggregate bytes over the summed Hub sizes
     (files with unknown size contribute bytes but no total -- percent clamps at 99
     until the job completes, so it never reads 100% early)."""
     with Session(engine) as session:
@@ -120,7 +120,7 @@ def run_snapshot_download(job_id: int, repo_id: str, files: list[SnapshotFile]) 
         try:
             for index, snapshot_file in enumerate(files, start=1):
                 label = f"file {index}/{len(files)}: {snapshot_file.filename}"
-                job.filename = snapshot_file.filename
+                job.current_file = snapshot_file.filename
                 job.detail = label
                 _save(session, job)
 

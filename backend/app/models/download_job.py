@@ -10,7 +10,9 @@ class DownloadJob(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     repo_id: str = Field(index=True)
-    filename: str
+    kind: str = "gguf"  # "gguf" | "snapshot" -- what was requested
+    filename: str | None = None  # the requested GGUF file; None for snapshots
+    current_file: str | None = None  # file currently downloading (snapshots only)
     status: str = "pending"  # "pending" | "downloading" | "completed" | "failed"
     percent: float = 0.0
     detail: str = "queued"

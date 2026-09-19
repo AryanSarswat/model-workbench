@@ -27,7 +27,7 @@ def _use_test_db(tmp_path, monkeypatch):
 
 def _seed_job() -> int:
     with Session(_test_engine) as session:
-        job = DownloadJob(repo_id="org/model", filename="")
+        job = DownloadJob(repo_id="org/model", kind="snapshot")
         session.add(job)
         session.commit()
         session.refresh(job)
@@ -94,7 +94,9 @@ def test_run_snapshot_download_success_with_aggregated_progress(tmp_path, monkey
         job = session.get(DownloadJob, job_id)
         assert job.status == "completed"
         assert job.percent == 100.0
-        assert job.filename == "data/vocab.txt"
+        assert job.kind == "snapshot"
+        assert job.filename is None
+        assert job.current_file == "data/vocab.txt"
         assert job.downloaded_model_id is not None
 
         record = session.get(DownloadedModelRecord, job.downloaded_model_id)

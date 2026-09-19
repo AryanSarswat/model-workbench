@@ -95,7 +95,7 @@ def start_download(
                 code="no_transformers_snapshot",
                 message=f"'{model_id}' has no non-GGUF files to snapshot.",
             )
-        job = _create_job(session, model_id, "")
+        job = _create_job(session, model_id, kind="snapshot")
         background_tasks.add_task(run_snapshot_download, job.id, model_id, files)
         return job
 
@@ -109,15 +109,15 @@ def start_download(
             details={"available": sorted(available)},
         )
 
-    job = _create_job(session, model_id, body.filename)
+    job = _create_job(session, model_id, kind="gguf", filename=body.filename)
     background_tasks.add_task(run_download, job.id, model_id, body.filename)
     return job
 
 
-def _create_job(session: Session, repo_id: str, filename: str) -> DownloadJob:
-    """A snapshot job starts with an empty filename -- the service updates it to the
-    file currently downloading, so it always names something real once running."""
-    job = DownloadJob(repo_id=repo_id, filename=filename)
+def _create_job(
+    session: Session, repo_id: str, kind: str, filename: str | None = None
+) -> DownloadJob:
+    job = DownloadJob(repo_id=repo_id, kind=kind, filename=filename)
     session.add(job)
     session.commit()
     session.refresh(job)

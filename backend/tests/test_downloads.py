@@ -165,7 +165,8 @@ def test_start_snapshot_download_creates_job_and_schedules_task():
     assert response.status_code == 202
     body = response.json()
     assert body["status"] == "pending"
-    assert body["filename"] == ""
+    assert body["kind"] == "snapshot"
+    assert body["filename"] is None
     assert scheduled["args"] == (body["id"], "org/model", files)
 
 
