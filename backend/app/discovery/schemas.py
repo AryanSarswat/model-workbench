@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -27,3 +28,15 @@ class ModelDetail(DiscoveredModel):
     gguf_files: list[GgufFile] = []
     parameter_count: int | None = None
     dtype: str | None = None  # dominant dtype from safetensors metadata, e.g. "BF16"
+
+
+class FeasibilityOption(BaseModel):
+    label: str  # a GGUF filename, or e.g. "transformers (BF16)"
+    verdict: Literal["comfortable", "tight", "wont_fit"]
+    estimated_memory_gb: float
+    reason: str
+
+
+class FeasibilityReport(BaseModel):
+    available_memory_gb: float
+    options: list[FeasibilityOption]
