@@ -1,8 +1,8 @@
 """POST /chat/stream -- SSE chat completion. Depends only on the InferenceBackend
 interface, not a specific backend -- get_backend() is where a (`backend`, `model_id`)
 pair gets resolved to a concrete implementation. "api" is remote; "gguf" runs a
-downloaded local file via llama.cpp. transformers (for models without a GGUF build) is
-the remaining follow-up that plugs in there.
+downloaded GGUF file via llama.cpp; "transformers" runs a downloaded snapshot via
+transformers (for models without a GGUF build).
 """
 
 from __future__ import annotations
