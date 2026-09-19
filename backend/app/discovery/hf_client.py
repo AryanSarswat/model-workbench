@@ -9,7 +9,7 @@ from typing import Any, Literal
 from huggingface_hub import list_models, model_info
 from huggingface_hub.errors import HTTPError, RepositoryNotFoundError
 
-from app.discovery.schemas import DiscoveredModel, GgufFile, ModelDetail
+from app.discovery.schemas import DiscoveredModel, GgufFile, ModelDetail, SnapshotFile
 from app.errors import WorkbenchError
 
 _SORT_BY: dict[str, str] = {
@@ -72,21 +72,7 @@ def list_discoverable_models(
 def get_model_detail(model_id: str) -> ModelDetail:
     """Model detail including any GGUF files available in the repo, for the download step
     to offer as a local-run option."""
-    try:
-        model = model_info(model_id, files_metadata=True)
-    except RepositoryNotFoundError as e:
-        raise WorkbenchError(
-            status_code=404,
-            code="model_not_found",
-            message=f"No model found on the Hugging Face Hub with id '{model_id}'.",
-        ) from e
-    except HTTPError as e:
-        raise WorkbenchError(
-            status_code=502,
-            code="hf_hub_unreachable",
-            message="Could not reach the Hugging Face Hub to fetch model details.",
-            details={"original_error": str(e)},
-        ) from e
+    model = _fetch_model_info(model_id)
 
     gguf_files = [
         GgufFile(filename=sibling.rfilename, size_bytes=sibling.size)
@@ -100,3 +86,34 @@ def get_model_detail(model_id: str) -> ModelDetail:
         parameter_count=parameter_count,
         dtype=dtype,
     )
+
+
+def get_snapshot_files(model_id: str) -> list[SnapshotFile]:
+    """Every non-GGUF file in the repo -- the transformers snapshot. GGUF has its own
+    single-file download flow, so it's excluded here rather than downloaded twice."""
+    model = _fetch_model_info(model_id)
+    return [
+        SnapshotFile(filename=sibling.rfilename, size_bytes=sibling.size)
+        for sibling in model.siblings or []
+        if not sibling.rfilename.endswith(".gguf")
+    ]
+
+
+def _fetch_model_info(model_id: str) -> Any:
+    """model_info with files_metadata, mapping Hub errors to WorkbenchErrors -- shared
+    by the detail view and the snapshot file listing so the mapping lives in one place."""
+    try:
+        return model_info(model_id, files_metadata=True)
+    except RepositoryNotFoundError as e:
+        raise WorkbenchError(
+            status_code=404,
+            code="model_not_found",
+            message=f"No model found on the Hugging Face Hub with id '{model_id}'.",
+        ) from e
+    except HTTPError as e:
+        raise WorkbenchError(
+            status_code=502,
+            code="hf_hub_unreachable",
+            message="Could not reach the Hugging Face Hub to fetch model details.",
+            details={"original_error": str(e)},
+        ) from e

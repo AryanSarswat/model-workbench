@@ -24,6 +24,15 @@ class GgufFile(BaseModel):
     size_bytes: int
 
 
+class SnapshotFile(BaseModel):
+    """One file of a transformers snapshot -- repo-relative path, which may include
+    subdirectories. size_bytes is None when the Hub reports no size; progress totals
+    treat it as 0 rather than refusing the download."""
+
+    filename: str
+    size_bytes: int | None = None
+
+
 class ModelDetail(DiscoveredModel):
     gguf_files: list[GgufFile] = []
     parameter_count: int | None = None

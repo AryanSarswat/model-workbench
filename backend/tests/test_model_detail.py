@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from huggingface_hub.errors import HTTPError, RepositoryNotFoundError
 
-from app.discovery.hf_client import get_model_detail
+from app.discovery.hf_client import get_model_detail, get_snapshot_files
 from app.discovery.schemas import ModelDetail
 from app.errors import WorkbenchError
 from app.main import app
@@ -60,6 +60,23 @@ def test_get_model_detail_leaves_parameter_info_none_without_safetensors():
         detail = get_model_detail("meta-llama/Llama-3-8B")
     assert detail.parameter_count is None
     assert detail.dtype is None
+
+
+def test_get_snapshot_files_excludes_gguf_and_keeps_the_rest():
+    model = _fake_model(
+        siblings=[
+            _sibling("model.gguf", size=4096),
+            _sibling("config.json", size=100),
+            _sibling("tokenizer.json", size=None),
+        ]
+    )
+    with patch("app.discovery.hf_client.model_info", return_value=model):
+        files = get_snapshot_files("org/model")
+
+    assert [(f.filename, f.size_bytes) for f in files] == [
+        ("config.json", 100),
+        ("tokenizer.json", None),
+    ]
 
 
 def test_get_model_detail_raises_404_for_missing_repo():
