@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.chat.router import router as chat_router
 from app.db import init_db
 from app.discovery.router import router as discovery_router
 from app.downloads.router import router as downloads_router
@@ -24,6 +25,7 @@ app = FastAPI(title="model-workbench", lifespan=lifespan)
 # within discovery/router.py itself; see its route-ordering comment).
 app.include_router(downloads_router)
 app.include_router(discovery_router)
+app.include_router(chat_router)
 
 
 @app.exception_handler(WorkbenchError)
