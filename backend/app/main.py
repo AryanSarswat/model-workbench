@@ -11,6 +11,7 @@ from app.db import init_db
 from app.discovery.router import router as discovery_router
 from app.downloads.router import router as downloads_router
 from app.errors import WorkbenchError
+from app.tools.router import router as tools_router
 
 
 @asynccontextmanager
@@ -26,6 +27,7 @@ app = FastAPI(title="model-workbench", lifespan=lifespan)
 app.include_router(downloads_router)
 app.include_router(discovery_router)
 app.include_router(chat_router)
+app.include_router(tools_router)
 
 
 @app.exception_handler(WorkbenchError)
