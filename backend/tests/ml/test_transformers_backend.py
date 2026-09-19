@@ -7,6 +7,7 @@ import torch
 from app.inference import transformers_backend
 from app.inference.schemas import ChatChunk, ChatMessage
 from app.inference.transformers_backend import TransformersBackend
+from app.tools import get_tool
 
 pytestmark = pytest.mark.ml
 
@@ -103,6 +104,56 @@ def _run_stream_chat(backend: TransformersBackend) -> list[ChatChunk]:
         return [chunk async for chunk in backend.stream_chat("org/model", messages)]
 
     return asyncio.run(_collect())
+
+
+def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
+    scripted = iter(
+        [
+            '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+            '{"reply": "the answer is 5"}',
+        ]
+    )
+    prompts = []
+
+    class _ToolTokenizer(_FakeTokenizer):
+        def apply_chat_template(self, messages, **kwargs):
+            assert kwargs["add_generation_prompt"] is True
+            assert kwargs["tokenize"] is False
+            self.applied_messages = messages
+            return "BASE PROMPT"
+
+        def __call__(self, text, **kwargs):
+            prompts.append(text)
+            return _FakeEncoding(input_ids=[[1, 2]])
+
+        def decode(self, ids, **kwargs):
+            assert kwargs["skip_special_tokens"] is True
+            return next(scripted)
+
+    class _ToolModel(_FakeModel):
+        def generate(self, **kwargs):
+            assert "streamer" not in kwargs
+            return [[1, 2, 3, 4]]
+
+    _install_fakes(monkeypatch)
+    monkeypatch.setattr(transformers_backend, "AutoTokenizer", _ToolTokenizer)
+    monkeypatch.setattr(transformers_backend, "AutoModelForCausalLM", _ToolModel)
+    backend = TransformersBackend("/tmp/snapshot")
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
+        tools = [get_tool("calculator").spec]
+        return [chunk async for chunk in backend.stream_chat("org/model", messages, tools=tools)]
+
+    chunks = asyncio.run(_collect())
+
+    # The whole loop resolves to one delta + done (tools mode never streams).
+    assert [c.delta for c in chunks] == ['{"reply": "the answer is 5"}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+    # The prompt was templated once, and the calculator result fed the next turn.
+    assert _ToolTokenizer.instances[0].applied_messages[0]["role"] == "system"
+    assert any("Tool 'calculator' returned: 5" in prompt for prompt in prompts)
 
 
 def test_capabilities_report_guided_and_native_tool_calling():

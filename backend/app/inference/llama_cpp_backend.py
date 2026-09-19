@@ -10,13 +10,16 @@ recently used model simply stays resident.
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 from llama_cpp import Llama
 
+from app.errors import WorkbenchError
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
+from app.tools import ToolSpec, get_tool
 
 _CACHE: dict[str, Llama] = {}
 _CACHE_LOCK = threading.Lock()
@@ -40,16 +43,86 @@ class LlamaCppBackend:
                 _CACHE[self._model_path] = llama
             return llama
 
+    async def _run_native_tool_loop(
+        self, llama: Llama, messages: list[ChatMessage], tools: list[ToolSpec]
+    ) -> str:
+        """Drive non-streamed chat turns until the model answers without tool calls.
+
+        History is plain dicts (converted once from ChatMessage at entry) so the
+        "tool"-role result messages -- which the public ChatMessage schema has no
+        variant for -- can ride along. A failing tool yields an "Error: ..." result
+        string, never a loop crash. Exhausted turns return the last content seen.
+        """
+        history: list[dict] = [m.model_dump() for m in messages]
+        # OpenAI tool shape -- llama-cpp-python reads tool["function"], so a bare
+        # spec dict would KeyError (or be silently filtered) inside the library.
+        tool_schemas = [{"type": "function", "function": spec.model_dump()} for spec in tools]
+        last_content = ""
+        for _ in range(5):
+            response = await asyncio.to_thread(
+                llama.create_chat_completion,
+                messages=history,
+                tools=tool_schemas,
+                tool_choice="auto",
+                stream=False,
+            )
+            message = response["choices"][0]["message"]
+            if message.get("content"):
+                last_content = message["content"]
+            tool_calls = message.get("tool_calls") or []
+            if not tool_calls:
+                return message.get("content") or ""
+            history.append(dict(message))
+            for call in tool_calls:
+                function = call.get("function") or {}
+                name = function.get("name", "")
+                args = function.get("arguments", {})
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except json.JSONDecodeError:
+                        args = None
+                if not isinstance(args, dict):
+                    result = f"Error: invalid arguments for tool '{name}': expected a JSON object"
+                else:
+                    try:
+                        result = await get_tool(name).run(args)
+                    except WorkbenchError as e:
+                        result = f"Error: {e.message}"
+                    except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
+                        result = f"Error: {e}"
+                history.append(
+                    {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
+                )
+        return last_content
+
     async def aclose(self) -> None:
         """No-op -- the cached Llama stays loaded for the next turn. The chat router
         still calls this (it closes whatever backend get_backend() returned), so the
         method exists for Protocol conformance, not because there's anything to free."""
 
     async def stream_chat(
-        self, model_id: str, messages: list[ChatMessage]
+        self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
     ) -> AsyncIterator[ChatChunk]:
         # model_id is Protocol compat only -- the registry already bound this backend
         # to a specific local file, so there's nothing left to resolve per request.
+        if tools:
+            # Tools mode runs non-streamed turns and yields the final reply as one
+            # delta + done: tool-calling turns can't stream partial tool calls
+            # honestly, so nothing streams until the loop resolves to final text.
+            try:
+                llama = await asyncio.to_thread(self._get_llama)
+            except Exception as e:  # noqa: BLE001 -- same terminal shape as below
+                yield ChatChunk(done=True, error=f"failed to load {self._model_path}: {e}")
+                return
+            try:
+                final = await self._run_native_tool_loop(llama, messages, tools)
+            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
+                yield ChatChunk(done=True, error=str(e))
+                return
+            yield ChatChunk(delta=final)
+            yield ChatChunk(done=True)
+            return
         try:
             llama = await asyncio.to_thread(self._get_llama)
         except Exception as e:  # noqa: BLE001 -- any load failure becomes a terminal

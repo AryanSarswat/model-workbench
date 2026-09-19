@@ -43,7 +43,7 @@ def test_stream_chat_gguf_without_download_returns_404(monkeypatch):
 
 
 def test_stream_chat_streams_sse_events_from_the_backend():
-    async def fake_stream_chat(self, model_id, messages):
+    async def fake_stream_chat(self, model_id, messages, tools=None):
         yield ChatChunk(delta="Hel")
         yield ChatChunk(delta="lo")
         yield ChatChunk(done=True)
@@ -69,7 +69,7 @@ def test_stream_chat_closes_the_backend_after_streaming():
     request -- leaving it open would leak a connection on every chat request."""
     closed = []
 
-    async def fake_stream_chat(self, model_id, messages):
+    async def fake_stream_chat(self, model_id, messages, tools=None):
         yield ChatChunk(done=True)
 
     async def fake_aclose(self):
@@ -83,3 +83,28 @@ def test_stream_chat_closes_the_backend_after_streaming():
         client.post("/chat/stream", json=_REQUEST)
 
     assert closed == [True]
+
+
+def test_stream_chat_passes_resolved_tool_specs_to_the_backend():
+    seen = {}
+
+    async def fake_stream_chat(self, model_id, messages, tools=None):
+        seen["tools"] = tools
+        yield ChatChunk(done=True)
+
+    with (
+        patch("app.chat.router.get_settings", return_value=Settings(hf_api_key="fake-key")),
+        patch("app.inference.hf_api_backend.HFInferenceAPIBackend.stream_chat", fake_stream_chat),
+    ):
+        response = client.post("/chat/stream", json={**_REQUEST, "tools": ["calculator"]})
+
+    assert response.status_code == 200
+    assert [spec.name for spec in seen["tools"]] == ["calculator"]
+
+
+def test_stream_chat_rejects_unknown_tool_name():
+    with patch("app.chat.router.get_settings", return_value=Settings(hf_api_key="fake-key")):
+        response = client.post("/chat/stream", json={**_REQUEST, "tools": ["nope"]})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "unknown_tool"

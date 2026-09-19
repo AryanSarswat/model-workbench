@@ -91,18 +91,18 @@ needs real aggregation (`GROUP BY model, backend, category`).
 ```python
 class InferenceBackend(Protocol):
     def capabilities(self) -> BackendCapabilities: ...
-    async def stream_chat(self, model_id: str, messages: list[ChatMessage]) -> AsyncIterator[ChatChunk]: ...
+    async def stream_chat(self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None) -> AsyncIterator[ChatChunk]: ...
     async def aclose(self) -> None: ...
 ```
 
-`tools`/`output_schema` params are added once tool calling and structured output land —
-left off for now rather than accepted-and-ignored. `get_backend(name, ...)` in
+`output_schema` is added once structured output lands — left off for now rather than
+accepted-and-ignored. `get_backend(name, ...)` in
 `app/inference/registry.py` resolves a request's `backend` field to a concrete
 implementation; `POST /chat/stream` calls that instead of importing a specific backend
 class, so it's the one thing that has to change when a new backend is added, not every
 caller.
 
-Three implementations, two built so far: `HFInferenceAPIBackend` (remote, via
+Three implementations: `HFInferenceAPIBackend` (remote, via
 `huggingface_hub.AsyncInferenceClient` — genuinely async, so a slow provider response
 doesn't block the event loop; which `model_id`s actually work depends on HF routing to an
 enabled provider, surfaced as a normal 4xx rather than a crash). `LlamaCppBackend` (GGUF via
@@ -130,14 +130,16 @@ backend to make sessions worth having.
 `capabilities()` reports which mode is active, so a response can be labeled
 "grammar-enforced" vs "best-effort" — this feeds eval assertions too.
 
-**Tool calling:** tools live in `backend/app/tools/` (below). If the model's chat template
-natively supports `tools=[...]`, we use it; otherwise `PromptJsonRetrier` handles a
-`{tool_call: {...}} | {reply: string}` schema — the same retry/error-feedback loop used for
-structured-output fallback, not a separate code path. On a tool call, we execute the
-function, append the result as a `tool`-role message, and continue, up to
-`max_tool_iterations` (default 5). Every response records `tool_calling_mode`
-(`native`/`fallback`/`failed`) and `structured_output_mode`, plus retry counts — these
-double as eval signals for free.
+**Tool calling:** tools live in `backend/app/tools/` (below). llama.cpp uses native
+`tools=[...]` (`tool_choice="auto"`); the other backends run the shared `run_tool_loop`
+over `PromptJsonRetrier`'s `{"tool": ..., "arguments": {...}} | {"reply": ...}` schema —
+the same retry/error-feedback loop as the structured-output fallback, not a separate
+code path. On a tool call, we execute the function, append the result, and continue, up
+to `max_iterations` (default 5) model turns. Fallback-loop traffic rides as user-role
+messages so `ChatMessage` stays `system|user|assistant` (only llama.cpp's native loop
+uses `tool`-role dicts, internally). Tool-calling turns are non-streamed; the final
+reply yields as one delta + done. `tool_calling_mode` recording is deferred to the eval
+engine, which is where the signal gets consumed.
 
 ## Shared tools directory
 
@@ -145,14 +147,15 @@ double as eval signals for free.
 keep in sync:
 
 ```python
-TOOL_SPEC = ToolSpec(name="calculator", description="...", args_schema={...})
-async def run(args: dict) -> Any: ...
+TOOL_SPEC = ToolSpec(name="calculator", description="...", parameters={...})
+async def run(args: dict) -> str: ...
 ```
 
-Add = new file. Modify = edit + `POST /tools/reload`. Delete = remove file + reload. A chat
-or eval request can filter to a subset via `tool_names: [...]`, so a new tool can be tested
-against one model without exposing it everywhere else. Filesystem-based management only —
-no in-app source editor (deliberate simplicity choice).
+Add = new file (+ one line in `_TOOL_MODULE_NAMES`). Modify = edit + `POST /tools/reload`.
+Delete = remove file + reload. A chat request filters to a subset via `tools: [...]`
+(tool names), so a new tool can be tested against one model without exposing it
+everywhere else. Filesystem-based management only — no in-app source editor
+(deliberate simplicity choice).
 
 ## Eval engine
 

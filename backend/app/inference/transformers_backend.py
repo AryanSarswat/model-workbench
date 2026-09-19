@@ -22,6 +22,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
+from app.inference.structured_output import PromptJsonRetrier
+from app.inference.tool_loop import run_tool_loop
+from app.tools import ToolSpec
 
 _CACHE: dict[str, tuple[AutoModelForCausalLM, AutoTokenizer]] = {}
 _CACHE_LOCK = threading.Lock()
@@ -66,8 +69,46 @@ class TransformersBackend:
         still calls this (it closes whatever backend get_backend() returned), so the
         method exists for Protocol conformance, not because there's anything to free."""
 
+    async def _run_fallback_tool_loop(
+        self,
+        model: AutoModelForCausalLM,
+        tokenizer: AutoTokenizer,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec],
+    ) -> str:
+        """Drive the shared prompt-and-retry tool loop with non-streamed generation.
+
+        The full prompt text is built ONCE via the chat template; each loop turn
+        then appends prior turns and tool results as plain text blocks instead of
+        re-applying the template, which would re-render generation prompts
+        mid-conversation. Blocking generate calls run on worker threads.
+        """
+        prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools)
+        conversation = await asyncio.to_thread(
+            tokenizer.apply_chat_template,
+            [m.model_dump() for m in prompt_messages],
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+        # The template render above already contains every message in history's
+        # initial state (prompt_messages), so only later loop turns get appended.
+        rendered = len(prompt_messages)
+
+        async def _generate(history: list[ChatMessage]) -> str:
+            nonlocal conversation, rendered
+            for message in history[rendered:]:
+                conversation += f"\n{message.role}: {message.content}\n"
+            rendered = len(history)
+            inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
+            inputs = inputs.to(self._device)
+            input_len = len(inputs["input_ids"][0])
+            outputs = await asyncio.to_thread(model.generate, **inputs)
+            return tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
+
+        return await run_tool_loop(_generate, prompt_messages, tools)
+
     async def stream_chat(
-        self, model_id: str, messages: list[ChatMessage]
+        self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
     ) -> AsyncIterator[ChatChunk]:
         # model_id is Protocol compat only -- the registry already bound this backend
         # to a specific snapshot dir, so there's nothing left to resolve per request.
@@ -76,6 +117,18 @@ class TransformersBackend:
         except Exception as e:  # noqa: BLE001 -- any load failure becomes a terminal
             # error chunk, never a mid-stream traceback (same contract as other backends)
             yield ChatChunk(done=True, error=f"failed to load {self._snapshot_dir}: {e}")
+            return
+        if tools:
+            # Tools mode runs non-streamed turns and yields the final reply as one
+            # delta + done: tool-calling turns can't stream partial tool calls
+            # honestly, so nothing streams until the loop resolves to final text.
+            try:
+                final = await self._run_fallback_tool_loop(model, tokenizer, messages, tools)
+            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
+                yield ChatChunk(done=True, error=str(e))
+                return
+            yield ChatChunk(delta=final)
+            yield ChatChunk(done=True)
             return
         try:
             inputs = tokenizer.apply_chat_template(

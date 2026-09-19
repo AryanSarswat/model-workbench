@@ -11,6 +11,9 @@ from huggingface_hub import AsyncInferenceClient
 from huggingface_hub.errors import HTTPError
 
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
+from app.inference.structured_output import PromptJsonRetrier
+from app.inference.tool_loop import run_tool_loop
+from app.tools import ToolSpec
 
 
 class HFInferenceAPIBackend:
@@ -27,9 +30,40 @@ class HFInferenceAPIBackend:
         request in the chat router -- callers must close it or the pool leaks."""
         await self._client.close()
 
+    async def _generate_text(self, model_id: str, messages: list[ChatMessage]) -> str:
+        """One non-streamed model turn for the fallback tool loop. HTTPError (and any
+        other failure) propagates to the tools branch of stream_chat, which reports
+        it as a terminal error chunk -- the same treatment as the streaming path."""
+        completion = await self._client.chat_completion(
+            messages=[m.model_dump() for m in messages],
+            model=model_id,
+            stream=False,
+        )
+        return completion.choices[0].message.content or ""
+
     async def stream_chat(
-        self, model_id: str, messages: list[ChatMessage]
+        self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
     ) -> AsyncIterator[ChatChunk]:
+        if tools:
+            # Tools mode runs non-streamed turns and yields the final reply as one
+            # delta + done: tool-calling turns can't stream partial tool calls
+            # honestly, so nothing streams until the loop resolves to final text.
+            try:
+                prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools)
+
+                async def _generate(history: list[ChatMessage]) -> str:
+                    return await self._generate_text(model_id, history)
+
+                final = await run_tool_loop(_generate, prompt_messages, tools)
+            except HTTPError as e:
+                yield ChatChunk(done=True, error=str(e))
+                return
+            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
+                yield ChatChunk(done=True, error=str(e))
+                return
+            yield ChatChunk(delta=final)
+            yield ChatChunk(done=True)
+            return
         try:
             stream = await self._client.chat_completion(
                 messages=[m.model_dump() for m in messages],
