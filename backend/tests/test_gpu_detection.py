@@ -1,7 +1,7 @@
 import subprocess
 from unittest.mock import patch
 
-from app.config import GPUInfo, _detect_gpu, _detect_nvidia_gpu, get_hardware_info
+from app.config import GPUInfo, HardwareInfo, _detect_gpu, _detect_nvidia_gpu, get_hardware_info
 
 
 def test_detect_nvidia_gpu_returns_none_when_nvidia_smi_missing():
@@ -37,3 +37,30 @@ def test_get_hardware_info_assembles_real_hardware_snapshot():
     info = get_hardware_info()
     assert info.total_ram_gb > 0
     assert info.gpu.kind in {"apple_silicon", "nvidia", "none"}
+
+
+def test_usable_memory_uses_system_ram_without_a_gpu():
+    info = HardwareInfo(
+        platform="linux", arch="x86_64", total_ram_gb=16.0, gpu=GPUInfo(kind="none")
+    )
+    assert info.usable_memory_gb == 16.0
+
+
+def test_usable_memory_uses_system_ram_for_apple_silicon():
+    info = HardwareInfo(
+        platform="darwin",
+        arch="arm64",
+        total_ram_gb=24.0,
+        gpu=GPUInfo(kind="apple_silicon", vram_gb=None),
+    )
+    assert info.usable_memory_gb == 24.0
+
+
+def test_usable_memory_uses_vram_for_nvidia():
+    info = HardwareInfo(
+        platform="linux",
+        arch="x86_64",
+        total_ram_gb=32.0,
+        gpu=GPUInfo(kind="nvidia", name="RTX 4090", vram_gb=24.0),
+    )
+    assert info.usable_memory_gb == 24.0

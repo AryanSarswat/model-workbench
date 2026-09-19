@@ -39,6 +39,19 @@ class HardwareInfo(BaseModel):
     total_ram_gb: float
     gpu: GPUInfo
 
+    @property
+    def usable_memory_gb(self) -> float:
+        """Memory a model actually gets loaded into, for the feasibility check.
+
+        NVIDIA with known VRAM: the GPU's dedicated memory. Everything else — Apple
+        Silicon (unified memory), no GPU at all, or an NVIDIA card whose VRAM we
+        couldn't read — falls back to system RAM, since that's where the model has
+        to be loaded regardless of whether a GPU is accelerating compute.
+        """
+        if self.gpu.kind == "nvidia" and self.gpu.vram_gb is not None:
+            return self.gpu.vram_gb
+        return self.total_ram_gb
+
 
 def _platform_info() -> tuple[str, str]:
     return platform.system().lower(), platform.machine().lower()
