@@ -30,7 +30,23 @@ def _common_fields(model: Any) -> dict[str, Any]:
         "trending_score": getattr(model, "trending_score", None),
         "created_at": model.created_at,
         "gated": model.gated,
+        "tags": model.tags or [],
+        "library_name": model.library_name,
     }
+
+
+def _parameter_info(model: Any) -> tuple[int | None, str | None]:
+    """(parameter_count, dominant dtype) from safetensors metadata, when available.
+
+    Only populated by model_info(files_metadata=True) -- None for the list view. A model
+    can mix dtypes across shards; we report the one with the most parameters, since that's
+    what dominates the memory estimate the feasibility check will use this for.
+    """
+    safetensors = getattr(model, "safetensors", None)
+    if safetensors is None or not safetensors.parameters:
+        return None, None
+    dominant_dtype = max(safetensors.parameters, key=safetensors.parameters.get)
+    return safetensors.total, dominant_dtype
 
 
 def list_discoverable_models(
@@ -77,4 +93,10 @@ def get_model_detail(model_id: str) -> ModelDetail:
         for sibling in model.siblings or []
         if sibling.rfilename.endswith(".gguf") and sibling.size is not None
     ]
-    return ModelDetail(**_common_fields(model), gguf_files=gguf_files)
+    parameter_count, dtype = _parameter_info(model)
+    return ModelDetail(
+        **_common_fields(model),
+        gguf_files=gguf_files,
+        parameter_count=parameter_count,
+        dtype=dtype,
+    )

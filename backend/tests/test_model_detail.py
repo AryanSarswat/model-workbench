@@ -45,6 +45,23 @@ def test_get_model_detail_maps_common_fields():
     assert detail.downloads == 12345
 
 
+def test_get_model_detail_reports_dominant_dtype_by_parameter_count():
+    safetensors = SimpleNamespace(parameters={"F32": 1_000, "BF16": 7_000_000_000}, total=7_001_000)
+    model = _fake_model(siblings=[], safetensors=safetensors)
+    with patch("app.discovery.hf_client.model_info", return_value=model):
+        detail = get_model_detail("meta-llama/Llama-3-8B")
+    assert detail.parameter_count == 7_001_000
+    assert detail.dtype == "BF16"
+
+
+def test_get_model_detail_leaves_parameter_info_none_without_safetensors():
+    model = _fake_model(siblings=[])  # safetensors defaults to None in _fake_model
+    with patch("app.discovery.hf_client.model_info", return_value=model):
+        detail = get_model_detail("meta-llama/Llama-3-8B")
+    assert detail.parameter_count is None
+    assert detail.dtype is None
+
+
 def test_get_model_detail_raises_404_for_missing_repo():
     not_found = RepositoryNotFoundError("nope", response=_fake_response(404))
     with (
