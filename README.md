@@ -26,7 +26,7 @@ reliability, tool-calling reliability, speed, cost) against models you've alread
   (`coding`, `general`, `world_understanding`, `personalization`, ...), scored by manual
   review, automated assertions, and/or LLM-as-judge.
 
-Full design: [docs/superpowers/specs/2026-09-19-model-workbench-backend-design.md](docs/superpowers/specs/2026-09-19-model-workbench-backend-design.md)
+Full architecture: [docs/architecture.md](docs/architecture.md). Setup/run/test: [docs/usage.md](docs/usage.md).
 
 ## Your test-case dataset is private
 

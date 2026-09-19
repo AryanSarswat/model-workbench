@@ -22,8 +22,9 @@ dist/
 # Brainstorming companion scratch files
 .superpowers/
 
-# Implementation plans are working documents, not repo artifacts — code and docs only
-docs/superpowers/plans/
+# Working documents (dated specs, implementation plans) are not repo artifacts —
+# only living docs (docs/*.md) and code are committed.
+docs/superpowers/
 
 # OS
 .DS_Store
