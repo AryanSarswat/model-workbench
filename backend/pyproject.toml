@@ -10,6 +10,8 @@ dependencies = [
     "psutil>=6.1",
     "huggingface_hub>=0.26",
     "llama-cpp-python>=0.3.8",
+    "torch>=2.4",
+    "transformers>=4.44",
     "sqlmodel>=0.0.22",
 ]
 

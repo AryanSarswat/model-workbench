@@ -110,9 +110,10 @@ llama-cpp-python, runs on any hardware) resolves its file from the downloaded-mo
 in the registry (`repo_id`, or `repo_id:filename` when several quants are on disk) and
 keeps the loaded model in a process-wide cache — no eviction, a deliberate single-user
 simplicity trade-off. `TransformersBackend` (fallback for models
-without a GGUF build; MPS/CUDA/CPU auto-detected) is still planned — model-loading/lifecycle
-management the remote backend doesn't need, and what the registry's
-next branch will construct.
+without a GGUF build; MPS/CUDA/CPU auto-detected) resolves its snapshot dir from the
+downloaded-models table by plain `repo_id` and keeps the loaded model in a process-wide
+cache like the llama.cpp backend. Generation streams via `TextIteratorStreamer` and runs
+to EOS with no token cap.
 
 No session persistence yet — `chat_sessions`/`chat_messages` and
 `GET/DELETE /chat/sessions[/{id}]` are a separate follow-up once there's more than one

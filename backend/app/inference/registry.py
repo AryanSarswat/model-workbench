@@ -1,7 +1,7 @@
 """Maps a chat request's (`backend`, `model_id`) to a concrete InferenceBackend. The chat
 router (and later the eval engine) call this instead of importing a specific backend
-class -- adding transformers later means adding one branch here, not touching every call
-site that runs a chat.
+class -- adding a backend means adding one branch here, not touching every call site
+that runs a chat.
 
 Local-model resolution happens here (not inside the stream) so an undownloaded or
 ambiguous model_id raises before streaming starts and surfaces as a proper HTTP error
@@ -17,6 +17,7 @@ from app.errors import WorkbenchError
 from app.inference.base import InferenceBackend
 from app.inference.hf_api_backend import HFInferenceAPIBackend
 from app.inference.llama_cpp_backend import LlamaCppBackend
+from app.inference.transformers_backend import TransformersBackend
 from app.models import DownloadedModelRecord
 
 
@@ -32,6 +33,9 @@ def get_backend(name: str, model_id: str, hf_api_key: str | None) -> InferenceBa
 
     if name == "gguf":
         return LlamaCppBackend(_resolve_gguf_path(model_id))
+
+    if name == "transformers":
+        return TransformersBackend(_resolve_snapshot_dir(model_id))
 
     raise WorkbenchError(
         status_code=400,
@@ -69,3 +73,27 @@ def _resolve_gguf_path(model_id: str) -> str:
             details={"available": available, "hint": "use 'repo_id:filename' as model_id"},
         )
     return records[0].local_path
+
+
+def _resolve_snapshot_dir(model_id: str) -> str:
+    """model_id is a downloaded repo_id -- snapshots have no quants, so unlike GGUF
+    there is no `repo_id:filename` form. Re-downloads insert a fresh row pointing at
+    the same snapshot dir, so the latest one wins deterministically."""
+    with Session(engine) as session:
+        statement = (
+            select(DownloadedModelRecord)
+            .where(
+                DownloadedModelRecord.repo_id == model_id,
+                DownloadedModelRecord.backend == "transformers",
+            )
+            .order_by(DownloadedModelRecord.downloaded_at.desc())
+        )
+        record = session.exec(statement).first()
+
+    if record is None:
+        raise WorkbenchError(
+            status_code=404,
+            code="local_model_not_found",
+            message=f"No downloaded transformers snapshot matches '{model_id}' -- download it first.",
+        )
+    return record.local_path
