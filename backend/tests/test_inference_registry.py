@@ -5,7 +5,6 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.errors import WorkbenchError
 from app.inference import registry
 from app.inference.hf_api_backend import HFInferenceAPIBackend
-from app.inference.llama_cpp_backend import LlamaCppBackend
 from app.inference.registry import get_backend
 from app.models import DownloadedModelRecord
 
@@ -56,15 +55,6 @@ def test_get_backend_unknown_name_raises_backend_not_supported():
     assert exc_info.value.code == "backend_not_supported"
 
 
-def test_get_backend_gguf_resolves_the_downloaded_file():
-    _seed("org/model", "model.Q4_K_M.gguf", "/tmp/model.gguf")
-
-    backend = get_backend("gguf", "org/model", hf_api_key=None)
-
-    assert isinstance(backend, LlamaCppBackend)
-    assert backend._model_path == "/tmp/model.gguf"
-
-
 def test_get_backend_gguf_without_download_raises_local_model_not_found():
     with pytest.raises(WorkbenchError) as exc_info:
         get_backend("gguf", "org/missing", hf_api_key=None)
@@ -82,7 +72,15 @@ def test_get_backend_gguf_with_several_quants_needs_an_explicit_filename():
 
     assert exc_info.value.code == "ambiguous_local_model"
 
-    backend = get_backend("gguf", "org/model:b.gguf", hf_api_key=None)
 
-    assert isinstance(backend, LlamaCppBackend)
-    assert backend._model_path == "/tmp/b.gguf"
+def test_get_backend_gguf_without_local_extra_raises_backend_not_available(monkeypatch):
+    """Resolution (pure DB) succeeds, then construction fails on the missing dep --
+    forced via find_spec so this holds in full envs too, not just slim CI."""
+    _seed("org/model", "model.Q4_K_M.gguf", "/tmp/model.gguf")
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: None)
+
+    with pytest.raises(WorkbenchError) as exc_info:
+        get_backend("gguf", "org/model", hf_api_key=None)
+
+    assert exc_info.value.code == "backend_not_available"
+    assert exc_info.value.status_code == 400

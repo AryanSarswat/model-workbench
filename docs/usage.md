@@ -9,8 +9,15 @@ wraps the common commands below — prefer `make <target>` day to day.
 ## Setup
 
 ```bash
-make setup   # cd backend && uv sync --extra dev
+make setup   # cd backend && uv sync --extra dev --extra local
 cd backend && cp .env.example .env   # fill in HF_API_KEY when you have one
+```
+
+The `local` extra (torch, transformers, llama-cpp-python) powers the `gguf` /
+`transformers` backends and is installed for local dev and Docker, but not in CI --
+CI runs the application suite only (see `make test` below), which must pass without it.
+A local request for a backend whose extra is missing fails as a 400
+(`backend_not_available`) naming the missing packages, not an import traceback.
 ```
 
 ## Run the API

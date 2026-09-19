@@ -19,9 +19,9 @@ WORKDIR /repo/backend
 # uv sync installs the project itself in editable mode (same as `pip install -e .`), so
 # app/db.py's __file__-based DB path resolution keeps working unchanged inside the
 # container. --locked fails the build instead of silently re-resolving if uv.lock is out
-# of sync with pyproject.toml. No --extra dev: the runtime image only needs the app's own
-# dependencies, not pytest/ruff.
-RUN uv sync --locked
+# of sync with pyproject.toml. --extra local (torch/llama.cpp) but no --extra dev: the
+# runtime image must serve local inference, it just doesn't need pytest/ruff.
+RUN uv sync --locked --extra local
 
 ENV PATH="/repo/backend/.venv/bin:$PATH"
 

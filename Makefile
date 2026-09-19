@@ -1,7 +1,9 @@
 .PHONY: setup run test test-ml test-all lint ci lock docker-build docker-run docker-ci
 
+# Local dev gets everything, including the heavy `local` extra (torch/llama.cpp)
+# that CI deliberately skips -- without it tests/ml/ can't even be collected.
 setup:
-	cd backend && uv sync --extra dev
+	cd backend && uv sync --extra dev --extra local
 
 run:
 	uv run --project backend uvicorn app.main:app --reload --app-dir backend
@@ -24,13 +26,14 @@ test-all:
 lint:
 	cd backend && uv run ruff check .
 
-# Mirrors both GitHub Actions jobs (`backend` + `docker`) so a pass here is a real signal
-# the PR checks will pass -- catching a Docker-only failure locally is a lot cheaper than
+# Local pre-PR gate: everything both GitHub Actions jobs run (`backend` + `docker`),
+# PLUS the ML suite CI skips -- so a pass here means the PR checks will pass AND the
+# locally-run ML tests are green. Catching either failure locally is a lot cheaper than
 # a push-wait-fail-fix round trip.
 ci:
-	cd backend && uv sync --locked --extra dev
+	cd backend && uv sync --locked --extra dev --extra local
 	cd backend && uv run ruff check .
-	cd backend && uv run pytest tests --ignore=tests/ml --cov --cov-report=term-missing
+	cd backend && uv run pytest --cov --cov-report=term-missing
 	$(MAKE) docker-ci
 
 lock:

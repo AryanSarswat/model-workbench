@@ -9,13 +9,18 @@ dependencies = [
     "pydantic-settings>=2.6",
     "psutil>=6.1",
     "huggingface_hub>=0.26",
-    "llama-cpp-python>=0.3.8",
-    "torch>=2.4",
-    "transformers>=4.44",
     "sqlmodel>=0.0.22",
 ]
 
 [project.optional-dependencies]
+# Heavy local-inference deps. Installed for local dev (`make setup`) and the Docker
+# image, but NOT in CI -- the application suite must pass without them (only
+# tests/ml/ needs them, and CI skips that directory).
+local = [
+    "llama-cpp-python>=0.3.8",
+    "torch>=2.4",
+    "transformers>=4.44",
+]
 dev = [
     "pytest>=8.3",
     "pytest-cov>=6.0",
