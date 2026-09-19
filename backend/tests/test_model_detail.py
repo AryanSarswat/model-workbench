@@ -66,6 +66,7 @@ def test_get_snapshot_files_excludes_gguf_and_keeps_the_rest():
     model = _fake_model(
         siblings=[
             _sibling("model.gguf", size=4096),
+            _sibling("MODEL.GGUF", size=4096),
             _sibling("config.json", size=100),
             _sibling("tokenizer.json", size=None),
         ]
@@ -77,6 +78,14 @@ def test_get_snapshot_files_excludes_gguf_and_keeps_the_rest():
         ("config.json", 100),
         ("tokenizer.json", None),
     ]
+
+
+def test_get_model_detail_includes_uppercase_gguf_extension():
+    model = _fake_model(siblings=[_sibling("MODEL.GGUF", size=4096)])
+    with patch("app.discovery.hf_client.model_info", return_value=model):
+        detail = get_model_detail("org/model")
+
+    assert [f.filename for f in detail.gguf_files] == ["MODEL.GGUF"]
 
 
 def test_get_model_detail_raises_404_for_missing_repo():

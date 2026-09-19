@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -82,7 +83,10 @@ def test_run_snapshot_download_success_with_aggregated_progress(tmp_path, monkey
 
     with (
         patch("app.downloads.service.hf_hub_url", side_effect=_hub_url),
-        patch("httpx.stream", side_effect=_streams({"config.json": b"a" * 100, "data/vocab.txt": b"b" * 300})),
+        patch(
+            "httpx.stream",
+            side_effect=_streams({"config.json": b"a" * 100, "data/vocab.txt": b"b" * 300}),
+        ),
     ):
         service.run_snapshot_download(job_id, "org/model", files)
 
@@ -188,3 +192,97 @@ def test_run_snapshot_download_truncated_file_marks_job_failed(tmp_path):
         assert session.exec(select(DownloadedModelRecord)).first() is None
 
     assert not (tmp_path / "org/model" / "snapshot").exists()
+
+
+@pytest.mark.parametrize("filename", ["../evil.txt", "/tmp/abs-evil-snapshot.txt"])
+def test_run_snapshot_download_rejects_escaping_paths(tmp_path, filename):
+    """Filenames come from Hub metadata -- `..` or absolute paths must fail the job,
+    never write outside the snapshot dir."""
+    job_id = _seed_job()
+
+    service.run_snapshot_download(job_id, "org/model", [SnapshotFile(filename=filename)])
+
+    with Session(_test_engine) as session:
+        job = session.get(DownloadJob, job_id)
+        assert job.status == "failed"
+        assert "unsafe download path" in job.error
+        assert session.exec(select(DownloadedModelRecord)).first() is None
+
+    assert not (tmp_path / "evil.txt").exists()
+    assert not Path("/tmp/abs-evil-snapshot.txt").exists()
+
+
+def test_run_download_rejects_escaping_filename(tmp_path):
+    job_id = _seed_job()
+
+    service.run_download(job_id, "org/model", "../evil.gguf")
+
+    with Session(_test_engine) as session:
+        job = session.get(DownloadJob, job_id)
+        assert job.status == "failed"
+        assert "unsafe download path" in job.error
+
+    assert not (tmp_path / "evil.gguf").exists()
+
+
+def test_run_snapshot_download_rejects_escaping_repo_id(tmp_path):
+    job_id = _seed_job()
+
+    service.run_snapshot_download(
+        job_id, "../evil", [SnapshotFile(filename="config.json", size_bytes=10)]
+    )
+
+    with Session(_test_engine) as session:
+        job = session.get(DownloadJob, job_id)
+        assert job.status == "failed"
+        assert "unsafe download path" in job.error
+
+    assert not (tmp_path / "evil").exists()
+
+
+def test_safe_dest_allows_normal_nested_paths(tmp_path):
+    assert service._safe_dest(tmp_path, "org/model", "data/vocab.txt") == (
+        tmp_path / "org/model" / "data" / "vocab.txt"
+    )
+
+
+def test_safe_dest_rejects_symlink_escape(tmp_path):
+    base = tmp_path / "models"
+    base.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (base / "sub").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(OSError, match="unsafe download path"):
+        service._safe_dest(base, "sub", "f.txt")
+
+
+def test_run_snapshot_download_with_unknown_sizes_clamps_and_completes(tmp_path, monkeypatch):
+    """No Hub sizes at all: percent sits at 0 (never a stuck 99 from overshoot, never
+    100 early), detail still names the current file, and the job completes at 100."""
+    job_id = _seed_job()
+    files = [SnapshotFile(filename="a.bin"), SnapshotFile(filename="b.bin")]
+    seen = []
+    real_save = service._save
+
+    def _recording_save(session: Session, job: DownloadJob) -> None:
+        seen.append((job.percent, job.detail))
+        real_save(session, job)
+
+    monkeypatch.setattr(service, "_save", _recording_save)
+
+    with (
+        patch("app.downloads.service.hf_hub_url", side_effect=_hub_url),
+        patch("httpx.stream", side_effect=_streams({"a.bin": b"a" * 100, "b.bin": b"b" * 300})),
+    ):
+        service.run_snapshot_download(job_id, "org/model", files)
+
+    with Session(_test_engine) as session:
+        job = session.get(DownloadJob, job_id)
+        assert job.status == "completed"
+        assert job.percent == 100.0
+        assert session.get(DownloadedModelRecord, job.downloaded_model_id).size_bytes == 400
+
+    assert all(percent <= 99.0 for percent, _ in seen[:-1])
+    assert any("unknown total" in detail for _, detail in seen)
+    assert any("file 2/2" in detail for _, detail in seen)

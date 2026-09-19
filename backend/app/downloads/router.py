@@ -80,7 +80,7 @@ def start_download(
     background_tasks: BackgroundTasks,
     session: SessionDep,
 ) -> DownloadJob:
-    if bool(body.filename) == bool(body.snapshot):
+    if bool(body.filename) == body.snapshot:
         raise WorkbenchError(
             status_code=400,
             code="invalid_download_request",

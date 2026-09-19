@@ -77,7 +77,7 @@ def get_model_detail(model_id: str) -> ModelDetail:
     gguf_files = [
         GgufFile(filename=sibling.rfilename, size_bytes=sibling.size)
         for sibling in model.siblings or []
-        if sibling.rfilename.endswith(".gguf") and sibling.size is not None
+        if sibling.rfilename.lower().endswith(".gguf") and sibling.size is not None
     ]
     parameter_count, dtype = _parameter_info(model)
     return ModelDetail(
@@ -95,7 +95,7 @@ def get_snapshot_files(model_id: str) -> list[SnapshotFile]:
     return [
         SnapshotFile(filename=sibling.rfilename, size_bytes=sibling.size)
         for sibling in model.siblings or []
-        if not sibling.rfilename.endswith(".gguf")
+        if not sibling.rfilename.lower().endswith(".gguf")
     ]
 
 

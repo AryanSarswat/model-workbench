@@ -43,9 +43,12 @@ def run_download(job_id: int, repo_id: str, filename: str) -> None:
         job.detail = "starting download"
         _save(session, job)
 
-        dest_dir = MODELS_DIR / repo_id
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_path = dest_dir / filename
+        try:
+            dest_path = _safe_dest(MODELS_DIR, repo_id, filename)
+        except OSError as e:
+            _fail_job(session, job, str(e))
+            return
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
 
         last_reported_percent = -1
 
@@ -96,21 +99,23 @@ def run_snapshot_download(job_id: int, repo_id: str, files: list[SnapshotFile]) 
             return
 
         if not files:
-            job.status = "failed"
-            job.error = f"No transformers snapshot files found for '{repo_id}'."
-            job.detail = "download failed"
-            _save(session, job)
+            _fail_job(session, job, f"No transformers snapshot files found for '{repo_id}'.")
             return
 
         job.status = "downloading"
         job.detail = "starting download"
         _save(session, job)
 
-        dest_dir = MODELS_DIR / repo_id / "snapshot"
+        try:
+            dest_dir = _safe_dest(MODELS_DIR, repo_id, "snapshot")
+        except OSError as e:
+            _fail_job(session, job, str(e))
+            return
         dest_dir.mkdir(parents=True, exist_ok=True)
         total_bytes = sum(f.size_bytes or 0 for f in files)
+        total_label = f"{total_bytes // (1024 * 1024)} MB" if total_bytes else "unknown total"
         completed_bytes = 0
-        last_reported_percent = -1
+        last_reported: tuple[int, int] = (-1, -1)
 
         try:
             for index, snapshot_file in enumerate(files, start=1):
@@ -124,20 +129,21 @@ def run_snapshot_download(job_id: int, repo_id: str, files: list[SnapshotFile]) 
                 def on_progress(
                     downloaded: int, _total: int, base: int = base_bytes, file_label: str = label
                 ) -> None:
-                    nonlocal last_reported_percent
+                    nonlocal last_reported
                     overall = base + downloaded
                     percent = int(overall / total_bytes * 100) if total_bytes else 0
-                    if percent != last_reported_percent:
-                        job.percent = float(min(percent, 99))
-                        job.detail = (
-                            f"{file_label} "
-                            f"({overall // (1024 * 1024)} MB "
-                            f"of {total_bytes // (1024 * 1024)} MB)"
-                        )
+                    # Compare clamped percent (what the poller sees) so overshooting
+                    # unknown-size bytes can't trigger a SQLite write per chunk, and
+                    # include whole MB so progress still advances when the Hub total
+                    # is unknown and percent sits at 0.
+                    key = (min(percent, 99), overall // (1024 * 1024))
+                    if key != last_reported:
+                        job.percent = float(key[0])
+                        job.detail = f"{file_label} ({key[1]} MB of {total_label})"
                         _save(session, job)
-                        last_reported_percent = percent
+                        last_reported = key
 
-                dest_path = dest_dir / snapshot_file.filename
+                dest_path = _safe_dest(dest_dir, snapshot_file.filename)
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 written, declared = _stream_to_file(
                     dest_path, hf_hub_url(repo_id, snapshot_file.filename), on_progress
@@ -188,6 +194,21 @@ def _stream_to_file(
                 downloaded_bytes += len(chunk)
                 on_progress(downloaded_bytes, total_bytes)
     return downloaded_bytes, total_bytes
+
+
+def _safe_dest(base_dir: Path, *parts: str) -> Path:
+    """Join remote-controlled path parts onto base_dir, refusing anything that would
+    escape it. Repo ids come from the URL path and filenames from Hub metadata, so
+    `..` segments or absolute paths fail the job instead of writing outside models/."""
+    for part in parts:
+        if Path(part).is_absolute() or ".." in Path(part).parts:
+            raise OSError(f"unsafe download path: {part!r}")
+    dest = base_dir.joinpath(*parts)
+    try:
+        dest.resolve().relative_to(base_dir.resolve())
+    except ValueError:
+        raise OSError(f"unsafe download path: {dest!r}") from None
+    return dest
 
 
 def _save(session: Session, job: DownloadJob) -> None:
