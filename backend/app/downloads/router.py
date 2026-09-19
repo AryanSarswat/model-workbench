@@ -1,7 +1,9 @@
 """Downloaded-model management: list/remove what's on disk, and kick off new downloads.
 
-Only GGUF single-file downloads are supported here -- a transformers snapshot_download
-(multiple files, different progress-aggregation story) is a separate follow-up.
+Two download kinds: a single GGUF file (`filename` from `GET /models/{id}`'s
+gguf_files), or a full transformers snapshot (`snapshot: true` -- every non-GGUF file
+in the repo, for the future transformers backend). Progress for both is polled via
+`GET /models/downloads/{job_id}`.
 """
 
 from __future__ import annotations
@@ -15,8 +17,8 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.discovery.hf_client import get_model_detail
-from app.downloads.service import run_download
+from app.discovery.hf_client import get_model_detail, get_snapshot_files
+from app.downloads.service import run_download, run_snapshot_download
 from app.errors import WorkbenchError
 from app.models import DownloadedModelRecord, DownloadJob
 
@@ -26,7 +28,8 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 class DownloadRequest(BaseModel):
-    filename: str  # one of the GGUF filenames from GET /models/{id}'s gguf_files
+    filename: str | None = None  # one of the GGUF filenames from GET /models/{id}
+    snapshot: bool = False  # whole transformers snapshot instead of one GGUF file
 
 
 @router.get("/downloaded")
@@ -77,6 +80,25 @@ def start_download(
     background_tasks: BackgroundTasks,
     session: SessionDep,
 ) -> DownloadJob:
+    if bool(body.filename) == body.snapshot:
+        raise WorkbenchError(
+            status_code=400,
+            code="invalid_download_request",
+            message="Provide either 'filename' (one GGUF file) or 'snapshot: true'.",
+        )
+
+    if body.snapshot:
+        files = get_snapshot_files(model_id)
+        if not files:
+            raise WorkbenchError(
+                status_code=400,
+                code="no_transformers_snapshot",
+                message=f"'{model_id}' has no non-GGUF files to snapshot.",
+            )
+        job = _create_job(session, model_id, kind="snapshot")
+        background_tasks.add_task(run_snapshot_download, job.id, model_id, files)
+        return job
+
     detail = get_model_detail(model_id)
     available = {f.filename for f in detail.gguf_files}
     if body.filename not in available:
@@ -87,10 +109,16 @@ def start_download(
             details={"available": sorted(available)},
         )
 
-    job = DownloadJob(repo_id=model_id, filename=body.filename)
+    job = _create_job(session, model_id, kind="gguf", filename=body.filename)
+    background_tasks.add_task(run_download, job.id, model_id, body.filename)
+    return job
+
+
+def _create_job(
+    session: Session, repo_id: str, kind: str, filename: str | None = None
+) -> DownloadJob:
+    job = DownloadJob(repo_id=repo_id, kind=kind, filename=filename)
     session.add(job)
     session.commit()
     session.refresh(job)
-
-    background_tasks.add_task(run_download, job.id, model_id, body.filename)
     return job

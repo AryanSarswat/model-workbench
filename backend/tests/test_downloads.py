@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.db import get_session
-from app.discovery.schemas import GgufFile, ModelDetail
+from app.discovery.schemas import GgufFile, ModelDetail, SnapshotFile
 from app.main import app
 from app.models import DownloadedModelRecord, DownloadJob
 
@@ -147,6 +147,51 @@ def test_start_download_rejects_filename_not_in_repo():
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_gguf_filename"
+
+
+def test_start_snapshot_download_creates_job_and_schedules_task():
+    files = [SnapshotFile(filename="config.json", size_bytes=100)]
+    scheduled = {}
+
+    def _fake_run_snapshot(job_id: int, repo_id: str, snapshot_files: list) -> None:
+        scheduled["args"] = (job_id, repo_id, snapshot_files)
+
+    with (
+        patch("app.downloads.router.get_snapshot_files", return_value=files),
+        patch("app.downloads.router.run_snapshot_download", _fake_run_snapshot),
+    ):
+        response = client.post("/models/org/model/download", json={"snapshot": True})
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "pending"
+    assert body["kind"] == "snapshot"
+    assert body["filename"] is None
+    assert scheduled["args"] == (body["id"], "org/model", files)
+
+
+def test_start_snapshot_download_with_no_snapshot_files_returns_400():
+    with patch("app.downloads.router.get_snapshot_files", return_value=[]):
+        response = client.post("/models/org/model/download", json={"snapshot": True})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "no_transformers_snapshot"
+
+
+def test_start_download_rejects_filename_combined_with_snapshot():
+    response = client.post(
+        "/models/org/model/download", json={"filename": "model.gguf", "snapshot": True}
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_download_request"
+
+
+def test_start_download_rejects_empty_body():
+    response = client.post("/models/org/model/download", json={})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_download_request"
 
 
 def test_get_download_job_returns_seeded_job():

@@ -176,14 +176,15 @@ the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling r
   + ~20% overhead; transformers: param count × bytes-per-dtype) against detected
   RAM/VRAM/GPU (`GET /config/hardware`), returns `comfortable | tight | wont_fit` +
   reasoning. Advisory, not a hard block.
-- `POST /models/{id}/download` — GGUF-only for now (a `filename` from `gguf_files`).
-  Streams the file directly (not via `hf_hub_download`, which has no progress-callback
-  hook) so `GET /models/downloads/{job_id}` can be polled for real byte-level
-  `{status, percent, detail}`. Runs as a FastAPI background task, not SSE — the eval
+- `POST /models/{id}/download` — either one GGUF file (`filename` from `gguf_files`)
+  or a whole transformers snapshot (`snapshot: true` -- every non-GGUF file in the repo,
+  into `models/<repo>/snapshot/`). Both stream directly (not via `hf_hub_download`,
+  which has no progress-callback hook) so `GET /models/downloads/{job_id}` can be
+  polled for real byte-level `{status, percent, detail}` -- snapshot percent is
+  aggregate bytes over the summed Hub-reported sizes. Runs as a FastAPI background
+  task, not SSE — the eval
   engine's `{completed, total, current_case}` progress is still planned as SSE once evals
   are built; downloads may move to SSE too once there's a frontend to stream it to.
-  transformers snapshot downloads (multiple files, different progress-aggregation story)
-  are a separate follow-up.
 
 ## API surface
 
