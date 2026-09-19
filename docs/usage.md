@@ -24,6 +24,7 @@ make run   # uv run --project backend uvicorn app.main:app --reload --app-dir ba
 ```bash
 make test   # cd backend && uv run pytest
 make lint   # cd backend && uv run ruff check .
+make ci     # lint + test with coverage, exactly what the `backend` CI job runs
 ```
 
 ## Run the API in Docker (alternative to the venv)

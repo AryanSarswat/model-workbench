@@ -58,9 +58,13 @@ time — shorter commands, and one less way for an agent's command to drift from
 make setup          # cd backend && uv sync --extra dev
 make test            # run tests
 make lint            # ruff check
+make ci              # lint + test with coverage, mirroring the `backend` CI job
 make run             # run the API (from repo root)
 make docker-build    # build the backend image
 make docker-run      # run the backend image
 ```
+
+Run `make ci` before opening a PR — it's the fastest way to know whether the `backend`
+check will pass, without retyping the install/lint/test sequence by hand each time.
 
 See [docs/usage.md](docs/usage.md) for the underlying commands each target wraps.
