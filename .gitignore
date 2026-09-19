@@ -31,5 +31,9 @@ dist/
 # only living docs (docs/*.md) and code are committed.
 docs/superpowers/
 
+# Personal scratch list of deferred follow-ups -- not a repo artifact, same reasoning as
+# docs/superpowers/ above.
+TODO.md
+
 # OS
 .DS_Store
