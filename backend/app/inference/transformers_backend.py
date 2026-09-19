@@ -9,22 +9,42 @@ used snapshot simply stays resident.
 Generation runs until the model's EOS token -- no token cap. trust_remote_code stays
 off: a snapshot is an arbitrary user-chosen repo, and loading it must never execute
 repo-shipped code; models that need custom code surface a terminal load error instead.
+
+Constrained (output_schema) turns never stream: outlines guided decoding biases the
+whole turn's logits, so those turns run to completion (max_new_tokens=512, the same
+cap as tool-loop turns) and yield the final JSON as one delta + done.
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    LogitsProcessorList,
+    TextIteratorStreamer,
+)
 
+from app.errors import WorkbenchError
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
 from app.inference.structured_output import PromptJsonRetrier
 from app.inference.tool_loop import run_tool_loop
 from app.tools import ToolSpec
+
+try:
+    # Sibling-owned schema validator (structured-output worker). Tolerated, not
+    # reimplemented: if their commit is ever absent from this branch, outlines
+    # itself still rejects bad schemas at processor-build time, wrapped to the
+    # same 400 below.
+    from app.inference.structured_output import validate_output_schema
+except ImportError:
+    validate_output_schema = None  # type: ignore[assignment]
 
 _CACHE: dict[str, tuple[AutoModelForCausalLM, AutoTokenizer]] = {}
 _CACHE_LOCK = threading.Lock()
@@ -37,6 +57,41 @@ def _detect_device() -> str:
     if torch.cuda.is_available():
         return "cuda"
     return "cpu"
+
+
+def _build_guided_processor(
+    model: AutoModelForCausalLM, tokenizer: AutoTokenizer, output_schema: dict
+):
+    """One fresh outlines-guided LogitsProcessor for a single generate call.
+
+    Built per turn, never shared: the outlines-core processor carries
+    per-sequence guide state, so reuse across turns would leak FSM state
+    between generations. Outlines is imported lazily so this module stays
+    importable without the `local` extra (registry._require_local precedent).
+    """
+    try:
+        import outlines
+        from outlines.backends import get_json_schema_logits_processor
+    except ImportError as e:
+        raise WorkbenchError(
+            400,
+            "backend_not_available",
+            "Structured output needs outlines -- run 'cd backend && uv sync --extra local'.",
+        ) from e
+    try:
+        guided_model = outlines.from_transformers(model, tokenizer)
+        return get_json_schema_logits_processor(
+            None, guided_model, json.dumps(output_schema)
+        )
+    except WorkbenchError:
+        raise
+    except Exception as e:
+        # The schema is the only caller-controlled input here, so any build
+        # failure -- outlines' ValueError/TypeError schema rejections above all --
+        # is reported as an invalid schema.
+        raise WorkbenchError(
+            400, "invalid_output_schema", f"invalid output_schema: {e}"
+        ) from e
 
 
 class TransformersBackend:
@@ -69,12 +124,37 @@ class TransformersBackend:
         still calls this (it closes whatever backend get_backend() returned), so the
         method exists for Protocol conformance, not because there's anything to free."""
 
+    async def _generate_turn(
+        self,
+        model: AutoModelForCausalLM,
+        tokenizer: AutoTokenizer,
+        conversation: str,
+        output_schema: dict | None = None,
+    ) -> str:
+        """One non-streamed turn off the accumulated conversation text."""
+        inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
+        inputs = inputs.to(self._device)
+        input_len = len(inputs["input_ids"][0])
+        # Bound loop turns so short tool-call JSON can't truncate mid-object:
+        # generate() defaults to input + 20 tokens, which cuts off arguments.
+        # Guided decoding constrains validity, not length, so guided turns
+        # share the same cap.
+        generate_kwargs = {**inputs, "max_new_tokens": 512}
+        if output_schema is not None:
+            processor = await asyncio.to_thread(
+                _build_guided_processor, model, tokenizer, output_schema
+            )
+            generate_kwargs["logits_processor"] = LogitsProcessorList([processor])
+        outputs = await asyncio.to_thread(model.generate, **generate_kwargs)
+        return tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
+
     async def _run_fallback_tool_loop(
         self,
         model: AutoModelForCausalLM,
         tokenizer: AutoTokenizer,
         messages: list[ChatMessage],
         tools: list[ToolSpec],
+        output_schema: dict | None = None,
     ) -> str:
         """Drive the shared prompt-and-retry tool loop with non-streamed generation.
 
@@ -82,6 +162,10 @@ class TransformersBackend:
         then appends prior turns and tool results as plain text blocks instead of
         re-applying the template, which would re-render generation prompts
         mid-conversation. Blocking generate calls run on worker threads.
+
+        With output_schema the loop's turns stay unconstrained (they must emit
+        tool-call JSON, which the schema must not forbid) and only the final
+        reply turn is schema-guided, with every tool result already in context.
         """
         prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools)
         conversation = await asyncio.to_thread(
@@ -99,24 +183,26 @@ class TransformersBackend:
             for message in history[rendered:]:
                 conversation += f"\n{message.role}: {message.content}\n"
             rendered = len(history)
-            inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
-            inputs = inputs.to(self._device)
-            input_len = len(inputs["input_ids"][0])
-            # Bound loop turns so short tool-call JSON can't truncate mid-object:
-            # generate() defaults to input + 20 tokens, which cuts off arguments.
-            # The no-tools streaming path below stays uncapped per design (free-form
-            # replies run to EOS).
-            generate_kwargs = {**inputs, "max_new_tokens": 512}
-            outputs = await asyncio.to_thread(model.generate, **generate_kwargs)
-            return tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
+            return await self._generate_turn(model, tokenizer, conversation)
 
-        return await run_tool_loop(_generate, prompt_messages, tools)
+        final = await run_tool_loop(_generate, prompt_messages, tools)
+        if output_schema is None:
+            return final
+        return await self._generate_turn(model, tokenizer, conversation, output_schema)
 
     async def stream_chat(
-        self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
+        self,
+        model_id: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec] | None = None,
+        output_schema: dict | None = None,
     ) -> AsyncIterator[ChatChunk]:
         # model_id is Protocol compat only -- the registry already bound this backend
         # to a specific snapshot dir, so there's nothing left to resolve per request.
+        # An invalid schema raises pre-stream (outside every try below, so the
+        # error raises instead of becoming a terminal chunk).
+        if output_schema is not None and validate_output_schema is not None:
+            validate_output_schema(output_schema)
         try:
             model, tokenizer = await asyncio.to_thread(self._get_model)
         except Exception as e:  # noqa: BLE001 -- any load failure becomes a terminal
@@ -128,7 +214,44 @@ class TransformersBackend:
             # delta + done: tool-calling turns can't stream partial tool calls
             # honestly, so nothing streams until the loop resolves to final text.
             try:
-                final = await self._run_fallback_tool_loop(model, tokenizer, messages, tools)
+                final = await self._run_fallback_tool_loop(
+                    model, tokenizer, messages, tools, output_schema
+                )
+            except WorkbenchError:
+                # Guided setup failures (bad schema, missing outlines) raise
+                # pre-stream; everything else is a terminal chunk, never raised.
+                raise
+            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
+                yield ChatChunk(done=True, error=str(e))
+                return
+            yield ChatChunk(delta=final)
+            yield ChatChunk(done=True)
+            return
+        if output_schema is not None:
+            # Constrained turns run to completion under the schema guide, then
+            # yield the final JSON as one delta + done: guided turns never
+            # stream. The processor builds before the try so a bad schema
+            # raises instead of becoming a terminal chunk.
+            processor = await asyncio.to_thread(
+                _build_guided_processor, model, tokenizer, output_schema
+            )
+            try:
+                inputs = tokenizer.apply_chat_template(
+                    [m.model_dump() for m in messages],
+                    add_generation_prompt=True,
+                    return_tensors="pt",
+                    return_dict=True,
+                ).to(self._device)
+                input_len = len(inputs["input_ids"][0])
+                outputs = await asyncio.to_thread(
+                    model.generate,
+                    **inputs,
+                    max_new_tokens=512,
+                    logits_processor=LogitsProcessorList([processor]),
+                )
+                final = tokenizer.decode(
+                    outputs[0][input_len:], skip_special_tokens=True
+                )
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return
