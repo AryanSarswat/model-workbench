@@ -50,11 +50,17 @@ themselves; there is no direct push. For any agent working in this repo:
 
 ## Commands
 
+Dependencies are managed with `uv` (`backend/pyproject.toml` + `backend/uv.lock`). Use the
+root `Makefile` targets below instead of retyping the full `uv`/`docker` invocations each
+time — shorter commands, and one less way for an agent's command to drift from what CI runs.
+
 ```bash
-cd backend
-source .venv/bin/activate     # create with: python3 -m venv .venv
-pip install -e ".[dev]"
-pytest                         # run tests
-ruff check .                   # lint
-uvicorn app.main:app --reload --app-dir backend   # run the API (from repo root)
+make setup          # cd backend && uv sync --extra dev
+make test            # run tests
+make lint            # ruff check
+make run             # run the API (from repo root)
+make docker-build    # build the backend image
+make docker-run      # run the backend image
 ```
+
+See [docs/usage.md](docs/usage.md) for the underlying commands each target wraps.

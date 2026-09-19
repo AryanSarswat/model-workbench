@@ -2,37 +2,35 @@
 
 Backend-only for now (see [architecture.md](architecture.md) for the roadmap).
 
+Dependencies are managed with [uv](https://docs.astral.sh/uv/); `backend/uv.lock` pins
+exact versions so local dev, CI, and Docker all install the same thing. A root `Makefile`
+wraps the common commands below — prefer `make <target>` day to day.
+
 ## Setup
 
 ```bash
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env   # fill in HF_API_KEY when you have one
+make setup   # cd backend && uv sync --extra dev
+cd backend && cp .env.example .env   # fill in HF_API_KEY when you have one
 ```
 
 ## Run the API
 
 ```bash
-source backend/.venv/bin/activate
-uvicorn app.main:app --reload --app-dir backend
+make run   # uv run --project backend uvicorn app.main:app --reload --app-dir backend
 ```
 
 ## Run tests
 
 ```bash
-source backend/.venv/bin/activate
-cd backend
-pytest
+make test   # cd backend && uv run pytest
+make lint   # cd backend && uv run ruff check .
 ```
 
 ## Run the API in Docker (alternative to the venv)
 
 ```bash
-# from the repo root -- the build needs both backend/ and data/ in its context
-docker build -f backend/Dockerfile -t model-workbench-backend .
-docker run -p 8000:8000 model-workbench-backend
+make docker-build   # docker build -f backend/Dockerfile -t model-workbench-backend .
+make docker-run     # docker run --rm -p 8000:8000 model-workbench-backend
 ```
 
 Note: the container's `data/` directory is ephemeral (lost when the container is removed).
