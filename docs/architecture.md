@@ -102,13 +102,16 @@ implementation; `POST /chat/stream` calls that instead of importing a specific b
 class, so it's the one thing that has to change when a new backend is added, not every
 caller.
 
-Three implementations, one built so far: `HFInferenceAPIBackend` (remote, via
+Three implementations, two built so far: `HFInferenceAPIBackend` (remote, via
 `huggingface_hub.AsyncInferenceClient` — genuinely async, so a slow provider response
 doesn't block the event loop; which `model_id`s actually work depends on HF routing to an
 enabled provider, surfaced as a normal 4xx rather than a crash). `LlamaCppBackend` (GGUF via
-llama-cpp-python, runs on any hardware) and `TransformersBackend` (fallback for models
-without a GGUF build; MPS/CUDA/CPU auto-detected) are still planned — both need
-model-loading/lifecycle management the remote backend doesn't, and are what the registry's
+llama-cpp-python, runs on any hardware) resolves its file from the downloaded-models table
+in the registry (`repo_id`, or `repo_id:filename` when several quants are on disk) and
+keeps the loaded model in a process-wide cache — no eviction, a deliberate single-user
+simplicity trade-off. `TransformersBackend` (fallback for models
+without a GGUF build; MPS/CUDA/CPU auto-detected) is still planned — model-loading/lifecycle
+management the remote backend doesn't need, and what the registry's
 next branch will construct.
 
 No session persistence yet — `chat_sessions`/`chat_messages` and

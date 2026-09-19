@@ -1,8 +1,11 @@
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy.pool import StaticPool
+from sqlmodel import SQLModel, create_engine
 
 from app.config import Settings
+from app.inference import registry
 from app.inference.schemas import ChatChunk
 from app.main import app
 
@@ -20,10 +23,23 @@ def test_stream_chat_returns_400_when_api_key_missing():
 
 
 def test_stream_chat_rejects_unsupported_backend():
-    response = client.post("/chat/stream", json={**_REQUEST, "backend": "gguf"})
+    response = client.post("/chat/stream", json={**_REQUEST, "backend": "nope"})
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "backend_not_supported"
+
+
+def test_stream_chat_gguf_without_download_returns_404(monkeypatch):
+    test_engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    SQLModel.metadata.create_all(test_engine)
+    monkeypatch.setattr(registry, "engine", test_engine)
+
+    response = client.post("/chat/stream", json={**_REQUEST, "backend": "gguf"})
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "local_model_not_found"
 
 
 def test_stream_chat_streams_sse_events_from_the_backend():

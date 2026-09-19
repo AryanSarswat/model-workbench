@@ -9,6 +9,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "psutil>=6.1",
     "huggingface_hub>=0.26",
+    "llama-cpp-python>=0.3.8",
     "sqlmodel>=0.0.22",
 ]
 
