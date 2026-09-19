@@ -1,4 +1,4 @@
-.PHONY: setup run test lint ci lock docker-build docker-run docker-ci
+.PHONY: setup run test test-ml test-all lint ci lock docker-build docker-run docker-ci
 
 setup:
 	cd backend && uv sync --extra dev
@@ -6,7 +6,19 @@ setup:
 run:
 	uv run --project backend uvicorn app.main:app --reload --app-dir backend
 
+# `test` is the application suite (what CI runs). ML backend tests live in
+# backend/tests/ml/ and run locally via `test-ml` or together with everything via
+# `test-all`. Splitting by directory with --ignore (not -m 'not ml') so CI skips ML
+# collection entirely. NOTE: app modules still import torch/transformers/llama.cpp at
+# top level via the registry -- dropping the heavy install from CI needs lazy imports
+# (a separate change, deliberately not done here).
 test:
+	cd backend && uv run pytest tests --ignore=tests/ml
+
+test-ml:
+	cd backend && uv run pytest tests/ml
+
+test-all:
 	cd backend && uv run pytest
 
 lint:
@@ -18,7 +30,7 @@ lint:
 ci:
 	cd backend && uv sync --locked --extra dev
 	cd backend && uv run ruff check .
-	cd backend && uv run pytest --cov --cov-report=term-missing
+	cd backend && uv run pytest tests --ignore=tests/ml --cov --cov-report=term-missing
 	$(MAKE) docker-ci
 
 lock:

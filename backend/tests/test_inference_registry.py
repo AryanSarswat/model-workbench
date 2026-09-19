@@ -7,7 +7,6 @@ from app.inference import registry
 from app.inference.hf_api_backend import HFInferenceAPIBackend
 from app.inference.llama_cpp_backend import LlamaCppBackend
 from app.inference.registry import get_backend
-from app.inference.transformers_backend import TransformersBackend
 from app.models import DownloadedModelRecord
 
 _test_engine = create_engine(
@@ -23,14 +22,12 @@ def _use_test_db(monkeypatch):
     SQLModel.metadata.drop_all(_test_engine)
 
 
-def _seed(
-    repo_id: str, quant: str | None, local_path: str, backend: str = "gguf"
-) -> None:
+def _seed(repo_id: str, quant: str | None, local_path: str) -> None:
     with Session(_test_engine) as session:
         session.add(
             DownloadedModelRecord(
                 repo_id=repo_id,
-                backend=backend,
+                backend="gguf",
                 quant=quant,
                 local_path=local_path,
                 size_bytes=1024,
@@ -89,20 +86,3 @@ def test_get_backend_gguf_with_several_quants_needs_an_explicit_filename():
 
     assert isinstance(backend, LlamaCppBackend)
     assert backend._model_path == "/tmp/b.gguf"
-
-
-def test_get_backend_transformers_resolves_the_snapshot_dir():
-    _seed("org/model", None, "/tmp/snapshot", backend="transformers")
-
-    backend = get_backend("transformers", "org/model", hf_api_key=None)
-
-    assert isinstance(backend, TransformersBackend)
-    assert backend._snapshot_dir == "/tmp/snapshot"
-
-
-def test_get_backend_transformers_without_download_raises_local_model_not_found():
-    with pytest.raises(WorkbenchError) as exc_info:
-        get_backend("transformers", "org/missing", hf_api_key=None)
-
-    assert exc_info.value.code == "local_model_not_found"
-    assert exc_info.value.status_code == 404

@@ -8,6 +8,8 @@ from app.inference import transformers_backend
 from app.inference.schemas import ChatChunk, ChatMessage
 from app.inference.transformers_backend import TransformersBackend
 
+pytestmark = pytest.mark.ml
+
 
 class _FakeEncoding(dict):
     def to(self, device):

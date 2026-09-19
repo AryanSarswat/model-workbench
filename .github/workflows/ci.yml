@@ -25,8 +25,10 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      # Application suite only -- ML backend tests (tests/ml/) run locally via
+      # `make test-ml`, never in CI (see Makefile for why: --ignore, not -m).
       - name: Test with coverage
-        run: uv run pytest --cov --cov-report=term-missing
+        run: uv run pytest tests --ignore=tests/ml --cov --cov-report=term-missing
 
   docker:
     runs-on: ubuntu-latest

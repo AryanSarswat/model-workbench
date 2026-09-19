@@ -28,7 +28,10 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["network: hits the real Hugging Face Hub API (excluded by default)"]
+markers = [
+    "network: hits the real Hugging Face Hub API (excluded by default)",
+    "ml: local-inference backend tests, run locally via `make test-ml` (excluded from CI)",
+]
 addopts = "-m 'not network'"
 
 [tool.coverage.run]
