@@ -6,6 +6,11 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /usr/local/bin/uv
 
 WORKDIR /repo
 
+# llama-cpp-python ships only an sdist, so image build compiles llama.cpp from
+# source -- needs a C/C++ toolchain (not present in the slim base image).
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/ backend/
 COPY data/test_cases.template.json data/test_cases.template.json
 
