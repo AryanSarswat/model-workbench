@@ -102,7 +102,12 @@ class TransformersBackend:
             inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
             inputs = inputs.to(self._device)
             input_len = len(inputs["input_ids"][0])
-            outputs = await asyncio.to_thread(model.generate, **inputs)
+            # Bound loop turns so short tool-call JSON can't truncate mid-object:
+            # generate() defaults to input + 20 tokens, which cuts off arguments.
+            # The no-tools streaming path below stays uncapped per design (free-form
+            # replies run to EOS).
+            generate_kwargs = {**inputs, "max_new_tokens": 512}
+            outputs = await asyncio.to_thread(model.generate, **generate_kwargs)
             return tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
 
         return await run_tool_loop(_generate, prompt_messages, tools)

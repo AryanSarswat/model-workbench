@@ -66,3 +66,20 @@ def test_parse_tool_call_with_missing_keys_returns_none():
 
     assert retrier.parse_tool_call_or_reply('{"tool": "calculator"}') is None
     assert retrier.parse_tool_call_or_reply('{"arguments": {"expression": "2"}}') is None
+
+
+def test_parse_tool_call_with_name_key_and_tool_call_tags():
+    parsed = PromptJsonRetrier().parse_tool_call_or_reply(
+        '<tool_call>\n{"name": "calculator", "arguments": {"expression": "2+3"}}\n</tool_call>'
+    )
+
+    assert parsed == ToolCall(tool_name="calculator", arguments={"expression": "2+3"})
+
+
+def test_parse_tool_call_with_name_key_and_surrounding_chatter():
+    parsed = PromptJsonRetrier().parse_tool_call_or_reply(
+        'Sure, computing that: <tool_call>{"name": "calculator", '
+        '"arguments": {"expression": "2+3"}}</tool_call> done'
+    )
+
+    assert parsed == ToolCall(tool_name="calculator", arguments={"expression": "2+3"})

@@ -175,3 +175,42 @@ def test_stream_chat_with_tools_returns_empty_when_turns_run_out(monkeypatch):
     assert [c.delta for c in chunks] == ["", ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+
+
+class _FakePlainTextToolLlama(_FakeLlama):
+    """Small models emit the tool attempt as plain-text <tool_call> JSON."""
+
+    def __init__(self, model_path: str, verbose: bool = False) -> None:
+        super().__init__(model_path, verbose)
+        self.seen: list[list[dict]] = []
+
+    def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
+        assert stream is False
+        self.seen.append(list(messages))
+        if len(self.seen) == 1:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": '<tool_call>\n{"name": "calculator", '
+                            '"arguments": {"expression": "6 * 7"}}\n</tool_call>',
+                        }
+                    }
+                ]
+            }
+        return {"choices": [{"message": {"role": "assistant", "content": "42"}}]}
+
+
+def test_stream_chat_with_tools_executes_plain_text_tool_call(monkeypatch):
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FakePlainTextToolLlama)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    chunks = _run_tool_chat(backend)
+
+    assert [c.delta for c in chunks] == ["42", ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+    llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
+    tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
+    assert tool_messages == [{"role": "tool", "tool_call_id": "", "content": "42"}]

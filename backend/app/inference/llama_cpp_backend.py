@@ -19,6 +19,7 @@ from llama_cpp import Llama
 
 from app.errors import WorkbenchError
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
+from app.inference.structured_output import PromptJsonRetrier, ToolCall
 from app.tools import ToolSpec, get_tool
 
 _CACHE: dict[str, Llama] = {}
@@ -58,6 +59,7 @@ class LlamaCppBackend:
         # spec dict would KeyError (or be silently filtered) inside the library.
         tool_schemas = [{"type": "function", "function": spec.model_dump()} for spec in tools]
         last_content = ""
+        retrier = PromptJsonRetrier()
         for _ in range(5):
             response = await asyncio.to_thread(
                 llama.create_chat_completion,
@@ -71,7 +73,24 @@ class LlamaCppBackend:
                 last_content = message["content"]
             tool_calls = message.get("tool_calls") or []
             if not tool_calls:
-                return message.get("content") or ""
+                # Small models (e.g. Qwen2.5-0.5B) emit the tool attempt as plain
+                # text (<tool_call>{"name": ..., "arguments": ...}</tool_call>)
+                # which llama-cpp-python never parses into message["tool_calls"].
+                # Fall back to the shared PromptJsonRetrier parser -- native when
+                # the template supports it, prompt-JSON otherwise.
+                content = message.get("content") or ""
+                parsed = retrier.parse_tool_call_or_reply(content) if content else None
+                if not isinstance(parsed, ToolCall):
+                    return content
+                history.append(dict(message))
+                try:
+                    result = await get_tool(parsed.tool_name).run(parsed.arguments)
+                except WorkbenchError as e:
+                    result = f"Error: {e.message}"
+                except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
+                    result = f"Error: {e}"
+                history.append({"role": "tool", "tool_call_id": "", "content": result})
+                continue
             history.append(dict(message))
             for call in tool_calls:
                 function = call.get("function") or {}

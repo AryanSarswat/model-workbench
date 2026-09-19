@@ -77,6 +77,13 @@ class PromptJsonRetrier:
                     obj.get("arguments"), dict
                 ):
                     return ToolCall(tool_name=obj["tool"], arguments=obj["arguments"])
+                # Qwen-style dialect: <tool_call>{"name": ..., "arguments": ...}</tool_call>.
+                # The {...} scan above already strips the surrounding tags/chatter, so
+                # only the `name` key shape needs handling here.
+                if isinstance(obj.get("name"), str) and isinstance(
+                    obj.get("arguments"), dict
+                ):
+                    return ToolCall(tool_name=obj["name"], arguments=obj["arguments"])
                 if isinstance(obj.get("reply"), str):
                     return TextReply(text=obj["reply"])
                 return None

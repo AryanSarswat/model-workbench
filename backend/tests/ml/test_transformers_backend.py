@@ -133,6 +133,8 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     class _ToolModel(_FakeModel):
         def generate(self, **kwargs):
             assert "streamer" not in kwargs
+            assert kwargs.get("max_new_tokens") == 512
+            self.generate_kwargs = kwargs
             return [[1, 2, 3, 4]]
 
     _install_fakes(monkeypatch)
