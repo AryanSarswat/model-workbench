@@ -30,8 +30,13 @@ class ModelDetail(DiscoveredModel):
     dtype: str | None = None  # dominant dtype from safetensors metadata, e.g. "BF16"
 
 
-class FeasibilityResult(BaseModel):
+class FeasibilityOption(BaseModel):
+    label: str  # a GGUF filename, or e.g. "transformers (BF16)"
     verdict: Literal["comfortable", "tight", "wont_fit"]
     estimated_memory_gb: float
-    available_memory_gb: float
     reason: str
+
+
+class FeasibilityReport(BaseModel):
+    available_memory_gb: float
+    options: list[FeasibilityOption]

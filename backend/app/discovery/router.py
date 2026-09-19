@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query
 
 from app.discovery.feasibility import estimate_feasibility
 from app.discovery.hf_client import get_model_detail, list_discoverable_models
-from app.discovery.schemas import DiscoveredModel, FeasibilityResult, ModelDetail
+from app.discovery.schemas import DiscoveredModel, FeasibilityReport, ModelDetail
 
 router = APIRouter(prefix="/models", tags=["discovery"])
 
@@ -24,7 +24,7 @@ def discover_models(
 # "/feasibility" route must be registered first, or it would never be reached (see
 # tests/test_feasibility.py's route-ordering regression test).
 @router.get("/{model_id:path}/feasibility")
-def model_feasibility(model_id: str, quant: str | None = None) -> FeasibilityResult:
+def model_feasibility(model_id: str, quant: str | None = None) -> FeasibilityReport:
     return estimate_feasibility(model_id, quant=quant)
 
 
