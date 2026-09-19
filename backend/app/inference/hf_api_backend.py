@@ -10,8 +10,7 @@ from collections.abc import AsyncIterator
 from huggingface_hub import AsyncInferenceClient
 from huggingface_hub.errors import HTTPError
 
-from app.inference.base import BackendCapabilities
-from app.inference.schemas import ChatChunk, ChatMessage
+from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
 
 
 class HFInferenceAPIBackend:

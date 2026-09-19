@@ -14,3 +14,8 @@ class ChatChunk(BaseModel):
     delta: str = ""
     done: bool = False
     error: str | None = None
+
+
+class BackendCapabilities(BaseModel):
+    structured_output_mode: Literal["grammar", "guided", "prompt_retry"]
+    native_tool_calling: bool

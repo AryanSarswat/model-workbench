@@ -29,10 +29,12 @@ model-workbench/
 │   │   ├── discovery/             # HF Hub trending/recent + model detail + feasibility
 │   │   ├── downloads/             # download manager, job tracking, progress
 │   │   ├── inference/
-│   │   │   ├── base.py            # InferenceBackend protocol, BackendCapabilities
+│   │   │   ├── base.py            # InferenceBackend protocol
+│   │   │   ├── schemas.py         # ChatMessage, ChatChunk, BackendCapabilities
+│   │   │   ├── registry.py        # backend name -> InferenceBackend
+│   │   │   ├── hf_api_backend.py
 │   │   │   ├── llama_cpp_backend.py
 │   │   │   ├── transformers_backend.py
-│   │   │   ├── hf_api_backend.py
 │   │   │   ├── structured_output.py  # grammar builders + PromptJsonRetrier
 │   │   │   └── tool_loop.py        # tool-call orchestration
 │   │   ├── tools/                  # shared, hot-reloadable tool directory (see below)
@@ -84,16 +86,21 @@ needs real aggregation (`GROUP BY model, backend, category`).
 
 ## Inference engine
 
-**Common interface**, so the frontend never touches a specific backend:
+**Common interface**, so callers depend on the shape, not a specific backend:
 
 ```python
 class InferenceBackend(Protocol):
     def capabilities(self) -> BackendCapabilities: ...
-    def stream_chat(self, model_id: str, messages: list[ChatMessage]) -> AsyncIterator[ChatChunk]: ...
+    async def stream_chat(self, model_id: str, messages: list[ChatMessage]) -> AsyncIterator[ChatChunk]: ...
+    async def aclose(self) -> None: ...
 ```
 
 `tools`/`output_schema` params are added once tool calling and structured output land —
-left off for now rather than accepted-and-ignored.
+left off for now rather than accepted-and-ignored. `get_backend(name, ...)` in
+`app/inference/registry.py` resolves a request's `backend` field to a concrete
+implementation; `POST /chat/stream` calls that instead of importing a specific backend
+class, so it's the one thing that has to change when a new backend is added, not every
+caller.
 
 Three implementations, one built so far: `HFInferenceAPIBackend` (remote, via
 `huggingface_hub.AsyncInferenceClient` — genuinely async, so a slow provider response
@@ -101,11 +108,12 @@ doesn't block the event loop; which `model_id`s actually work depends on HF rout
 enabled provider, surfaced as a normal 4xx rather than a crash). `LlamaCppBackend` (GGUF via
 llama-cpp-python, runs on any hardware) and `TransformersBackend` (fallback for models
 without a GGUF build; MPS/CUDA/CPU auto-detected) are still planned — both need
-model-loading/lifecycle management the remote backend doesn't.
+model-loading/lifecycle management the remote backend doesn't, and are what the registry's
+next branch will construct.
 
-`POST /chat/stream` wires the HF API backend to an SSE endpoint today (no session
-persistence yet — `chat_sessions`/`chat_messages` and `GET/DELETE /chat/sessions[/{id}]`
-are a separate follow-up once there's more than one backend to make sessions worth having).
+No session persistence yet — `chat_sessions`/`chat_messages` and
+`GET/DELETE /chat/sessions[/{id}]` are a separate follow-up once there's more than one
+backend to make sessions worth having.
 
 **Structured output:**
 

@@ -6,21 +6,16 @@ shape, never on a specific backend.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from typing import Literal, Protocol
+from typing import Protocol
 
-from pydantic import BaseModel
-
-from app.inference.schemas import ChatChunk, ChatMessage
-
-
-class BackendCapabilities(BaseModel):
-    structured_output_mode: Literal["grammar", "guided", "prompt_retry"]
-    native_tool_calling: bool
+from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
 
 
 class InferenceBackend(Protocol):
     def capabilities(self) -> BackendCapabilities: ...
 
-    def stream_chat(
+    async def stream_chat(
         self, model_id: str, messages: list[ChatMessage]
     ) -> AsyncIterator[ChatChunk]: ...
+
+    async def aclose(self) -> None: ...
