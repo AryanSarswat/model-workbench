@@ -182,6 +182,10 @@ the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling r
 ## Notable decisions
 
 - **ORM**: SQLModel over raw SQL — typed models, standard, keeps CRUD-heavy code simple.
-- **Docker**: deferred to Phase 2 (needs both services to make a meaningful compose file);
-  Phase 1 runs via a local Python venv + uvicorn.
+- **Docker**: `backend/Dockerfile` builds and runs the backend standalone (build from the
+  repo root: `docker build -f backend/Dockerfile .`, since it needs both `backend/` and
+  `data/` in the build context). A root `docker-compose.yml` chaining backend + frontend is
+  still deferred until the frontend exists — one service alone doesn't need compose. Local
+  dev still defaults to a Python venv + uvicorn; the image is for anyone who'd rather not
+  set up Python locally, and lays groundwork for the eventual compose file.
 - **HF API key**: `backend/.env` via `pydantic-settings`, never in the DB or logs.

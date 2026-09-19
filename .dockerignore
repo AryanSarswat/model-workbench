@@ -1,0 +1,13 @@
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.coverage
+**/*.egg-info
+.git
+.github
+.superpowers
+docs
+data/test_cases
+data/*.db
