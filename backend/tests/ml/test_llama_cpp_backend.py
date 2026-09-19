@@ -6,6 +6,8 @@ from app.inference import llama_cpp_backend
 from app.inference.llama_cpp_backend import LlamaCppBackend
 from app.inference.schemas import ChatChunk, ChatMessage
 
+pytestmark = pytest.mark.ml
+
 
 @pytest.fixture(autouse=True)
 def _clear_cache():

@@ -635,12 +635,9 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "huggingface-hub" },
-    { name = "llama-cpp-python" },
     { name = "psutil" },
     { name = "pydantic-settings" },
     { name = "sqlmodel" },
-    { name = "torch" },
-    { name = "transformers" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -651,24 +648,29 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+local = [
+    { name = "llama-cpp-python" },
+    { name = "torch" },
+    { name = "transformers" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "huggingface-hub", specifier = ">=0.26" },
-    { name = "llama-cpp-python", specifier = ">=0.3.8" },
+    { name = "llama-cpp-python", marker = "extra == 'local'", specifier = ">=0.3.8" },
     { name = "psutil", specifier = ">=6.1" },
     { name = "pydantic-settings", specifier = ">=2.6" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.7" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
-    { name = "torch", specifier = ">=2.4" },
-    { name = "transformers", specifier = ">=4.44" },
+    { name = "torch", marker = "extra == 'local'", specifier = ">=2.4" },
+    { name = "transformers", marker = "extra == 'local'", specifier = ">=4.44" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["local", "dev"]
 
 [[package]]
 name = "mpmath"
