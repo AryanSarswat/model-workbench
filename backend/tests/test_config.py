@@ -22,6 +22,3 @@ def test_platform_info_returns_known_system():
     assert system in {"darwin", "linux", "windows"}
     assert machine  # non-empty string, e.g. "arm64" or "x86_64"
 
-
-# get_hardware_info() is not tested yet — it depends on _detect_gpu(), which is not
-# implemented (see the TODO in app/config.py). Add a test once that's filled in.
