@@ -17,6 +17,9 @@ data/test_cases/
 data/workbench.db
 data/*.db
 
+# Downloaded model weights — large, machine-specific, never committed
+data/models/
+
 # Node / frontend (added when Phase 2 starts)
 node_modules/
 dist/
