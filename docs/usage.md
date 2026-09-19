@@ -24,7 +24,6 @@ make run   # uv run --project backend uvicorn app.main:app --reload --app-dir ba
 ```bash
 make test   # cd backend && uv run pytest
 make lint   # cd backend && uv run ruff check .
-make ci     # lint + test with coverage, exactly what the `backend` CI job runs
 ```
 
 ## Run the API in Docker (alternative to the venv)
@@ -32,6 +31,13 @@ make ci     # lint + test with coverage, exactly what the `backend` CI job runs
 ```bash
 make docker-build   # docker build -f backend/Dockerfile -t model-workbench-backend .
 make docker-run     # docker run --rm -p 8000:8000 model-workbench-backend
+```
+
+## Before opening a PR
+
+```bash
+make ci   # backend lint+test+coverage, then a Docker build/boot/health check --
+          # the same two jobs GitHub Actions runs, so a pass here means the PR checks will pass
 ```
 
 Note: the container's `data/` directory is ephemeral (lost when the container is removed).
