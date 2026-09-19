@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+*.env.local
+
+# Private data (real dataset + generated DB) — only templates are committed
+data/test_cases/
+data/workbench.db
+data/*.db
+
+# Node / frontend (added when Phase 2 starts)
+node_modules/
+dist/
+
+# Brainstorming companion scratch files
+.superpowers/
+
+# Implementation plans are working documents, not repo artifacts — code and docs only
+docs/superpowers/plans/
+
+# OS
+.DS_Store

@@ -1,0 +1,43 @@
+{
+  "$comment": "Template for your private test-case dataset. Copy real cases into data/test_cases/<category>.json (gitignored) — this file is just the shape, committed as an example.",
+  "cases": [
+    {
+      "id": "example-general-001",
+      "category": "general",
+      "messages": [
+        {"role": "user", "content": "Summarize the plot of a story in two sentences."}
+      ],
+      "assertions": [
+        {"type": "contains", "value": "sentence"}
+      ]
+    },
+    {
+      "id": "example-coding-001",
+      "category": "coding",
+      "messages": [
+        {"role": "user", "content": "Write a function that returns the nth Fibonacci number."}
+      ],
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "language": {"type": "string"},
+          "code": {"type": "string"}
+        },
+        "required": ["language", "code"]
+      },
+      "assertions": [
+        {"type": "schema_valid"}
+      ]
+    },
+    {
+      "id": "example-personalization-001",
+      "category": "personalization",
+      "messages": [
+        {"role": "user", "content": "Given my note-taking style, suggest a title for this note."}
+      ],
+      "judge": {
+        "criteria": "The title should be under 8 words and reflect the note's main topic."
+      }
+    }
+  ]
+}
