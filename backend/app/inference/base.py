@@ -16,7 +16,11 @@ class InferenceBackend(Protocol):
     def capabilities(self) -> BackendCapabilities: ...
 
     async def stream_chat(
-        self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
+        self,
+        model_id: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec] | None = None,
+        output_schema: dict | None = None,
     ) -> AsyncIterator[ChatChunk]: ...
 
     async def aclose(self) -> None: ...

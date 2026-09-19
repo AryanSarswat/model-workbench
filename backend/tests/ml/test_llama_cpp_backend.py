@@ -2,7 +2,9 @@ import asyncio
 import json
 
 import pytest
+from llama_cpp import LlamaGrammar
 
+from app.errors import WorkbenchError
 from app.inference import llama_cpp_backend
 from app.inference.llama_cpp_backend import LlamaCppBackend
 from app.inference.schemas import ChatChunk, ChatMessage
@@ -214,3 +216,136 @@ def test_stream_chat_with_tools_executes_plain_text_tool_call(monkeypatch):
     llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
     tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
     assert tool_messages == [{"role": "tool", "tool_call_id": "", "content": "42"}]
+
+
+_SCHEMA = {
+    "type": "object",
+    "required": ["answer"],
+    "properties": {"answer": {"type": "integer"}},
+}
+
+
+def _run_schema_chat(
+    backend: LlamaCppBackend, schema: dict, tools=None
+) -> list[ChatChunk]:
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="hi")]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "whatever/model", messages, tools=tools, output_schema=schema
+            )
+        ]
+
+    return asyncio.run(_collect())
+
+
+class _FakeSchemaLlama(_FakeLlama):
+    """Records kwargs so tests can assert on the grammar kwarg."""
+
+    def __init__(self, model_path: str, verbose: bool = False) -> None:
+        super().__init__(model_path, verbose)
+        self.seen_kwargs: dict = {}
+
+    def create_chat_completion(self, messages, stream=True, **kwargs):
+        assert stream is True
+        self.seen_kwargs = kwargs
+        return iter(
+            [
+                {"choices": [{"delta": {"content": '{"answer":'}}]},
+                {"choices": [{"delta": {"content": " 42}"}}]},
+            ]
+        )
+
+
+def test_stream_chat_with_schema_passes_grammar_and_yields_single_delta(monkeypatch):
+    fake = _FakeSchemaLlama("/tmp/fake.gguf")
+    monkeypatch.setattr(LlamaCppBackend, "_get_llama", lambda self: fake)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    chunks = _run_schema_chat(backend, _SCHEMA)
+
+    assert isinstance(fake.seen_kwargs.get("grammar"), LlamaGrammar)
+    # Constrained turns never stream fragments: one delta + done.
+    assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+
+
+def test_stream_chat_without_schema_passes_no_grammar(monkeypatch):
+    fake = _FakeSchemaLlama("/tmp/fake.gguf")
+    monkeypatch.setattr(LlamaCppBackend, "_get_llama", lambda self: fake)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    chunks = _run_stream_chat(backend)
+
+    assert "grammar" not in fake.seen_kwargs
+    assert [c.delta for c in chunks] == ['{"answer":', " 42}", ""]
+    assert chunks[-1].done is True
+
+
+def test_stream_chat_with_invalid_schema_raises_pre_stream():
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    async def _collect() -> None:
+        messages = [ChatMessage(role="user", content="hi")]
+        with pytest.raises(WorkbenchError) as exc_info:
+            async for _ in backend.stream_chat(
+                "whatever/model", messages, output_schema={"type": 42}
+            ):
+                pass
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.code == "invalid_output_schema"
+
+    asyncio.run(_collect())
+
+
+class _FakeSchemaToolLlama(_FakeLlama):
+    """One native tool turn, then a final answer -- every turn must carry grammar."""
+
+    def __init__(self, model_path: str, verbose: bool = False) -> None:
+        super().__init__(model_path, verbose)
+        self.grammars: list = []
+        self.turns = 0
+
+    def create_chat_completion(
+        self, messages, stream=True, tools=None, tool_choice=None, **kwargs
+    ):
+        assert stream is False
+        self.grammars.append(kwargs.get("grammar"))
+        self.turns += 1
+        if self.turns == 1:
+            return {
+                "choices": [
+                    {
+                        "message": _tool_call_message(
+                            "call_1", "calculator", json.dumps({"expression": "2 + 3"})
+                        )
+                    }
+                ]
+            }
+        return {"choices": [{"message": {"role": "assistant", "content": '{"answer": 5}'}}]}
+
+
+def test_stream_chat_with_tools_and_schema_constrains_every_turn(monkeypatch):
+    fake = _FakeSchemaToolLlama("/tmp/fake.gguf")
+    monkeypatch.setattr(LlamaCppBackend, "_get_llama", lambda self: fake)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
+        tools = [get_tool("calculator").spec]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "whatever/model", messages, tools=tools, output_schema=_SCHEMA
+            )
+        ]
+
+    chunks = asyncio.run(_collect())
+
+    assert len(fake.grammars) == 2
+    assert all(isinstance(g, LlamaGrammar) for g in fake.grammars)
+    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None

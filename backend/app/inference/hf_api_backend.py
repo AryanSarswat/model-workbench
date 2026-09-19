@@ -5,15 +5,25 @@ provider that serves it; an unsupported model_id is a normal BadRequestError, no
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+import json
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 from huggingface_hub import AsyncInferenceClient
 from huggingface_hub.errors import HTTPError
 
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
-from app.inference.structured_output import PromptJsonRetrier
+from app.inference.structured_output import (
+    PromptJsonRetrier,
+    matches_schema,
+    validate_output_schema,
+)
 from app.inference.tool_loop import run_tool_loop
 from app.tools import ToolSpec
+
+_SCHEMA_RETRY_MESSAGE = (
+    "That was not valid JSON conforming to the required schema. "
+    "Reply with exactly one JSON object and nothing else."
+)
 
 
 class HFInferenceAPIBackend:
@@ -41,20 +51,75 @@ class HFInferenceAPIBackend:
         )
         return completion.choices[0].message.content or ""
 
-    async def stream_chat(
-        self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None
-    ) -> AsyncIterator[ChatChunk]:
-        if tools:
-            # Tools mode runs non-streamed turns and yields the final reply as one
-            # delta + done: tool-calling turns can't stream partial tool calls
-            # honestly, so nothing streams until the loop resolves to final text.
-            try:
-                prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools)
+    async def _run_schema_loop(
+        self,
+        generate: Callable[[list[ChatMessage]], Awaitable[str]],
+        messages: list[ChatMessage],
+        schema: dict,
+        max_iterations: int = 5,
+    ) -> str:
+        """Best-effort schema-constrained turns over the shared prompt-and-retry
+        helpers, mirroring run_tool_loop's shape: at most max_iterations model
+        turns, each failure fed back as a user-role message.
 
+        Success returns the parsed object re-serialized, so the delta is pure
+        JSON. Exhausted turns return the last raw text -- the caller still
+        emits a terminal chunk, never raises.
+        """
+        retrier = PromptJsonRetrier()
+        history = retrier.build_schema_messages(messages, schema)
+        last_text = ""
+        for _ in range(max_iterations):
+            last_text = await generate(history)
+            parsed = retrier.parse_schema_reply(last_text)
+            history.append(ChatMessage(role="assistant", content=last_text))
+            if isinstance(parsed, dict) and matches_schema(parsed, schema):
+                return json.dumps(parsed)
+            history.append(ChatMessage(role="user", content=_SCHEMA_RETRY_MESSAGE))
+        return last_text
+
+    async def stream_chat(
+        self,
+        model_id: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec] | None = None,
+        output_schema: dict | None = None,
+    ) -> AsyncIterator[ChatChunk]:
+        if output_schema is not None:
+            # Pre-stream 400 -- outside the try below so an invalid schema
+            # raises instead of becoming a terminal chunk.
+            validate_output_schema(output_schema)
+        if tools or output_schema is not None:
+            # Constrained/tool turns run non-streamed and yield the final reply
+            # as one delta + done: neither tool-calling nor retry turns can
+            # stream partial output honestly, so nothing streams until the loop
+            # resolves to final text.
+            try:
                 async def _generate(history: list[ChatMessage]) -> str:
                     return await self._generate_text(model_id, history)
 
-                final = await run_tool_loop(_generate, prompt_messages, tools)
+                if tools:
+                    # The tool loop runs first; its tool-informed final reply
+                    # then enters the schema-constrained turn(s) as assistant
+                    # context (tool traffic stays in messages).
+                    prompt_messages = PromptJsonRetrier().build_tool_messages(
+                        messages, tools
+                    )
+                    tool_final = await run_tool_loop(_generate, prompt_messages, tools)
+                    history = [
+                        *messages,
+                        ChatMessage(role="assistant", content=tool_final),
+                    ]
+                else:
+                    history = messages
+                if output_schema is not None:
+                    final = await self._run_schema_loop(
+                        _generate, history, output_schema
+                    )
+                else:
+                    # Tools-only: output_schema is None implies tools is set,
+                    # so tool_final is bound (outer condition guarantees one).
+                    final = tool_final
             except HTTPError as e:
                 yield ChatChunk(done=True, error=str(e))
                 return
