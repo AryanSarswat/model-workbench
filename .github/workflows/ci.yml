@@ -28,3 +28,35 @@ jobs:
 
       - name: Test with coverage
         run: pytest --cov --cov-report=term-missing
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build context is the repo root, not backend/ -- the image needs both backend/ and
+      # data/ (see backend/Dockerfile's top comment).
+      - name: Build image
+        run: docker build -f backend/Dockerfile -t model-workbench-backend:ci .
+
+      - name: Run container
+        run: docker run -d --name backend-ci -p 8000:8000 model-workbench-backend:ci
+
+      # Proves the container actually starts and serves traffic, not just that it builds --
+      # a Dockerfile can build fine and still fail at runtime (missing file, crashed import,
+      # wrong CMD). Deliberately just /health, not a real HF Hub call: this should fail on a
+      # broken image, not on Hugging Face being slow or unreachable.
+      - name: Wait for health check
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Container did not become healthy within 30s"
+          exit 1
+
+      - name: Container logs
+        if: always()
+        run: docker logs backend-ci

@@ -20,9 +20,9 @@ frontend code yet — the backend is being completed first, end-to-end, before P
   Living reference docs belong in `docs/*.md` and should be kept up to date as the
   architecture evolves; specs/plans (if produced during a work session) are gitignored
   under `docs/superpowers/`.
-- **CI must stay green.** Every push runs lint (`ruff check`) and `pytest --cov` via GitHub
-  Actions (`.github/workflows/ci.yml`). The `backend` check is a required status check on
-  `main` — a PR literally cannot merge until it passes.
+- **CI must stay green.** Every push runs lint (`ruff check`), `pytest --cov`, and a Docker
+  build-and-boot check via GitHub Actions (`.github/workflows/ci.yml`). Both `backend` and
+  `docker` are required status checks on `main` — a PR literally cannot merge until they pass.
 - **Private dataset never gets committed.** `data/test_cases/` and `data/*.db` are
   gitignored. Only `data/test_cases.template.json` is tracked.
 - **Structured output & tool calling share one fallback mechanism** (`PromptJsonRetrier`) —
