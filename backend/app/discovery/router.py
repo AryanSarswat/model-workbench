@@ -4,8 +4,9 @@ from typing import Literal
 
 from fastapi import APIRouter, Query
 
+from app.discovery.feasibility import estimate_feasibility
 from app.discovery.hf_client import get_model_detail, list_discoverable_models
-from app.discovery.schemas import DiscoveredModel, ModelDetail
+from app.discovery.schemas import DiscoveredModel, FeasibilityResult, ModelDetail
 
 router = APIRouter(prefix="/models", tags=["discovery"])
 
@@ -16,6 +17,15 @@ def discover_models(
     limit: int = Query(default=20, ge=1, le=100),
 ) -> list[DiscoveredModel]:
     return list_discoverable_models(sort=sort, limit=limit)
+
+
+# NOTE: route order matters. Both routes below use a {model_id:path} catch-all, which
+# matches ANY string including one ending in "/feasibility" -- so the more specific
+# "/feasibility" route must be registered first, or it would never be reached (see
+# tests/test_feasibility.py's route-ordering regression test).
+@router.get("/{model_id:path}/feasibility")
+def model_feasibility(model_id: str, quant: str | None = None) -> FeasibilityResult:
+    return estimate_feasibility(model_id, quant=quant)
 
 
 @router.get("/{model_id:path}")
