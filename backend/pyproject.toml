@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "pydantic-settings>=2.6",
     "psutil>=6.1",
+    "huggingface_hub>=0.26",
 ]
 
 [project.optional-dependencies]
@@ -23,6 +24,8 @@ line-length = 100
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["network: hits the real Hugging Face Hub API (excluded by default)"]
+addopts = "-m 'not network'"
 
 [tool.coverage.run]
 source = ["app"]
