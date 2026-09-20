@@ -73,6 +73,21 @@ def test_schema_valid_assertion_fails_on_mismatched_type():
     assert results[0].passed is False
 
 
+def test_schema_valid_assertion_distinguishes_no_json_from_no_schema_set():
+    no_json_case = _case(
+        output_schema={"type": "object"}, assertions=[Assertion(type="schema_valid")]
+    )
+    no_schema_case = _case(assertions=[Assertion(type="schema_valid")])
+
+    no_json_result = run_assertions(no_json_case, "no json here", _capabilities(False), [], 0)
+    no_schema_result = run_assertions(no_schema_case, '{"a": 1}', _capabilities(False), [], 0)
+
+    assert no_json_result[0].passed is False
+    assert no_json_result[0].detail == "no JSON object found in response"
+    assert no_schema_result[0].passed is False
+    assert no_schema_result[0].detail == "case has no output_schema set"
+
+
 def test_tool_called_assertion_checks_the_tools_called_list():
     case = _case(assertions=[Assertion(type="tool_called", name="calculator")])
 

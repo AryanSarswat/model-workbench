@@ -10,14 +10,14 @@ import re
 
 from pydantic import BaseModel
 
-from app.dataset.store import Assertion, TestCase
+from app.dataset.store import Assertion, AssertionType, TestCase
 from app.errors import WorkbenchError
 from app.inference.schemas import BackendCapabilities
 from app.inference.structured_output import extract_json_object, matches_schema
 
 
 class AssertionResult(BaseModel):
-    type: str
+    type: AssertionType
     passed: bool
     detail: str = ""
 
@@ -45,11 +45,18 @@ def _run_one(
 ) -> AssertionResult:
     if assertion.type == "schema_valid":
         parsed = extract_json_object(response)
-        passed = (
-            parsed is not None
-            and case.output_schema is not None
-            and matches_schema(parsed, case.output_schema)
-        )
+        if case.output_schema is None:
+            # An authoring bug (the case never set output_schema), not a model
+            # failure -- worth distinguishing so a reviewer doesn't chase the
+            # model's response when the test case itself is misconfigured.
+            return AssertionResult(
+                type=assertion.type, passed=False, detail="case has no output_schema set"
+            )
+        if parsed is None:
+            return AssertionResult(
+                type=assertion.type, passed=False, detail="no JSON object found in response"
+            )
+        passed = matches_schema(parsed, case.output_schema)
         detail = "" if passed else "response did not match output_schema"
         return AssertionResult(type=assertion.type, passed=passed, detail=detail)
     if assertion.type == "contains":
