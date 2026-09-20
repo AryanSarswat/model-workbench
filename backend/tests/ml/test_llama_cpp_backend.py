@@ -300,6 +300,23 @@ def test_stream_chat_with_invalid_schema_raises_pre_stream():
     asyncio.run(_collect())
 
 
+def test_prevalidate_output_schema_rejects_dict_shaped_but_invalid_schema():
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    with pytest.raises(WorkbenchError) as exc_info:
+        backend.prevalidate_output_schema({"type": 42})
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "invalid_output_schema"
+
+
+def test_prevalidate_output_schema_accepts_valid_schema():
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    # No model file needed: grammar compile touches no weights.
+    backend.prevalidate_output_schema(_SCHEMA)
+
+
 class _FakeSchemaToolLlama(_FakeLlama):
     """One native tool turn, then a final answer -- every turn must carry grammar."""
 

@@ -425,6 +425,26 @@ def test_invalid_output_schema_raises_400_pre_stream(monkeypatch):
     assert exc_info.value.code == "invalid_output_schema"
 
 
+def test_prevalidate_output_schema_rejects_bad_type_without_a_model():
+    pytest.importorskip("outlines_core")
+    backend = TransformersBackend("/tmp/snapshot")
+
+    with pytest.raises(WorkbenchError) as exc_info:
+        backend.prevalidate_output_schema({"type": "not_a_real_type"})
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "invalid_output_schema"
+
+
+def test_prevalidate_output_schema_accepts_valid_schema():
+    pytest.importorskip("outlines_core")
+    backend = TransformersBackend("/tmp/snapshot")
+
+    backend.prevalidate_output_schema(
+        {"type": "object", "properties": {"a": {"type": "integer"}}}
+    )
+
+
 def test_missing_outlines_raises_backend_not_available(monkeypatch):
     monkeypatch.setitem(sys.modules, "outlines", None)
     monkeypatch.setitem(sys.modules, "outlines.backends", None)

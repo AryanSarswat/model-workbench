@@ -35,6 +35,15 @@ class HFInferenceAPIBackend:
         # and tool calling both go through the prompt-and-retry fallback for this backend.
         return BackendCapabilities(structured_output_mode="prompt_retry", native_tool_calling=False)
 
+    def prevalidate_output_schema(self, schema: dict) -> None:
+        """Shared dict/serializable check only (the Protocol default).
+
+        The prompt-and-retry schema loop never raises for schema reasons -- it
+        returns the last text when turns run out -- so there is no
+        generator-time rejection path to mirror here.
+        """
+        validate_output_schema(schema)
+
     async def aclose(self) -> None:
         """A fresh backend (and its underlying httpx connection pool) is created per
         request in the chat router -- callers must close it or the pool leaks."""

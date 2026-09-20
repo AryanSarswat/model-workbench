@@ -130,12 +130,15 @@ def test_stream_chat_passes_output_schema_to_the_backend():
 
 
 def test_stream_chat_rejects_invalid_output_schema_before_streaming():
-    def _reject(schema):
+    def _reject(self, schema):
         raise WorkbenchError(400, "invalid_output_schema", "bad schema")
 
     with (
         patch("app.chat.router.get_settings", return_value=Settings(hf_api_key="fake-key")),
-        patch("app.chat.router.validate_output_schema", _reject),
+        patch(
+            "app.inference.hf_api_backend.HFInferenceAPIBackend.prevalidate_output_schema",
+            _reject,
+        ),
     ):
         response = client.post(
             "/chat/stream", json={**_REQUEST, "output_schema": {"type": "object"}}

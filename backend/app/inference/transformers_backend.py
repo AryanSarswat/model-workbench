@@ -104,6 +104,30 @@ class TransformersBackend:
         # once structured output / tool calling land).
         return BackendCapabilities(structured_output_mode="guided", native_tool_calling=True)
 
+    def prevalidate_output_schema(self, schema: dict) -> None:
+        """Reject a bad schema pre-stream without loading the model.
+
+        The default outlines-core backend builds its guide from the schema
+        string alone (build_regex_from_schema), so running that same function
+        here exercises the exact rejection path _build_guided_processor hits --
+        anything it rejects would also fail at generator time, so valid schemas
+        can never be over-restricted. Without outlines installed there is
+        nothing model-free to probe; the shared dict check runs and the
+        generator-time wrapping stays the backstop.
+        """
+        if validate_output_schema is not None:
+            validate_output_schema(schema)
+        try:
+            from outlines_core.json_schema import build_regex_from_schema
+        except ImportError:
+            return
+        try:
+            build_regex_from_schema(json.dumps(schema))
+        except Exception as e:
+            raise WorkbenchError(
+                400, "invalid_output_schema", f"invalid output_schema: {e}"
+            ) from e
+
     def _get_model(self) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
         with _CACHE_LOCK:
             cached = _CACHE.get(self._snapshot_dir)

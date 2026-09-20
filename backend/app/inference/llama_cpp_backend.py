@@ -19,7 +19,11 @@ from llama_cpp import Llama, LlamaGrammar
 
 from app.errors import WorkbenchError
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
-from app.inference.structured_output import PromptJsonRetrier, ToolCall
+from app.inference.structured_output import (
+    PromptJsonRetrier,
+    ToolCall,
+    validate_output_schema,
+)
 from app.tools import ToolSpec, get_tool
 
 _CACHE: dict[str, Llama] = {}
@@ -50,6 +54,16 @@ class LlamaCppBackend:
         # JSON Schema constrains decoding via GBNF grammar (wired up once structured
         # output lands); chat-template tool calling is natively supported.
         return BackendCapabilities(structured_output_mode="grammar", native_tool_calling=True)
+
+    def prevalidate_output_schema(self, schema: dict) -> None:
+        """Same grammar compile the generator runs, but pre-stream and model-free.
+
+        from_json_schema touches no weights, so compiling here turns a
+        dict-shaped-but-invalid schema (e.g. {"type": 42}) into a 400 before
+        StreamingResponse starts instead of a mid-stream failure.
+        """
+        validate_output_schema(schema)
+        _build_grammar(schema)
 
     def _get_llama(self) -> Llama:
         with _CACHE_LOCK:
