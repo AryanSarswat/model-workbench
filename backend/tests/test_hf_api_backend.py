@@ -5,6 +5,7 @@ import httpx
 import pytest
 from huggingface_hub.errors import BadRequestError
 
+from app.errors import WorkbenchError
 from app.inference.hf_api_backend import HFInferenceAPIBackend
 from app.inference.schemas import ChatChunk, ChatMessage
 from app.tools import get_tool
@@ -150,3 +151,149 @@ def test_stream_chat_against_real_hf_inference_api():
 
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+
+
+_SCHEMA = {
+    "type": "object",
+    "required": ["answer"],
+    "properties": {"answer": {"type": "integer"}},
+}
+
+
+def _run_schema_chat(
+    backend: HFInferenceAPIBackend, schema: dict, tools=None
+) -> list[ChatChunk]:
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="Answer with JSON.")]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "some/model", messages, tools=tools, output_schema=schema
+            )
+        ]
+
+    return asyncio.run(_collect())
+
+
+def test_stream_chat_with_schema_returns_valid_json_first_try(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+
+    async def fake_chat_completion(**kwargs):
+        assert kwargs["stream"] is False
+        return _non_streamed_completion('Sure: {"answer": 42}')
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA)
+
+    # One delta + done; the delta is pure JSON even when the model adds chatter.
+    assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+
+
+def test_stream_chat_with_schema_retries_garbage_then_succeeds(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+    sent_messages = []
+
+    async def fake_chat_completion(**kwargs):
+        sent_messages.append(kwargs["messages"])
+        if len(sent_messages) == 1:
+            return _non_streamed_completion("no json here at all")
+        return _non_streamed_completion('{"answer": 7}')
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA)
+
+    assert [c.delta for c in chunks] == ['{"answer": 7}', ""]
+    assert chunks[-1].done is True
+    # The retry fed error feedback back before the successful turn.
+    assert any(
+        "required schema" in m["content"] for m in sent_messages[-1] if m["role"] == "user"
+    )
+
+
+def test_stream_chat_with_schema_returns_last_text_when_turns_run_out(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+    calls = []
+
+    async def fake_chat_completion(**kwargs):
+        calls.append(kwargs)
+        return _non_streamed_completion("still not json")
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA)
+
+    # Exhausted turns are a terminal chunk with the last text, never raised.
+    assert len(calls) == 5
+    assert [c.delta for c in chunks] == ["still not json", ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+
+
+def test_stream_chat_with_tools_and_schema_skips_schema_loop_when_draft_conforms(
+    monkeypatch,
+):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+    script = [
+        '{"tool": "calculator", "arguments": {"expression": "6 * 7"}}',
+        '{"answer": 42}',
+        '{"answer": 42}',
+        '{"answer": 42}',
+        '{"answer": 42}',
+    ]
+    calls = []
+
+    async def fake_chat_completion(**kwargs):
+        calls.append(kwargs)
+        return _non_streamed_completion(script.pop(0))
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA, tools=_tools())
+
+    # The tool loop's draft already conformed, so no schema-loop turn ran:
+    # five tool-loop turns, zero schema-loop turns.
+    assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+    assert len(calls) == 5
+
+
+def test_stream_chat_with_tools_and_schema_constrains_the_final_reply(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+    script = [
+        '{"tool": "calculator", "arguments": {"expression": "6 * 7"}}',
+        '{"reply": "the answer is 42"}',
+        'Here you go: {"answer": 42}',
+    ]
+
+    async def fake_chat_completion(**kwargs):
+        return _non_streamed_completion(script.pop(0))
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA, tools=_tools())
+
+    # Tool loop ran first (calculator), then the final reply was schema-shaped.
+    assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+
+
+def test_stream_chat_with_invalid_schema_raises_pre_stream():
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+
+    async def _collect() -> None:
+        messages = [ChatMessage(role="user", content="hi")]
+        with pytest.raises(WorkbenchError) as exc_info:
+            async for _ in backend.stream_chat(
+                "some/model", messages, output_schema=["not", "a", "dict"]
+            ):
+                pass
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.code == "invalid_output_schema"
+
+    asyncio.run(_collect())

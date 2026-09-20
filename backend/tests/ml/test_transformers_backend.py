@@ -1,9 +1,13 @@
 import asyncio
+import json
+import sys
 from typing import ClassVar
 
 import pytest
 import torch
+from transformers import LogitsProcessorList
 
+from app.errors import WorkbenchError
 from app.inference import transformers_backend
 from app.inference.schemas import ChatChunk, ChatMessage
 from app.inference.transformers_backend import TransformersBackend
@@ -244,3 +248,297 @@ def test_device_selection_prefers_mps_then_cuda_then_cpu(
     assert model.device == expected_device
     assert model.load_kwargs["torch_dtype"] == expected_dtype
     assert model.load_kwargs["trust_remote_code"] is False
+
+
+class _GuidedTokenizer(_FakeTokenizer):
+    """Fake serving scripted replies per generate turn, recording prompts."""
+
+    def __init__(self, replies: list[str]) -> None:
+        super().__init__()
+        self._replies = list(replies)
+        self.prompts: list[str] = []
+
+    def apply_chat_template(self, messages, **kwargs):
+        assert kwargs["add_generation_prompt"] is True
+        self.applied_messages = messages
+        if kwargs.get("tokenize") is False:
+            return "BASE PROMPT"
+        return _FakeEncoding(input_ids=[[1, 2]])
+
+    def __call__(self, text, **kwargs):
+        self.prompts.append(text)
+        return _FakeEncoding(input_ids=[[1, 2]])
+
+    def decode(self, ids, **kwargs):
+        return self._replies.pop(0)
+
+
+class _GuidedModel(_FakeModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.generate_calls: list[dict] = []
+
+    def generate(self, **kwargs):
+        self.generate_calls.append(kwargs)
+        return [[1, 2, 3, 4]]
+
+
+def _real_tokenizer():
+    """A tiny real fast tokenizer built locally (no Hub download), enough for
+    outlines' from_transformers wrapper and vocabulary indexing."""
+    pytest.importorskip("tokenizers")
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from tokenizers.pre_tokenizers import Whitespace
+    from transformers import PreTrainedTokenizerFast
+
+    tok = Tokenizer(
+        WordLevel(
+            vocab={
+                "[UNK]": 0,
+                "[EOS]": 1,
+                "hello": 2,
+                "{": 3,
+                "}": 4,
+                '"': 5,
+                "a": 6,
+                ":": 7,
+                "1": 8,
+                " ": 9,
+            },
+            unk_token="[UNK]",
+        )
+    )
+    tok.pre_tokenizer = Whitespace()
+    return PreTrainedTokenizerFast(
+        tokenizer_object=tok, unk_token="[UNK]", eos_token="[EOS]"
+    )
+
+
+def _patch_guided_processor(monkeypatch, sentinel=None):
+    sentinel = sentinel if sentinel is not None else object()
+    built: list = []
+
+    def _fake_build(model, tokenizer, schema):
+        built.append((model, tokenizer, schema))
+        return sentinel
+
+    monkeypatch.setattr(transformers_backend, "_build_guided_processor", _fake_build)
+    return sentinel, built
+
+
+def test_guided_plain_path_yields_single_delta_with_processor(monkeypatch):
+    schema = {"type": "object", "properties": {"a": {"type": "integer"}}}
+    model, tokenizer = _GuidedModel(), _GuidedTokenizer(['{"a": 1}'])
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+    sentinel, built = _patch_guided_processor(monkeypatch)
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="hi")]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "org/model", messages, output_schema=schema
+            )
+        ]
+
+    chunks = asyncio.run(_collect())
+
+    # Constrained turns never stream: one delta + done.
+    assert [c.delta for c in chunks] == ['{"a": 1}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+    assert model.generate_calls[0].get("max_new_tokens") == 512
+    processor = model.generate_calls[0].get("logits_processor")
+    assert isinstance(processor, LogitsProcessorList)
+    assert list(processor) == [sentinel]
+    assert built == [(model, tokenizer, schema)]
+
+
+def test_plain_path_without_schema_passes_no_logits_processor(monkeypatch):
+    model, tokenizer = _GuidedModel(), _GuidedTokenizer([])
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+    monkeypatch.setattr(transformers_backend, "TextIteratorStreamer", _FakeStreamer)
+
+    chunks = _run_stream_chat(backend)
+
+    assert chunks[-1].done is True
+    assert "logits_processor" not in model.generate_calls[0]
+
+
+def test_guided_tool_loop_constrains_only_the_final_turn(monkeypatch):
+    scripted = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"reply": "the answer is 5"}',
+        '{"answer": 5}',
+    ]
+    schema = {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {"answer": {"type": "integer"}},
+    }
+    model, tokenizer = _GuidedModel(), _GuidedTokenizer(scripted)
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+    sentinel, built = _patch_guided_processor(monkeypatch)
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
+        tools = [get_tool("calculator").spec]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "org/model", messages, tools=tools, output_schema=schema
+            )
+        ]
+
+    chunks = asyncio.run(_collect())
+
+    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
+    assert chunks[-1].done is True
+    # Two unconstrained loop turns, then one guided final turn.
+    assert len(model.generate_calls) == 3
+    assert "logits_processor" not in model.generate_calls[0]
+    assert "logits_processor" not in model.generate_calls[1]
+    assert list(model.generate_calls[2]["logits_processor"]) == [sentinel]
+    assert built == [(model, tokenizer, schema)]
+    # Tool results reached the guided turn's context.
+    assert any("Tool 'calculator' returned: 5" in prompt for prompt in tokenizer.prompts)
+
+
+def test_invalid_output_schema_raises_400_pre_stream(monkeypatch):
+    pytest.importorskip("outlines")
+    model, tokenizer = _FakeModel(), _real_tokenizer()
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="hi")]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "org/model", messages, output_schema={"type": "not_a_real_type"}
+            )
+        ]
+
+    with pytest.raises(WorkbenchError) as exc_info:
+        asyncio.run(_collect())
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "invalid_output_schema"
+
+
+def test_prevalidate_output_schema_rejects_bad_type_without_a_model():
+    pytest.importorskip("outlines_core")
+    backend = TransformersBackend("/tmp/snapshot")
+
+    with pytest.raises(WorkbenchError) as exc_info:
+        backend.prevalidate_output_schema({"type": "not_a_real_type"})
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "invalid_output_schema"
+
+
+def test_prevalidate_output_schema_accepts_valid_schema():
+    pytest.importorskip("outlines_core")
+    backend = TransformersBackend("/tmp/snapshot")
+
+    backend.prevalidate_output_schema(
+        {"type": "object", "properties": {"a": {"type": "integer"}}}
+    )
+
+
+def test_missing_outlines_raises_backend_not_available(monkeypatch):
+    monkeypatch.setitem(sys.modules, "outlines", None)
+    monkeypatch.setitem(sys.modules, "outlines.backends", None)
+
+    with pytest.raises(WorkbenchError) as exc_info:
+        transformers_backend._build_guided_processor(
+            object(), object(), {"type": "object"}
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.code == "backend_not_available"
+
+
+def _conforming_schema() -> dict:
+    return {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {"answer": {"type": "integer"}},
+    }
+
+
+def test_tool_loop_conforming_draft_skips_guided_turn(monkeypatch):
+    # After the tool call the model emits the schema-shaped answer directly;
+    # the loop treats it as a non-tool turn and retries, so all five loop
+    # turns run -- but the conforming draft returns as-is, no guided turn.
+    scripted = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"answer": 5}',
+        '{"answer": 5}',
+        '{"answer": 5}',
+        '{"answer": 5}',
+    ]
+    schema = _conforming_schema()
+    model, tokenizer = _GuidedModel(), _GuidedTokenizer(scripted)
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+    _, built = _patch_guided_processor(monkeypatch)
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
+        tools = [get_tool("calculator").spec]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "org/model", messages, tools=tools, output_schema=schema
+            )
+        ]
+
+    chunks = asyncio.run(_collect())
+
+    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
+    assert chunks[-1].done is True
+    assert len(model.generate_calls) == 5
+    assert all("logits_processor" not in call for call in model.generate_calls)
+    assert built == []
+    # The schema instruction rode the single template-built prompt.
+    assert json.dumps(schema) in tokenizer.applied_messages[0]["content"]
+
+
+def test_tool_loop_nonconforming_draft_falls_through_to_guided(monkeypatch):
+    scripted = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"wrong": 1}',
+        '{"wrong": 1}',
+        '{"wrong": 1}',
+        '{"wrong": 1}',
+        '{"answer": 5}',
+    ]
+    schema = _conforming_schema()
+    model, tokenizer = _GuidedModel(), _GuidedTokenizer(scripted)
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+    sentinel, built = _patch_guided_processor(monkeypatch)
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
+        tools = [get_tool("calculator").spec]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "org/model", messages, tools=tools, output_schema=schema
+            )
+        ]
+
+    chunks = asyncio.run(_collect())
+
+    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
+    assert chunks[-1].done is True
+    # Five loop turns plus the guided final turn.
+    assert len(model.generate_calls) == 6
+    assert list(model.generate_calls[-1]["logits_processor"]) == [sentinel]
+    assert built == [(model, tokenizer, schema)]

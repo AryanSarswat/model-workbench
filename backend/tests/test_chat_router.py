@@ -5,6 +5,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel, create_engine
 
 from app.config import Settings
+from app.errors import WorkbenchError
 from app.inference import registry
 from app.inference.schemas import ChatChunk
 from app.main import app
@@ -43,7 +44,7 @@ def test_stream_chat_gguf_without_download_returns_404(monkeypatch):
 
 
 def test_stream_chat_streams_sse_events_from_the_backend():
-    async def fake_stream_chat(self, model_id, messages, tools=None):
+    async def fake_stream_chat(self, model_id, messages, tools=None, output_schema=None):
         yield ChatChunk(delta="Hel")
         yield ChatChunk(delta="lo")
         yield ChatChunk(done=True)
@@ -69,7 +70,7 @@ def test_stream_chat_closes_the_backend_after_streaming():
     request -- leaving it open would leak a connection on every chat request."""
     closed = []
 
-    async def fake_stream_chat(self, model_id, messages, tools=None):
+    async def fake_stream_chat(self, model_id, messages, tools=None, output_schema=None):
         yield ChatChunk(done=True)
 
     async def fake_aclose(self):
@@ -88,7 +89,7 @@ def test_stream_chat_closes_the_backend_after_streaming():
 def test_stream_chat_passes_resolved_tool_specs_to_the_backend():
     seen = {}
 
-    async def fake_stream_chat(self, model_id, messages, tools=None):
+    async def fake_stream_chat(self, model_id, messages, tools=None, output_schema=None):
         seen["tools"] = tools
         yield ChatChunk(done=True)
 
@@ -108,3 +109,40 @@ def test_stream_chat_rejects_unknown_tool_name():
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "unknown_tool"
+
+
+def test_stream_chat_passes_output_schema_to_the_backend():
+    seen = {}
+
+    async def fake_stream_chat(self, model_id, messages, tools=None, output_schema=None):
+        seen["output_schema"] = output_schema
+        yield ChatChunk(done=True)
+
+    schema = {"type": "object", "properties": {"answer": {"type": "integer"}}}
+    with (
+        patch("app.chat.router.get_settings", return_value=Settings(hf_api_key="fake-key")),
+        patch("app.inference.hf_api_backend.HFInferenceAPIBackend.stream_chat", fake_stream_chat),
+    ):
+        response = client.post("/chat/stream", json={**_REQUEST, "output_schema": schema})
+
+    assert response.status_code == 200
+    assert seen["output_schema"] == schema
+
+
+def test_stream_chat_rejects_invalid_output_schema_before_streaming():
+    def _reject(self, schema):
+        raise WorkbenchError(400, "invalid_output_schema", "bad schema")
+
+    with (
+        patch("app.chat.router.get_settings", return_value=Settings(hf_api_key="fake-key")),
+        patch(
+            "app.inference.hf_api_backend.HFInferenceAPIBackend.prevalidate_output_schema",
+            _reject,
+        ),
+    ):
+        response = client.post(
+            "/chat/stream", json={**_REQUEST, "output_schema": {"type": "object"}}
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_output_schema"
