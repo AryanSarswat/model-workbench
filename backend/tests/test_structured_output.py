@@ -10,6 +10,7 @@ from app.inference.structured_output import (
     PromptJsonRetrier,
     TextReply,
     ToolCall,
+    extract_json_object,
     matches_schema,
     validate_output_schema,
 )
@@ -208,3 +209,11 @@ def test_chat_chunk_carries_token_usage():
 
     assert chunk.usage.prompt_tokens == 10
     assert chunk.usage.completion_tokens == 5
+
+
+def test_extract_json_object_finds_a_json_object_wrapped_in_chatter():
+    assert extract_json_object('Sure: {"answer": 42} thanks') == {"answer": 42}
+
+
+def test_extract_json_object_returns_none_for_no_json():
+    assert extract_json_object("no json here") is None
