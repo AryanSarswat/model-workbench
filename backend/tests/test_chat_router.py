@@ -1,3 +1,4 @@
+import json
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -57,12 +58,20 @@ def test_stream_chat_streams_sse_events_from_the_backend():
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
-    events = [line for line in response.text.splitlines() if line.startswith("data: ")]
-    assert events == [
-        'data: {"delta":"Hel","done":false,"error":null}',
-        'data: {"delta":"lo","done":false,"error":null}',
-        'data: {"delta":"","done":true,"error":null}',
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
     ]
+    assert [(e["delta"], e["done"], e["error"]) for e in events] == [
+        ("Hel", False, None),
+        ("lo", False, None),
+        ("", True, None),
+    ]
+    for event in events:
+        assert event["usage"] is None
+        assert event["tools_called"] == []
+        assert event["retries"] == 0
 
 
 def test_stream_chat_closes_the_backend_after_streaming():

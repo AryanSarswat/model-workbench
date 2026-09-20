@@ -5,7 +5,7 @@ import json
 import pytest
 
 from app.errors import WorkbenchError
-from app.inference.schemas import ChatMessage
+from app.inference.schemas import ChatChunk, ChatMessage, TokenUsage
 from app.inference.structured_output import (
     PromptJsonRetrier,
     TextReply,
@@ -193,3 +193,18 @@ def test_matches_schema_accepts_valid_and_rejects_mismatches():
     assert matches_schema({"name": "Ada"}, _schema()) is False
     assert matches_schema({"name": "Ada", "age": "36"}, _schema()) is False
     assert matches_schema({"name": "Ada", "age": True}, _schema()) is False
+
+
+def test_chat_chunk_defaults_have_no_usage_and_empty_loop_metadata():
+    chunk = ChatChunk(delta="hi")
+
+    assert chunk.usage is None
+    assert chunk.tools_called == []
+    assert chunk.retries == 0
+
+
+def test_chat_chunk_carries_token_usage():
+    chunk = ChatChunk(done=True, usage=TokenUsage(prompt_tokens=10, completion_tokens=5))
+
+    assert chunk.usage.prompt_tokens == 10
+    assert chunk.usage.completion_tokens == 5
