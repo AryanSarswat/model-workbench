@@ -15,8 +15,23 @@ def _tools():
     return [get_tool("calculator").spec]
 
 
-def _completion_chunk(content: str | None) -> SimpleNamespace:
-    return SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content=content))])
+def _completion_chunk(content: str | None, usage=None) -> SimpleNamespace:
+    return SimpleNamespace(
+        choices=[SimpleNamespace(delta=SimpleNamespace(content=content))], usage=usage
+    )
+
+
+def _usage_chunk(prompt_tokens: int, completion_tokens: int) -> SimpleNamespace:
+    """The terminal usage-only chunk stream_options={"include_usage": True} adds --
+    empty choices, per the OpenAI-compatible streaming convention."""
+    return SimpleNamespace(
+        choices=[],
+        usage=SimpleNamespace(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens + completion_tokens,
+        ),
+    )
 
 
 async def _fake_stream(chunks: list[SimpleNamespace]):
@@ -88,8 +103,10 @@ def test_stream_chat_converts_hf_error_to_a_terminal_error_chunk(monkeypatch):
     assert "not supported" in chunks[0].error
 
 
-def _non_streamed_completion(content: str) -> SimpleNamespace:
-    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+def _non_streamed_completion(content: str, usage=None) -> SimpleNamespace:
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))], usage=usage
+    )
 
 
 def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
@@ -297,3 +314,83 @@ def test_stream_chat_with_invalid_schema_raises_pre_stream():
         assert exc_info.value.code == "invalid_output_schema"
 
     asyncio.run(_collect())
+
+
+def test_stream_chat_requests_usage_and_captures_it_from_the_final_chunk(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+
+    async def fake_chat_completion(**kwargs):
+        assert kwargs["stream_options"] == {"include_usage": True}
+        return _fake_stream(
+            [
+                _completion_chunk("Hel"),
+                _completion_chunk("lo"),
+                _usage_chunk(prompt_tokens=12, completion_tokens=2),
+            ]
+        )
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_stream_chat(backend)
+
+    # The usage-only chunk has empty choices -- it must not add a spurious delta.
+    assert [c.delta for c in chunks] == ["Hel", "lo", ""]
+    assert chunks[-1].usage.prompt_tokens == 12
+    assert chunks[-1].usage.completion_tokens == 2
+
+
+def test_stream_chat_with_tools_reports_tools_called_and_summed_usage(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+    sent_messages = []
+
+    async def fake_chat_completion(**kwargs):
+        sent_messages.append(kwargs["messages"])
+        if len(sent_messages) == 1:
+            return _non_streamed_completion(
+                '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+                usage=SimpleNamespace(prompt_tokens=20, completion_tokens=15, total_tokens=35),
+            )
+        return _non_streamed_completion(
+            '{"reply": "the answer is 5"}',
+            usage=SimpleNamespace(prompt_tokens=40, completion_tokens=5, total_tokens=45),
+        )
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_tool_chat(backend)
+
+    assert chunks[-1].tools_called == ["calculator"]
+    # completion_tokens sums across both turns; prompt_tokens is the last turn's
+    # (it already includes the full accumulated history).
+    assert chunks[-1].usage.completion_tokens == 20
+    assert chunks[-1].usage.prompt_tokens == 40
+
+
+def test_stream_chat_with_schema_first_try_reports_zero_retries(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+
+    async def fake_chat_completion(**kwargs):
+        return _non_streamed_completion('{"answer": 42}')
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA)
+
+    assert chunks[-1].retries == 0
+
+
+def test_stream_chat_with_schema_retry_reports_nonzero_retries(monkeypatch):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+    sent_messages = []
+
+    async def fake_chat_completion(**kwargs):
+        sent_messages.append(kwargs["messages"])
+        if len(sent_messages) == 1:
+            return _non_streamed_completion("no json here at all")
+        return _non_streamed_completion('{"answer": 7}')
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA)
+
+    assert chunks[-1].retries == 1

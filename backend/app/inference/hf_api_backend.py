@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from huggingface_hub import AsyncInferenceClient
 from huggingface_hub.errors import HTTPError
 
-from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
+from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage, TokenUsage
 from app.inference.structured_output import (
     PromptJsonRetrier,
     matches_schema,
@@ -24,6 +24,31 @@ _SCHEMA_RETRY_MESSAGE = (
     "That was not valid JSON conforming to the required schema. "
     "Reply with exactly one JSON object and nothing else."
 )
+
+
+class _UsageAccumulator:
+    """Combines per-turn usage across a multi-turn tool/schema loop.
+
+    completion_tokens sums (each turn generated new output); prompt_tokens takes
+    the last turn's figure (it already includes every prior turn's history, so
+    summing it would double-count). Returns None when nothing ever reported
+    usage -- a fake test client, or a provider that omits it.
+    """
+
+    def __init__(self) -> None:
+        self._turns: list[TokenUsage] = []
+
+    def record(self, usage: TokenUsage | None) -> None:
+        if usage is not None:
+            self._turns.append(usage)
+
+    def combined(self) -> TokenUsage | None:
+        if not self._turns:
+            return None
+        return TokenUsage(
+            prompt_tokens=self._turns[-1].prompt_tokens,
+            completion_tokens=sum(t.completion_tokens for t in self._turns),
+        )
 
 
 class HFInferenceAPIBackend:
@@ -49,16 +74,26 @@ class HFInferenceAPIBackend:
         request in the chat router -- callers must close it or the pool leaks."""
         await self._client.close()
 
-    async def _generate_text(self, model_id: str, messages: list[ChatMessage]) -> str:
-        """One non-streamed model turn for the fallback tool loop. HTTPError (and any
-        other failure) propagates to the tools branch of stream_chat, which reports
-        it as a terminal error chunk -- the same treatment as the streaming path."""
+    async def _generate_text(
+        self, model_id: str, messages: list[ChatMessage]
+    ) -> tuple[str, TokenUsage | None]:
+        """One non-streamed model turn for the fallback tool/schema loops. HTTPError
+        (and any other failure) propagates to the tools branch of stream_chat, which
+        reports it as a terminal error chunk -- the same treatment as the streaming
+        path."""
         completion = await self._client.chat_completion(
             messages=[m.model_dump() for m in messages],
             model=model_id,
             stream=False,
         )
-        return completion.choices[0].message.content or ""
+        text = completion.choices[0].message.content or ""
+        usage = None
+        if completion.usage is not None:
+            usage = TokenUsage(
+                prompt_tokens=completion.usage.prompt_tokens,
+                completion_tokens=completion.usage.completion_tokens,
+            )
+        return text, usage
 
     async def _run_schema_loop(
         self,
@@ -66,26 +101,28 @@ class HFInferenceAPIBackend:
         messages: list[ChatMessage],
         schema: dict,
         max_iterations: int = 5,
-    ) -> str:
+    ) -> tuple[str, int]:
         """Best-effort schema-constrained turns over the shared prompt-and-retry
         helpers, mirroring run_tool_loop's shape: at most max_iterations model
         turns, each failure fed back as a user-role message.
 
-        Success returns the parsed object re-serialized, so the delta is pure
-        JSON. Exhausted turns return the last raw text -- the caller still
-        emits a terminal chunk, never raises.
+        Returns (text, retries): retries is the 0-indexed attempt number a
+        successful turn landed on (0 == first try, feeds the
+        structured_output_first_try assertion). Exhausted turns return the last
+        raw text with retries == max_iterations - 1 -- the caller still emits a
+        terminal chunk, never raises.
         """
         retrier = PromptJsonRetrier()
         history = retrier.build_schema_messages(messages, schema)
         last_text = ""
-        for _ in range(max_iterations):
+        for attempt in range(max_iterations):
             last_text = await generate(history)
             parsed = retrier.parse_schema_reply(last_text)
             history.append(ChatMessage(role="assistant", content=last_text))
             if isinstance(parsed, dict) and matches_schema(parsed, schema):
-                return json.dumps(parsed)
+                return json.dumps(parsed), attempt
             history.append(ChatMessage(role="user", content=_SCHEMA_RETRY_MESSAGE))
-        return last_text
+        return last_text, max_iterations - 1
 
     async def stream_chat(
         self,
@@ -103,9 +140,14 @@ class HFInferenceAPIBackend:
             # as one delta + done: neither tool-calling nor retry turns can
             # stream partial output honestly, so nothing streams until the loop
             # resolves to final text.
+            usage_acc = _UsageAccumulator()
+            tools_called: list[str] = []
+            retries = 0
             try:
                 async def _generate(history: list[ChatMessage]) -> str:
-                    return await self._generate_text(model_id, history)
+                    text, usage = await self._generate_text(model_id, history)
+                    usage_acc.record(usage)
+                    return text
 
                 if tools:
                     # The tool loop runs first; its tool-informed final reply
@@ -114,7 +156,9 @@ class HFInferenceAPIBackend:
                     prompt_messages = PromptJsonRetrier().build_tool_messages(
                         messages, tools, output_schema
                     )
-                    tool_final = await run_tool_loop(_generate, prompt_messages, tools)
+                    loop_result = await run_tool_loop(_generate, prompt_messages, tools)
+                    tool_final = loop_result.text
+                    tools_called = loop_result.tools_called
                     history = [
                         *messages,
                         ChatMessage(role="assistant", content=tool_final),
@@ -136,7 +180,7 @@ class HFInferenceAPIBackend:
                     if draft_conforms:
                         final = tool_final
                     else:
-                        final = await self._run_schema_loop(
+                        final, retries = await self._run_schema_loop(
                             _generate, history, output_schema
                         )
                 else:
@@ -150,18 +194,33 @@ class HFInferenceAPIBackend:
                 yield ChatChunk(done=True, error=str(e))
                 return
             yield ChatChunk(delta=final)
-            yield ChatChunk(done=True)
+            yield ChatChunk(
+                done=True,
+                usage=usage_acc.combined(),
+                tools_called=tools_called,
+                retries=retries,
+            )
             return
         try:
             stream = await self._client.chat_completion(
                 messages=[m.model_dump() for m in messages],
                 model=model_id,
                 stream=True,
+                stream_options={"include_usage": True},
             )
+            usage: TokenUsage | None = None
             async for completion_chunk in stream:
-                delta = completion_chunk.choices[0].delta.content
-                if delta:
-                    yield ChatChunk(delta=delta)
-            yield ChatChunk(done=True)
+                # The terminal usage-only chunk (stream_options.include_usage)
+                # carries empty choices -- indexing [0] on it would raise.
+                if completion_chunk.choices:
+                    delta = completion_chunk.choices[0].delta.content
+                    if delta:
+                        yield ChatChunk(delta=delta)
+                if completion_chunk.usage is not None:
+                    usage = TokenUsage(
+                        prompt_tokens=completion_chunk.usage.prompt_tokens,
+                        completion_tokens=completion_chunk.usage.completion_tokens,
+                    )
+            yield ChatChunk(done=True, usage=usage)
         except HTTPError as e:
             yield ChatChunk(done=True, error=str(e))
