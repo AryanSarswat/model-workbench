@@ -91,12 +91,13 @@ needs real aggregation (`GROUP BY model, backend, category`).
 ```python
 class InferenceBackend(Protocol):
     def capabilities(self) -> BackendCapabilities: ...
-    async def stream_chat(self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None) -> AsyncIterator[ChatChunk]: ...
+    async def stream_chat(self, model_id: str, messages: list[ChatMessage], tools: list[ToolSpec] | None = None, output_schema: dict | None = None) -> AsyncIterator[ChatChunk]: ...
     async def aclose(self) -> None: ...
 ```
 
-`output_schema` is added once structured output lands — left off for now rather than
-accepted-and-ignored. `get_backend(name, ...)` in
+`stream_chat(..., output_schema=...)` carries a raw JSON-Schema dict
+(`ChatRequest.output_schema`); invalid schemas are a 400 `invalid_output_schema`
+pre-stream, never mid-stream. `get_backend(name, ...)` in
 `app/inference/registry.py` resolves a request's `backend` field to a concrete
 implementation; `POST /chat/stream` calls that instead of importing a specific backend
 class, so it's the one thing that has to change when a new backend is added, not every
@@ -112,20 +113,28 @@ keeps the loaded model in a process-wide cache — no eviction, a deliberate sin
 simplicity trade-off. `TransformersBackend` (fallback for models
 without a GGUF build; MPS/CUDA/CPU auto-detected) resolves its snapshot dir from the
 downloaded-models table by plain `repo_id` and keeps the loaded model in a process-wide
-cache like the llama.cpp backend. Generation streams via `TextIteratorStreamer` and runs
-to EOS with no token cap.
+cache like the llama.cpp backend. Unconstrained generation streams via
+`TextIteratorStreamer` and runs to EOS with no token cap; schema-guided/tool
+turns are non-streamed (one delta + done, 512-token cap on transformers
+guided turns).
 
 No session persistence yet — `chat_sessions`/`chat_messages` and
 `GET/DELETE /chat/sessions[/{id}]` are a separate follow-up once there's more than one
 backend to make sessions worth having.
 
-**Structured output:**
+**Structured output** (`POST /chat/stream` `output_schema`, raw JSON-Schema dict):
 
 | Backend | Mechanism | Guarantee |
 |---|---|---|
-| llama.cpp | JSON Schema → GBNF grammar | Guaranteed valid |
-| transformers | `outlines` guided generation | Guaranteed valid |
-| HF Inference API | Prompt + parse + retry (`PromptJsonRetrier`) | Best-effort |
+| llama.cpp | `LlamaGrammar.from_json_schema` GBNF grammar | Guaranteed valid |
+| transformers | `outlines` `get_json_schema_logits_processor` LogitsProcessor (local extra) | Guaranteed valid |
+| HF Inference API | `PromptJsonRetrier` schema loop (prompt + parse + retry, ≤5 turns) | Best-effort |
+
+Constrained turns never stream (final JSON as one delta + done); transformers
+guided turns cap at `max_new_tokens=512`, unconstrained chat still streams to EOS
+uncapped. `tools` + `output_schema` runs the tool loop first, then constrains the
+final reply (loop turns stay unconstrained). Invalid schemas are a 400
+`invalid_output_schema` pre-stream.
 
 `capabilities()` reports which mode is active, so a response can be labeled
 "grammar-enforced" vs "best-effort" — this feeds eval assertions too.
