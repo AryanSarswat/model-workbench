@@ -85,8 +85,23 @@ def _stream(**overrides):
         return client.post("/chat/stream", json=body)
 
 
+def test_create_session_returns_id_and_lists_newest_first():
+    first = client.post("/chat/sessions")
+    second = client.post("/chat/sessions")
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert set(first.json()) == {"id", "created_at"}
+    assert first.json()["id"] != second.json()["id"]
+
+    listed = client.get("/chat/sessions").json()
+    assert [s["id"] for s in listed] == [second.json()["id"], first.json()["id"]]
+
+
 def test_stream_with_session_persists_user_and_assistant_round_trip():
-    session_id = _seed_session()
+    create_response = client.post("/chat/sessions")
+    assert create_response.status_code == 201
+    session_id = create_response.json()["id"]
 
     response = _stream(session_id=session_id)
 

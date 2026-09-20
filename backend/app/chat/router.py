@@ -119,6 +119,15 @@ def stream_chat(request: ChatRequest, session: SessionDep) -> StreamingResponse:
     )
 
 
+@router.post("/sessions", status_code=201)
+def create_chat_session(session: SessionDep) -> ChatSession:
+    chat_session = ChatSession()
+    session.add(chat_session)
+    session.commit()
+    session.refresh(chat_session)
+    return chat_session
+
+
 @router.get("/sessions")
 def list_chat_sessions(session: SessionDep) -> list[ChatSession]:
     return list(
