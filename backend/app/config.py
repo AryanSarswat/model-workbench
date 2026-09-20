@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import platform
 import subprocess
+from pathlib import Path
 
 import psutil
 from pydantic import BaseModel
@@ -21,6 +22,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     hf_api_key: str | None = None
+    # Override for the file-backed test-case dataset (data/test_cases/ by default).
+    # Tests point this at tmp_path so they never touch the real dataset.
+    test_cases_dir: Path | None = None
 
 
 def get_settings() -> Settings:
