@@ -112,7 +112,7 @@ class HFInferenceAPIBackend:
                     # then enters the schema-constrained turn(s) as assistant
                     # context (tool traffic stays in messages).
                     prompt_messages = PromptJsonRetrier().build_tool_messages(
-                        messages, tools
+                        messages, tools, output_schema
                     )
                     tool_final = await run_tool_loop(_generate, prompt_messages, tools)
                     history = [
@@ -122,9 +122,23 @@ class HFInferenceAPIBackend:
                 else:
                     history = messages
                 if output_schema is not None:
-                    final = await self._run_schema_loop(
-                        _generate, history, output_schema
-                    )
+                    # Optimistic fast path for tools+schema: a tool-loop draft
+                    # that already conforms skips the schema loop entirely.
+                    draft_conforms = False
+                    if tools:
+                        try:
+                            draft = json.loads(tool_final)
+                        except (TypeError, ValueError):
+                            draft = None
+                        draft_conforms = isinstance(draft, dict) and matches_schema(
+                            draft, output_schema
+                        )
+                    if draft_conforms:
+                        final = tool_final
+                    else:
+                        final = await self._run_schema_loop(
+                            _generate, history, output_schema
+                        )
                 else:
                     # Tools-only: output_schema is None implies tools is set,
                     # so tool_final is bound (outer condition guarantees one).

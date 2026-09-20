@@ -36,6 +36,27 @@ def test_build_tool_messages_prepends_instruction_without_system():
     assert [m.content for m in result[1:]] == ["hi"]
 
 
+def test_build_tool_messages_with_schema_embeds_instruction_and_schema():
+    result = PromptJsonRetrier().build_tool_messages(
+        [ChatMessage(role="user", content="hi")], [_spec()], _schema()
+    )
+
+    assert result[0].role == "system"
+    assert json.dumps(_schema()) in result[0].content
+    assert "FINAL reply" in result[0].content
+    assert '{"tool":' in result[0].content
+    assert [m.content for m in result[1:]] == ["hi"]
+
+
+def test_build_tool_messages_without_schema_leaves_prompt_unchanged():
+    messages = [ChatMessage(role="user", content="hi")]
+    default = PromptJsonRetrier().build_tool_messages(messages, [_spec()])
+    explicit_none = PromptJsonRetrier().build_tool_messages(messages, [_spec()], None)
+
+    assert default[0].content == explicit_none[0].content
+    assert "JSON Schema" not in default[0].content
+
+
 def test_build_tool_messages_keeps_existing_system_first():
     messages = [
         ChatMessage(role="system", content="Be concise."),

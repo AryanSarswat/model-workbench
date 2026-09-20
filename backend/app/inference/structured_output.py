@@ -123,12 +123,18 @@ class PromptJsonRetrier:
     """Build tool-call prompts and parse free-text model output back into calls."""
 
     def build_tool_messages(
-        self, messages: list[ChatMessage], tools: list[ToolSpec]
+        self,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec],
+        output_schema: dict | None = None,
     ) -> list[ChatMessage]:
         """Prefix messages with a system instruction describing the JSON protocol.
 
         An existing leading system message is kept first; the tool instruction is
-        inserted after it so a caller-supplied persona is never clobbered.
+        inserted after it so a caller-supplied persona is never clobbered. With
+        output_schema the instruction additionally requires the FINAL reply to
+        conform to the schema, so every loop turn already knows the target shape.
+        None (the default) leaves the prompt byte-identical to the tools-only form.
         """
         lines = [
             "Reply with exactly one JSON object per turn and nothing else.",
@@ -141,6 +147,17 @@ class PromptJsonRetrier:
             lines.append(
                 f"- {tool.name}: {tool.description} "
                 f"Parameters: {json.dumps(tool.parameters)}"
+            )
+        if output_schema is not None:
+            lines.extend(
+                [
+                    "",
+                    (
+                        'Tool calls use {"tool": ...} as above, but the FINAL reply must '
+                        "be exactly one JSON object conforming to this JSON Schema:"
+                    ),
+                    json.dumps(output_schema),
+                ]
             )
         instruction = ChatMessage(role="system", content="\n".join(lines))
         if messages and messages[0].role == "system":

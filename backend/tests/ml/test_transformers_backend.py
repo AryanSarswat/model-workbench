@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 from typing import ClassVar
 
@@ -373,7 +374,11 @@ def test_guided_tool_loop_constrains_only_the_final_turn(monkeypatch):
         '{"reply": "the answer is 5"}',
         '{"answer": 5}',
     ]
-    schema = {"type": "object", "properties": {"answer": {"type": "integer"}}}
+    schema = {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {"answer": {"type": "integer"}},
+    }
     model, tokenizer = _GuidedModel(), _GuidedTokenizer(scripted)
     backend = TransformersBackend("/tmp/snapshot")
     monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
@@ -456,3 +461,84 @@ def test_missing_outlines_raises_backend_not_available(monkeypatch):
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.code == "backend_not_available"
+
+
+def _conforming_schema() -> dict:
+    return {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {"answer": {"type": "integer"}},
+    }
+
+
+def test_tool_loop_conforming_draft_skips_guided_turn(monkeypatch):
+    # After the tool call the model emits the schema-shaped answer directly;
+    # the loop treats it as a non-tool turn and retries, so all five loop
+    # turns run -- but the conforming draft returns as-is, no guided turn.
+    scripted = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"answer": 5}',
+        '{"answer": 5}',
+        '{"answer": 5}',
+        '{"answer": 5}',
+    ]
+    schema = _conforming_schema()
+    model, tokenizer = _GuidedModel(), _GuidedTokenizer(scripted)
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+    _, built = _patch_guided_processor(monkeypatch)
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
+        tools = [get_tool("calculator").spec]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "org/model", messages, tools=tools, output_schema=schema
+            )
+        ]
+
+    chunks = asyncio.run(_collect())
+
+    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
+    assert chunks[-1].done is True
+    assert len(model.generate_calls) == 5
+    assert all("logits_processor" not in call for call in model.generate_calls)
+    assert built == []
+    # The schema instruction rode the single template-built prompt.
+    assert json.dumps(schema) in tokenizer.applied_messages[0]["content"]
+
+
+def test_tool_loop_nonconforming_draft_falls_through_to_guided(monkeypatch):
+    scripted = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"wrong": 1}',
+        '{"wrong": 1}',
+        '{"wrong": 1}',
+        '{"wrong": 1}',
+        '{"answer": 5}',
+    ]
+    schema = _conforming_schema()
+    model, tokenizer = _GuidedModel(), _GuidedTokenizer(scripted)
+    backend = TransformersBackend("/tmp/snapshot")
+    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
+    sentinel, built = _patch_guided_processor(monkeypatch)
+
+    async def _collect() -> list[ChatChunk]:
+        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
+        tools = [get_tool("calculator").spec]
+        return [
+            chunk
+            async for chunk in backend.stream_chat(
+                "org/model", messages, tools=tools, output_schema=schema
+            )
+        ]
+
+    chunks = asyncio.run(_collect())
+
+    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
+    assert chunks[-1].done is True
+    # Five loop turns plus the guided final turn.
+    assert len(model.generate_calls) == 6
+    assert list(model.generate_calls[-1]["logits_processor"]) == [sentinel]
+    assert built == [(model, tokenizer, schema)]

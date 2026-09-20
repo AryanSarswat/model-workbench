@@ -233,6 +233,35 @@ def test_stream_chat_with_schema_returns_last_text_when_turns_run_out(monkeypatc
     assert chunks[-1].error is None
 
 
+def test_stream_chat_with_tools_and_schema_skips_schema_loop_when_draft_conforms(
+    monkeypatch,
+):
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+    script = [
+        '{"tool": "calculator", "arguments": {"expression": "6 * 7"}}',
+        '{"answer": 42}',
+        '{"answer": 42}',
+        '{"answer": 42}',
+        '{"answer": 42}',
+    ]
+    calls = []
+
+    async def fake_chat_completion(**kwargs):
+        calls.append(kwargs)
+        return _non_streamed_completion(script.pop(0))
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_schema_chat(backend, _SCHEMA, tools=_tools())
+
+    # The tool loop's draft already conformed, so no schema-loop turn ran:
+    # five tool-loop turns, zero schema-loop turns.
+    assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error is None
+    assert len(calls) == 5
+
+
 def test_stream_chat_with_tools_and_schema_constrains_the_final_reply(monkeypatch):
     backend = HFInferenceAPIBackend(api_key="fake-key")
     script = [

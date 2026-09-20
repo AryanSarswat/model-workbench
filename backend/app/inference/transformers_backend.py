@@ -33,7 +33,7 @@ from transformers import (
 
 from app.errors import WorkbenchError
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
-from app.inference.structured_output import PromptJsonRetrier
+from app.inference.structured_output import PromptJsonRetrier, matches_schema
 from app.inference.tool_loop import run_tool_loop
 from app.tools import ToolSpec
 
@@ -191,7 +191,9 @@ class TransformersBackend:
         tool-call JSON, which the schema must not forbid) and only the final
         reply turn is schema-guided, with every tool result already in context.
         """
-        prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools)
+        prompt_messages = PromptJsonRetrier().build_tool_messages(
+            messages, tools, output_schema
+        )
         conversation = await asyncio.to_thread(
             tokenizer.apply_chat_template,
             [m.model_dump() for m in prompt_messages],
@@ -210,9 +212,17 @@ class TransformersBackend:
             return await self._generate_turn(model, tokenizer, conversation)
 
         final = await run_tool_loop(_generate, prompt_messages, tools)
-        if output_schema is None:
-            return final
-        return await self._generate_turn(model, tokenizer, conversation, output_schema)
+        if output_schema is not None:
+            # Optimistic fast path: the schema instruction rides every loop
+            # turn, so a draft that already conforms skips the guided redraft.
+            try:
+                draft = json.loads(final)
+            except (TypeError, ValueError):
+                draft = None
+            if isinstance(draft, dict) and matches_schema(draft, output_schema):
+                return final
+            return await self._generate_turn(model, tokenizer, conversation, output_schema)
+        return final
 
     async def stream_chat(
         self,
