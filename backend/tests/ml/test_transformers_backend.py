@@ -41,6 +41,11 @@ class _FakeTokenizer:
         self.applied_messages = messages
         return _FakeEncoding(input_ids=[[1, 2]])
 
+    def __call__(self, text, **kwargs):
+        # One "token" per whitespace-separated word -- good enough to test the
+        # wiring, not a real tokenizer.
+        return {"input_ids": text.split()}
+
 
 class _FakeStreamer:
     def __init__(self, tokenizer, skip_prompt=False) -> None:
@@ -160,6 +165,9 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     # The prompt was templated once, and the calculator result fed the next turn.
     assert _ToolTokenizer.instances[0].applied_messages[0]["role"] == "system"
     assert any("Tool 'calculator' returned: 5" in prompt for prompt in prompts)
+    assert chunks[-1].tools_called == ["calculator"]
+    assert chunks[-1].usage.prompt_tokens == 2  # every _FakeEncoding uses input_ids=[[1, 2]]
+    assert chunks[-1].usage.completion_tokens == 4  # 2 generate() turns x 2 completion tokens each
 
 
 def test_capabilities_report_guided_and_native_tool_calling():
@@ -186,6 +194,8 @@ def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
         {"role": "user", "content": "hi"}
     ]
     assert _FakeModel.instances[0].device == backend._device
+    assert chunks[-1].usage.prompt_tokens == 2  # input_ids=[[1, 2]] from _FakeEncoding
+    assert chunks[-1].usage.completion_tokens == 1  # "Hello".split() -> one token
 
 
 def test_stream_chat_converts_generation_error_to_a_terminal_error_chunk(monkeypatch):
@@ -354,6 +364,8 @@ def test_guided_plain_path_yields_single_delta_with_processor(monkeypatch):
     assert isinstance(processor, LogitsProcessorList)
     assert list(processor) == [sentinel]
     assert built == [(model, tokenizer, schema)]
+    assert chunks[-1].usage.prompt_tokens == 2
+    assert chunks[-1].usage.completion_tokens == 2  # outputs[0][input_len:] == [3, 4]
 
 
 def test_plain_path_without_schema_passes_no_logits_processor(monkeypatch):
@@ -406,6 +418,8 @@ def test_guided_tool_loop_constrains_only_the_final_turn(monkeypatch):
     assert built == [(model, tokenizer, schema)]
     # Tool results reached the guided turn's context.
     assert any("Tool 'calculator' returned: 5" in prompt for prompt in tokenizer.prompts)
+    assert chunks[-1].tools_called == ["calculator"]
+    assert chunks[-1].usage.completion_tokens == 6  # 3 generate() turns x 2 completion tokens each
 
 
 def test_invalid_output_schema_raises_400_pre_stream(monkeypatch):
