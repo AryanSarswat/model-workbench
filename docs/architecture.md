@@ -118,9 +118,11 @@ cache like the llama.cpp backend. Unconstrained generation streams via
 turns are non-streamed (one delta + done, 512-token cap on transformers
 guided turns).
 
-No session persistence yet — `chat_sessions`/`chat_messages` and
-`GET/DELETE /chat/sessions[/{id}]` are a separate follow-up once there's more than one
-backend to make sessions worth having.
+Chat sessions are a persistence record, not context management: `POST /chat/sessions`
+creates a session, `POST /chat/stream` takes an optional `session_id` and files the new
+user turn plus the completed assistant reply (nothing on error/disconnect), and
+`GET/DELETE /chat/sessions[/{id}]` list, show (with ordered messages), and delete.
+Inference stays stateless — the caller still resends full history every request.
 
 **Structured output** (`POST /chat/stream` `output_schema`, raw JSON-Schema dict):
 
