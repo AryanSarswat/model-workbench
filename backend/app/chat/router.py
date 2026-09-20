@@ -8,10 +8,15 @@ Session persistence is a record, not context management: the client still resend
 full message history every request (stateless inference), and `session_id` only asks
 the server to file a copy of the turn away. The stored history is never injected into
 the model context.
+
+Every turn -- with or without a session_id, successful or not -- also gets a
+response_metrics row (tokens/sec, TTFT, latency, RAM/VRAM), via the same
+build_response_metric() helper the eval engine uses.
 """
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from typing import Annotated
@@ -26,7 +31,8 @@ from app.db import get_session
 from app.errors import WorkbenchError
 from app.inference.base import InferenceBackend
 from app.inference.registry import get_backend
-from app.inference.schemas import ChatMessage
+from app.inference.schemas import ChatMessage, TokenUsage
+from app.metrics import build_response_metric
 from app.models import ChatMessageRecord, ChatSession
 from app.tools import ToolSpec, resolve_tool_names
 
@@ -51,7 +57,9 @@ class ChatSessionDetail(BaseModel):
 
 
 async def _sse_events(
+    session: Session,
     backend: InferenceBackend,
+    backend_name: str,
     model_id: str,
     messages: list[ChatMessage],
     tools: list[ToolSpec] | None = None,
@@ -59,12 +67,17 @@ async def _sse_events(
     on_complete: Callable[[str], None] | None = None,
 ) -> AsyncIterator[str]:
     # Persist-on-error decision: only a stream that runs to exhaustion with no error
-    # chunk persists its reply. Mid-stream failures, backend exceptions, and client
-    # disconnects (GeneratorExit) persist nothing -- a partial/error reply filed as the
-    # turn's assistant message would read as the model's answer on re-read.
+    # chunk persists its CHAT reply. Mid-stream failures, backend exceptions, and client
+    # disconnects (GeneratorExit) persist no assistant message -- a partial/error reply
+    # filed as the turn's assistant message would read as the model's answer on re-read.
+    # response_metrics is different: every turn gets one regardless of outcome, since a
+    # failed generation's latency is still useful reliability data.
     parts: list[str] = []
     failed = False
     finished = False
+    started_at = time.monotonic()
+    first_chunk_at: float | None = None
+    usage: TokenUsage | None = None
     try:
         async for chunk in backend.stream_chat(
             model_id, messages, tools=tools, output_schema=output_schema
@@ -72,13 +85,27 @@ async def _sse_events(
             if chunk.error is not None:
                 failed = True
             else:
+                if first_chunk_at is None and chunk.delta:
+                    first_chunk_at = time.monotonic()
                 parts.append(chunk.delta)
+            if chunk.done:
+                usage = chunk.usage
             yield f"data: {chunk.model_dump_json()}\n\n"
         finished = True
     finally:
         await backend.aclose()
         if on_complete is not None and finished and not failed:
             on_complete("".join(parts))
+        metric = build_response_metric(
+            model_id=model_id,
+            backend_name=backend_name,
+            usage=usage,
+            started_at=started_at,
+            first_chunk_at=first_chunk_at,
+            finished_at=time.monotonic(),
+        )
+        session.add(metric)
+        session.commit()
 
 
 @router.post("/stream")
@@ -108,7 +135,9 @@ def stream_chat(request: ChatRequest, session: SessionDep) -> StreamingResponse:
 
     return StreamingResponse(
         _sse_events(
+            session,
             backend,
+            request.backend,
             request.model_id,
             request.messages,
             tools=specs or None,
