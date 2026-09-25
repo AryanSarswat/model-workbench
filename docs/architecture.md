@@ -179,7 +179,10 @@ eval-specific inference logic. Automatically recorded per case: response, struct
 output/tool-calling modes and retry counts, and performance metrics. Assertions run
 automatically; if a case has `judge.criteria`, a second call to `judge_model_id` scores it.
 Every result also carries `manual_verdict`/`manual_notes` for hand review regardless of
-automated results. Aggregating `eval_results` by `(model_id, backend, category)` produces
+automated results. The backend is resolved once before the stream starts, so misconfiguration
+(missing key, undownloaded model) is a normal 4xx. A per-case failure (backend error,
+invalid case schema) is recorded on that result's `error` and the run continues; a run
+always ends `completed` or `failed` with a final `done` event. Aggregating `eval_results` by `(model_id, backend, category)` produces
 the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling reliability
 %, structured-output reliability %.
 
