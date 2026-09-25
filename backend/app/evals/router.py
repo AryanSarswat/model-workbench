@@ -1,15 +1,14 @@
 """POST /evals/run (SSE progress) + GET /evals/runs[/{id}/results] + PATCH
-/evals/results/{id} -- per docs/architecture.md's eval engine section.
+/evals/results/{id}.
 
-Unlike downloads (BackgroundTasks + polling), evals are explicitly SSE in the
-architecture doc: the run streams progress for the lifetime of the request,
-the same shape as POST /chat/stream, persisting each case's result as it goes
-so GET /evals/runs/{id}/results works even from a second request.
+The run streams progress for the lifetime of the request, persisting each case's
+result as it goes so GET /evals/runs/{id}/results works from a second request.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
@@ -24,7 +23,11 @@ from app.db import get_session
 from app.errors import WorkbenchError
 from app.evals.schemas import EvalRunRequest, ManualVerdictUpdate
 from app.evals.service import run_one_case
+from app.inference.base import InferenceBackend
+from app.inference.registry import get_backend
 from app.models import EvalResult, EvalRun
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/evals", tags=["evals"])
 
@@ -33,6 +36,10 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 @router.post("/run")
 def start_eval_run(request: EvalRunRequest, session: SessionDep) -> StreamingResponse:
+    # Resolved pre-stream, like /chat/stream: a missing key, unknown backend, or
+    # undownloaded model is a normal 4xx, not a broken stream with a stuck run.
+    hf_api_key = get_settings().hf_api_key
+    backend = get_backend(request.backend, request.model_id, hf_api_key)
     cases = load_cases(request.category)
     run = EvalRun(
         model_id=request.model_id,
@@ -44,36 +51,51 @@ def start_eval_run(request: EvalRunRequest, session: SessionDep) -> StreamingRes
     session.add(run)
     session.commit()
     session.refresh(run)
-    hf_api_key = get_settings().hf_api_key
     return StreamingResponse(
-        _run_events(session, run, cases, hf_api_key), media_type="text/event-stream"
+        _run_events(session, run, cases, backend, hf_api_key), media_type="text/event-stream"
     )
 
 
+def _event(run: EvalRun, current_case: str | None, done: bool, **extra: str) -> str:
+    payload = {
+        "completed": run.completed_cases,
+        "total": run.total_cases,
+        "current_case": current_case,
+        "done": done,
+        **extra,
+    }
+    return f"data: {json.dumps(payload)}\n\n"
+
+
 async def _run_events(
-    session: Session, run: EvalRun, cases: list[TestCase], hf_api_key: str | None
+    session: Session,
+    run: EvalRun,
+    cases: list[TestCase],
+    backend: InferenceBackend,
+    hf_api_key: str | None,
 ) -> AsyncIterator[str]:
-    for index, case in enumerate(cases):
-        await run_one_case(session, run, case, hf_api_key)
-        run.completed_cases += 1
-        is_last = index == len(cases) - 1
-        if is_last:
-            run.status = "completed"
-            run.finished_at = datetime.now(UTC)
+    # Per-case failures are recorded on the result by run_one_case; anything that
+    # escapes here (or a client disconnect) ends the run as "failed", never "running".
+    error: str | None = None
+    try:
+        for case in cases:
+            yield _event(run, current_case=case.id, done=False)
+            await run_one_case(session, run, case, backend, hf_api_key)
+            run.completed_cases += 1
+            session.add(run)
+            session.commit()
+        run.status = "completed"
+    except Exception as exc:
+        logger.exception("Eval run %s failed", run.id)
+        error = str(exc)
+    finally:
+        await backend.aclose()
+        if run.status != "completed":
+            run.status = "failed"
+        run.finished_at = datetime.now(UTC)
         session.add(run)
         session.commit()
-        yield (
-            "data: "
-            + json.dumps(
-                {
-                    "completed": run.completed_cases,
-                    "total": run.total_cases,
-                    "current_case": None if is_last else case.id,
-                    "done": is_last,
-                }
-            )
-            + "\n\n"
-        )
+    yield _event(run, current_case=None, done=True, **({"error": error} if error else {}))
 
 
 @router.get("/runs")

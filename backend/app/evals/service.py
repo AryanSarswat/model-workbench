@@ -1,10 +1,7 @@
-"""Runs one test case through the same chat path used for regular chat --
-get_backend() + stream_chat() -- per docs/architecture.md's eval engine design.
-No eval-specific inference logic: assertions, judge scoring, and
-response_metrics all run on top of the same InferenceBackend Protocol every
-other caller uses. The per-run orchestration loop (iterating every matching
-case, SSE progress) lives in evals/router.py, since it's inherently tied to
-the StreamingResponse the endpoint returns.
+"""Runs one test case through the same stream_chat() path used for regular chat.
+No eval-specific inference logic: assertions, judge scoring, and response_metrics
+all sit on top of the InferenceBackend Protocol. The backend is resolved once per
+run by evals/router.py (which also owns the SSE loop and closes the backend).
 """
 
 from __future__ import annotations
@@ -15,9 +12,10 @@ import time
 from sqlmodel import Session
 
 from app.dataset.store import TestCase
+from app.errors import WorkbenchError
 from app.evals.assertions import run_assertions
 from app.evals.judge import score_with_judge
-from app.inference.registry import get_backend
+from app.inference.base import InferenceBackend
 from app.inference.schemas import ChatMessage, TokenUsage
 from app.metrics import build_response_metric
 from app.models import EvalResult, EvalRun
@@ -25,9 +23,12 @@ from app.tools import resolve_tool_names
 
 
 async def run_one_case(
-    session: Session, run: EvalRun, case: TestCase, hf_api_key: str | None
+    session: Session,
+    run: EvalRun,
+    case: TestCase,
+    backend: InferenceBackend,
+    hf_api_key: str | None,
 ) -> EvalResult:
-    backend = get_backend(run.backend, run.model_id, hf_api_key)
     messages = list(case.messages)
     if case.system_prompt is not None:
         messages = [ChatMessage(role="system", content=case.system_prompt), *messages]
@@ -39,11 +40,16 @@ async def run_one_case(
     usage: TokenUsage | None = None
     tools_called: list[str] = []
     retries = 0
+    error: str | None = None
     try:
+        if case.output_schema is not None:
+            backend.prevalidate_output_schema(case.output_schema)
         async for chunk in backend.stream_chat(
             run.model_id, messages, tools=tools, output_schema=case.output_schema
         ):
-            if chunk.error is None and chunk.delta:
+            if chunk.error is not None:
+                error = chunk.error
+            elif chunk.delta:
                 if first_chunk_at is None:
                     first_chunk_at = time.monotonic()
                 parts.append(chunk.delta)
@@ -51,8 +57,8 @@ async def run_one_case(
                 usage = chunk.usage
                 tools_called = chunk.tools_called
                 retries = chunk.retries
-    finally:
-        await backend.aclose()
+    except WorkbenchError as exc:
+        error = exc.message
     finished_at = time.monotonic()
     response_text = "".join(parts)
 
@@ -82,6 +88,7 @@ async def run_one_case(
         case_id=case.id,
         category=case.category,
         response=response_text,
+        error=error,
         structured_output_mode=capabilities.structured_output_mode,
         native_tool_calling=capabilities.native_tool_calling,
         retries=retries,

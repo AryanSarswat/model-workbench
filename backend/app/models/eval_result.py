@@ -16,6 +16,7 @@ class EvalResult(SQLModel, table=True):
     # to support filtering/aggregation without re-reading JSON per query.
     category: str
     response: str
+    error: str | None = None  # backend error or invalid case schema; assertions then fail
     structured_output_mode: str | None = None  # backend.capabilities().structured_output_mode
     native_tool_calling: bool = False
     retries: int = 0

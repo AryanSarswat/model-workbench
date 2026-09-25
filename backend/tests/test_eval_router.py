@@ -9,7 +9,8 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app.config import Settings
 from app.dataset import store
 from app.db import get_session
-from app.evals import service
+from app.errors import WorkbenchError
+from app.evals import router as eval_router
 from app.inference.schemas import BackendCapabilities, ChatChunk
 from app.main import app
 from app.models import EvalResult, EvalRun
@@ -43,6 +44,8 @@ def _reset_db_and_dataset(tmp_path, monkeypatch):
 
 
 class _FakeBackend:
+    closed = False
+
     def capabilities(self):
         return BackendCapabilities(structured_output_mode="grammar", native_tool_calling=False)
 
@@ -50,8 +53,11 @@ class _FakeBackend:
         yield ChatChunk(delta="hi there")
         yield ChatChunk(done=True)
 
-    async def aclose(self):
+    def prevalidate_output_schema(self, schema):
         pass
+
+    async def aclose(self):
+        self.closed = True
 
 
 def _seed_case(category="general") -> dict:
@@ -67,18 +73,28 @@ def _seed_case(category="general") -> dict:
     return response.json()
 
 
-def test_start_eval_run_streams_progress_and_persists_results():
-    _seed_case()
+def _events(response) -> list[dict]:
+    return [
+        json.loads(line[len("data: ") :])
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
 
-    with patch.object(service, "get_backend", return_value=_FakeBackend()):
+
+def test_start_eval_run_streams_progress_and_persists_results():
+    case = _seed_case()
+    backend = _FakeBackend()
+
+    with patch.object(eval_router, "get_backend", return_value=backend):
         response = client.post("/evals/run", json={"model_id": "some/model", "backend": "api"})
 
     assert response.status_code == 200
-    events = [
-        line[len("data: ") :] for line in response.text.splitlines() if line.startswith("data: ")
-    ]
-    assert len(events) == 1  # one case -> its progress event doubles as the final one
-    assert json.loads(events[-1])["done"] is True
+    events = _events(response)
+    # One "now running X" event per case, then a final done event.
+    assert events[0] == {"completed": 0, "total": 1, "current_case": case["id"], "done": False}
+    assert events[-1]["done"] is True
+    assert events[-1]["completed"] == 1
+    assert backend.closed is True
 
     with Session(_test_engine) as session:
         runs = list(session.exec(select(EvalRun)).all())
@@ -92,7 +108,7 @@ def test_start_eval_run_streams_progress_and_persists_results():
 
 def test_list_eval_runs_returns_newest_first():
     _seed_case()
-    with patch.object(service, "get_backend", return_value=_FakeBackend()):
+    with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
         client.post("/evals/run", json={"model_id": "some/model", "backend": "api"})
         client.post("/evals/run", json={"model_id": "some/model", "backend": "api"})
 
@@ -112,7 +128,7 @@ def test_get_eval_run_results_returns_404_for_missing_run():
 
 def test_get_eval_run_results_returns_its_results():
     _seed_case()
-    with patch.object(service, "get_backend", return_value=_FakeBackend()):
+    with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
         run_response = client.post("/evals/run", json={"model_id": "some/model", "backend": "api"})
     assert run_response.status_code == 200
     with Session(_test_engine) as session:
@@ -126,7 +142,7 @@ def test_get_eval_run_results_returns_its_results():
 
 def test_patch_eval_result_sets_manual_verdict():
     _seed_case()
-    with patch.object(service, "get_backend", return_value=_FakeBackend()):
+    with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
         client.post("/evals/run", json={"model_id": "some/model", "backend": "api"})
     with Session(_test_engine) as session:
         result_id = session.exec(select(EvalResult)).one().id
@@ -148,3 +164,27 @@ def test_patch_missing_eval_result_returns_404():
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "eval_result_not_found"
+
+
+def test_misconfigured_backend_is_a_400_before_any_run_is_created():
+    _seed_case()
+    missing_key = WorkbenchError(400, "missing_hf_api_key", "HF_API_KEY is not configured")
+
+    with patch.object(eval_router, "get_backend", side_effect=missing_key):
+        response = client.post("/evals/run", json={"model_id": "some/model", "backend": "api"})
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "missing_hf_api_key"
+    with Session(_test_engine) as session:
+        assert session.exec(select(EvalRun)).all() == []
+
+
+def test_run_with_no_matching_cases_completes_instead_of_hanging_as_running():
+    with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
+        response = client.post(
+            "/evals/run", json={"model_id": "some/model", "backend": "api", "category": "none"}
+        )
+
+    assert _events(response) == [{"completed": 0, "total": 0, "current_case": None, "done": True}]
+    with Session(_test_engine) as session:
+        assert session.exec(select(EvalRun)).one().status == "completed"
