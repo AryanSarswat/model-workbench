@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.api_config.router import router as config_router
 from app.chat.router import router as chat_router
 from app.db import init_db
 from app.discovery.router import router as discovery_router
@@ -27,6 +28,7 @@ app = FastAPI(title="model-workbench", lifespan=lifespan)
 app.include_router(downloads_router)
 app.include_router(discovery_router)
 app.include_router(chat_router)
+app.include_router(config_router)
 app.include_router(tools_router)
 
 
