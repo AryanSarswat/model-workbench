@@ -24,6 +24,11 @@ class _FakeLlama:
     def __init__(self, model_path: str, verbose: bool = False) -> None:
         self.model_path = model_path
 
+    def tokenize(self, data: bytes, add_bos: bool = True) -> list[int]:
+        # One "token" per whitespace-separated word -- good enough to test the
+        # wiring, not a real tokenizer.
+        return data.decode().split()
+
     def create_chat_completion(self, messages, stream=True):
         assert stream is True
         return iter(
@@ -154,10 +159,40 @@ def test_stream_chat_with_tools_executes_the_call_and_streams_the_final_text(mon
     assert [c.delta for c in chunks] == ["5", ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+    assert chunks[-1].tools_called == ["calculator"]
     # The real calculator ran: its result rode back as a tool-role message.
     llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
     tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
     assert tool_messages == [{"role": "tool", "tool_call_id": "call_1", "content": "5"}]
+
+
+class _FakeUnknownToolLlama(_FakeLlama):
+    """First turn requests a tool name that isn't registered, the second answers."""
+
+    def __init__(self, model_path: str, verbose: bool = False) -> None:
+        super().__init__(model_path, verbose)
+        self.seen: list[list[dict]] = []
+
+    def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
+        assert stream is False
+        self.seen.append(list(messages))
+        if len(self.seen) == 1:
+            return {
+                "choices": [{"message": _tool_call_message("call_1", "nonexistent_tool", "{}")}]
+            }
+        return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
+
+
+def test_stream_chat_with_tools_does_not_record_an_unknown_tool_name(monkeypatch):
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FakeUnknownToolLlama)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    chunks = _run_tool_chat(backend)
+
+    assert [c.delta for c in chunks] == ["done", ""]
+    assert chunks[-1].done is True
+    # The name was never resolved, so it must never be recorded as "called."
+    assert chunks[-1].tools_called == []
 
 
 class _FakeStubbornLlama(_FakeLlama):
@@ -241,21 +276,26 @@ def _run_schema_chat(
 
 
 class _FakeSchemaLlama(_FakeLlama):
-    """Records kwargs so tests can assert on the grammar kwarg."""
+    """Records kwargs so tests can assert on the grammar kwarg and serves both the
+    streaming (no-schema) and non-streamed (schema) call shapes."""
 
     def __init__(self, model_path: str, verbose: bool = False) -> None:
         super().__init__(model_path, verbose)
         self.seen_kwargs: dict = {}
 
     def create_chat_completion(self, messages, stream=True, **kwargs):
-        assert stream is True
-        self.seen_kwargs = kwargs
-        return iter(
-            [
-                {"choices": [{"delta": {"content": '{"answer":'}}]},
-                {"choices": [{"delta": {"content": " 42}"}}]},
-            ]
-        )
+        self.seen_kwargs = {**kwargs, "stream": stream}
+        if stream:
+            return iter(
+                [
+                    {"choices": [{"delta": {"content": '{"answer":'}}]},
+                    {"choices": [{"delta": {"content": " 42}"}}]},
+                ]
+            )
+        return {
+            "choices": [{"message": {"content": '{"answer": 42}'}}],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 6, "total_tokens": 14},
+        }
 
 
 def test_stream_chat_with_schema_passes_grammar_and_yields_single_delta(monkeypatch):
@@ -265,11 +305,14 @@ def test_stream_chat_with_schema_passes_grammar_and_yields_single_delta(monkeypa
 
     chunks = _run_schema_chat(backend, _SCHEMA)
 
+    assert fake.seen_kwargs["stream"] is False
     assert isinstance(fake.seen_kwargs.get("grammar"), LlamaGrammar)
     # Constrained turns never stream fragments: one delta + done.
     assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+    assert chunks[-1].usage.prompt_tokens == 8
+    assert chunks[-1].usage.completion_tokens == 6
 
 
 def test_stream_chat_without_schema_passes_no_grammar(monkeypatch):
@@ -280,6 +323,7 @@ def test_stream_chat_without_schema_passes_no_grammar(monkeypatch):
     chunks = _run_stream_chat(backend)
 
     assert "grammar" not in fake.seen_kwargs
+    assert fake.seen_kwargs["stream"] is True
     assert [c.delta for c in chunks] == ['{"answer":', " 42}", ""]
     assert chunks[-1].done is True
 
@@ -366,3 +410,15 @@ def test_stream_chat_with_tools_and_schema_constrains_every_turn(monkeypatch):
     assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+    assert chunks[-1].tools_called == ["calculator"]
+
+
+def test_stream_chat_reports_approximate_usage_from_tokenize(monkeypatch):
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FakeLlama)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    chunks = _run_stream_chat(backend)
+
+    assert chunks[-1].usage is not None
+    assert chunks[-1].usage.prompt_tokens == 1  # "hi" -> one whitespace-split token
+    assert chunks[-1].usage.completion_tokens == 1  # "Hello" -> one whitespace-split token

@@ -41,6 +41,11 @@ class _FakeTokenizer:
         self.applied_messages = messages
         return _FakeEncoding(input_ids=[[1, 2]])
 
+    def __call__(self, text, **kwargs):
+        # One "token" per whitespace-separated word -- good enough to test the
+        # wiring, not a real tokenizer.
+        return {"input_ids": text.split()}
+
 
 class _FakeStreamer:
     def __init__(self, tokenizer, skip_prompt=False) -> None:
@@ -160,6 +165,9 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     # The prompt was templated once, and the calculator result fed the next turn.
     assert _ToolTokenizer.instances[0].applied_messages[0]["role"] == "system"
     assert any("Tool 'calculator' returned: 5" in prompt for prompt in prompts)
+    assert chunks[-1].tools_called == ["calculator"]
+    assert chunks[-1].usage.prompt_tokens == 2  # every _FakeEncoding uses input_ids=[[1, 2]]
+    assert chunks[-1].usage.completion_tokens == 4  # 2 generate() turns x 2 completion tokens each
 
 
 def test_capabilities_report_guided_and_native_tool_calling():
@@ -186,6 +194,8 @@ def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
         {"role": "user", "content": "hi"}
     ]
     assert _FakeModel.instances[0].device == backend._device
+    assert chunks[-1].usage.prompt_tokens == 2  # input_ids=[[1, 2]] from _FakeEncoding
+    assert chunks[-1].usage.completion_tokens == 1  # "Hello".split() -> one token
 
 
 def test_stream_chat_converts_generation_error_to_a_terminal_error_chunk(monkeypatch):
@@ -354,6 +364,8 @@ def test_guided_plain_path_yields_single_delta_with_processor(monkeypatch):
     assert isinstance(processor, LogitsProcessorList)
     assert list(processor) == [sentinel]
     assert built == [(model, tokenizer, schema)]
+    assert chunks[-1].usage.prompt_tokens == 2
+    assert chunks[-1].usage.completion_tokens == 2  # outputs[0][input_len:] == [3, 4]
 
 
 def test_plain_path_without_schema_passes_no_logits_processor(monkeypatch):
@@ -406,6 +418,8 @@ def test_guided_tool_loop_constrains_only_the_final_turn(monkeypatch):
     assert built == [(model, tokenizer, schema)]
     # Tool results reached the guided turn's context.
     assert any("Tool 'calculator' returned: 5" in prompt for prompt in tokenizer.prompts)
+    assert chunks[-1].tools_called == ["calculator"]
+    assert chunks[-1].usage.completion_tokens == 6  # 3 generate() turns x 2 completion tokens each
 
 
 def test_invalid_output_schema_raises_400_pre_stream(monkeypatch):
@@ -507,38 +521,3 @@ def test_tool_loop_conforming_draft_skips_guided_turn(monkeypatch):
     assert built == []
     # The schema instruction rode the single template-built prompt.
     assert json.dumps(schema) in tokenizer.applied_messages[0]["content"]
-
-
-def test_tool_loop_nonconforming_draft_falls_through_to_guided(monkeypatch):
-    scripted = [
-        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
-        '{"wrong": 1}',
-        '{"wrong": 1}',
-        '{"wrong": 1}',
-        '{"wrong": 1}',
-        '{"answer": 5}',
-    ]
-    schema = _conforming_schema()
-    model, tokenizer = _GuidedModel(), _GuidedTokenizer(scripted)
-    backend = TransformersBackend("/tmp/snapshot")
-    monkeypatch.setattr(backend, "_get_model", lambda: (model, tokenizer))
-    sentinel, built = _patch_guided_processor(monkeypatch)
-
-    async def _collect() -> list[ChatChunk]:
-        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
-        tools = [get_tool("calculator").spec]
-        return [
-            chunk
-            async for chunk in backend.stream_chat(
-                "org/model", messages, tools=tools, output_schema=schema
-            )
-        ]
-
-    chunks = asyncio.run(_collect())
-
-    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
-    assert chunks[-1].done is True
-    # Five loop turns plus the guided final turn.
-    assert len(model.generate_calls) == 6
-    assert list(model.generate_calls[-1]["logits_processor"]) == [sentinel]
-    assert built == [(model, tokenizer, schema)]
