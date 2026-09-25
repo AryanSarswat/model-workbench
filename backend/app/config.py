@@ -12,14 +12,16 @@ import subprocess
 from pathlib import Path
 
 import psutil
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ENV_FILE = ".env"
 
 
 class Settings(BaseSettings):
     """Loaded from backend/.env (see .env.example). Never logged or persisted to the DB."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
     hf_api_key: str | None = None
     # Override for the file-backed test-case dataset (data/test_cases/ by default).
@@ -28,7 +30,8 @@ class Settings(BaseSettings):
 
 
 def get_settings() -> Settings:
-    return Settings()
+    # ENV_FILE is read at call time so POST /config/hf-api-key takes effect without a restart.
+    return Settings(_env_file=ENV_FILE)
 
 
 class GPUInfo(BaseModel):
@@ -43,6 +46,7 @@ class HardwareInfo(BaseModel):
     total_ram_gb: float
     gpu: GPUInfo
 
+    @computed_field
     @property
     def usable_memory_gb(self) -> float:
         """Memory a model actually gets loaded into, for the feasibility check.
