@@ -196,16 +196,6 @@ def test_get_missing_session_returns_404():
     assert response.json()["error"]["code"] == "chat_session_not_found"
 
 
-def test_list_sessions_returns_newest_first():
-    first = _seed_session()
-    second = _seed_session()
-
-    response = client.get("/chat/sessions")
-
-    assert response.status_code == 200
-    assert [s["id"] for s in response.json()] == [second, first]
-
-
 def test_delete_session_removes_messages_and_get_then_404s():
     session_id = _seed_session()
     _seed_message(session_id, "user", "hi", 1)

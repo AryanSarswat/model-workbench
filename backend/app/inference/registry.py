@@ -1,5 +1,5 @@
 """Maps a chat request's (`backend`, `model_id`) to a concrete InferenceBackend. The chat
-router (and later the eval engine) call this instead of importing a specific backend
+router and the eval engine call this instead of importing a specific backend
 class -- adding a backend means adding one branch here, not touching every call site
 that runs a chat.
 

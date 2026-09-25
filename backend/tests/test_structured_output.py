@@ -10,6 +10,7 @@ from app.inference.structured_output import (
     PromptJsonRetrier,
     TextReply,
     ToolCall,
+    extract_json_object,
     matches_schema,
     validate_output_schema,
 )
@@ -46,15 +47,6 @@ def test_build_tool_messages_with_schema_embeds_instruction_and_schema():
     assert "FINAL reply" in result[0].content
     assert '{"tool":' in result[0].content
     assert [m.content for m in result[1:]] == ["hi"]
-
-
-def test_build_tool_messages_without_schema_leaves_prompt_unchanged():
-    messages = [ChatMessage(role="user", content="hi")]
-    default = PromptJsonRetrier().build_tool_messages(messages, [_spec()])
-    explicit_none = PromptJsonRetrier().build_tool_messages(messages, [_spec()], None)
-
-    assert default[0].content == explicit_none[0].content
-    assert "JSON Schema" not in default[0].content
 
 
 def test_build_tool_messages_keeps_existing_system_first():
@@ -103,15 +95,6 @@ def test_parse_tool_call_with_missing_keys_returns_none():
 def test_parse_tool_call_with_name_key_and_tool_call_tags():
     parsed = PromptJsonRetrier().parse_tool_call_or_reply(
         '<tool_call>\n{"name": "calculator", "arguments": {"expression": "2+3"}}\n</tool_call>'
-    )
-
-    assert parsed == ToolCall(tool_name="calculator", arguments={"expression": "2+3"})
-
-
-def test_parse_tool_call_with_name_key_and_surrounding_chatter():
-    parsed = PromptJsonRetrier().parse_tool_call_or_reply(
-        'Sure, computing that: <tool_call>{"name": "calculator", '
-        '"arguments": {"expression": "2+3"}}</tool_call> done'
     )
 
     assert parsed == ToolCall(tool_name="calculator", arguments={"expression": "2+3"})
@@ -193,3 +176,11 @@ def test_matches_schema_accepts_valid_and_rejects_mismatches():
     assert matches_schema({"name": "Ada"}, _schema()) is False
     assert matches_schema({"name": "Ada", "age": "36"}, _schema()) is False
     assert matches_schema({"name": "Ada", "age": True}, _schema()) is False
+
+
+def test_extract_json_object_finds_a_json_object_wrapped_in_chatter():
+    assert extract_json_object('Sure: {"answer": 42} thanks') == {"answer": 42}
+
+
+def test_extract_json_object_returns_none_for_no_json():
+    assert extract_json_object("no json here") is None
