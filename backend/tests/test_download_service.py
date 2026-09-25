@@ -128,3 +128,15 @@ def test_run_download_truncated_stream_marks_job_failed(tmp_path):
         assert session.exec(select(DownloadedModelRecord)).first() is None
 
     assert not (tmp_path / "meta-llama/Llama-3-8B" / "model.Q4_K_M.gguf").exists()
+
+
+def test_run_download_unwritable_dest_marks_job_failed(tmp_path):
+    """A mkdir failure (here: a file where the repo dir should be) must fail the job,
+    not escape the background task and leave the job stuck at "downloading"."""
+    (tmp_path / "meta-llama").write_text("not a directory")
+    job_id = _seed_job()
+
+    service.run_download(job_id, "meta-llama/Llama-3-8B", "model.Q4_K_M.gguf")
+
+    with Session(_test_engine) as session:
+        assert session.get(DownloadJob, job_id).status == "failed"

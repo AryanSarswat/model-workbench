@@ -242,6 +242,16 @@ def test_run_snapshot_download_rejects_escaping_repo_id(tmp_path):
     assert not (tmp_path / "evil").exists()
 
 
+def test_run_snapshot_download_unwritable_dest_marks_job_failed(tmp_path):
+    (tmp_path / "org").write_text("not a directory")
+    job_id = _seed_job()
+
+    service.run_snapshot_download(job_id, "org/model", [SnapshotFile(filename="config.json")])
+
+    with Session(_test_engine) as session:
+        assert session.get(DownloadJob, job_id).status == "failed"
+
+
 def test_safe_dest_allows_normal_nested_paths(tmp_path):
     assert service._safe_dest(tmp_path, "org/model", "data/vocab.txt") == (
         tmp_path / "org/model" / "data" / "vocab.txt"
