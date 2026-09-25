@@ -104,3 +104,32 @@ def get_hardware_info() -> HardwareInfo:
         total_ram_gb=_total_ram_gb(),
         gpu=_detect_gpu(),
     )
+
+
+class MemoryUsage(BaseModel):
+    ram_used_gb: float
+    vram_used_gb: float | None = None  # None for apple_silicon (unified memory) or no GPU
+
+
+def _nvidia_vram_used_gb() -> float | None:
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return None
+    first_line = result.stdout.strip().splitlines()[0]
+    return round(float(first_line.strip()) / 1024, 1)
+
+
+def get_memory_usage() -> MemoryUsage:
+    """A point-in-time snapshot for response_metrics -- unlike get_hardware_info's
+    static totals, this changes on every call."""
+    ram_used_gb = round(psutil.virtual_memory().used / (1024**3), 1)
+    gpu = _detect_gpu()
+    vram_used_gb = _nvidia_vram_used_gb() if gpu.kind == "nvidia" else None
+    return MemoryUsage(ram_used_gb=ram_used_gb, vram_used_gb=vram_used_gb)

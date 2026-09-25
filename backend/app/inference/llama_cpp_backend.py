@@ -18,17 +18,60 @@ from pathlib import Path
 from llama_cpp import Llama, LlamaGrammar
 
 from app.errors import WorkbenchError
-from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
+from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage, TokenUsage
 from app.inference.structured_output import (
     PromptJsonRetrier,
     ToolCall,
     validate_output_schema,
 )
+from app.inference.tool_loop import LoopResult
 from app.tools import ToolSpec, get_tool
 
 _CACHE: dict[str, Llama] = {}
 _CACHE_LOCK = threading.Lock()
 _SENTINEL = object()
+
+
+def _record_usage(usages: list[TokenUsage], usage_dict: dict | None) -> None:
+    if usage_dict:
+        usages.append(
+            TokenUsage(
+                prompt_tokens=usage_dict["prompt_tokens"],
+                completion_tokens=usage_dict["completion_tokens"],
+            )
+        )
+
+
+def _combine_usage(usages: list[TokenUsage]) -> TokenUsage | None:
+    """completion_tokens sums across turns; prompt_tokens takes the last turn's
+    figure (it already includes every prior turn's history)."""
+    if not usages:
+        return None
+    return TokenUsage(
+        prompt_tokens=usages[-1].prompt_tokens,
+        completion_tokens=sum(u.completion_tokens for u in usages),
+    )
+
+
+def _estimate_streaming_usage(
+    llama: Llama, messages: list[ChatMessage], completion_text: str
+) -> TokenUsage | None:
+    """Best-effort token counts for the one true-streaming path (no grammar, no
+    tools): llama.cpp's streaming chunks carry no usage field, unlike the
+    non-streamed dict responses used by the grammar/tool paths above. Prompt
+    tokens approximate a newline-joined transcript rather than the exact
+    chat-template rendering (applied internally by create_chat_completion and
+    not exposed) -- good enough for a relative tokens/sec comparison, not
+    billing-grade accounting. Returns None rather than raising: usage is a
+    nice-to-have, never worth failing a turn that already streamed successfully.
+    """
+    try:
+        prompt_text = "\n".join(m.content for m in messages)
+        prompt_tokens = len(llama.tokenize(prompt_text.encode("utf-8")))
+        completion_tokens = len(llama.tokenize(completion_text.encode("utf-8"), add_bos=False))
+    except Exception:  # noqa: BLE001 -- see above
+        return None
+    return TokenUsage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
 
 
 def _build_grammar(output_schema: dict) -> LlamaGrammar:
@@ -79,19 +122,25 @@ class LlamaCppBackend:
         messages: list[ChatMessage],
         tools: list[ToolSpec],
         grammar: LlamaGrammar | None = None,
-    ) -> str:
+    ) -> tuple[LoopResult, TokenUsage | None]:
         """Drive non-streamed chat turns until the model answers without tool calls.
 
         History is plain dicts (converted once from ChatMessage at entry) so the
         "tool"-role result messages -- which the public ChatMessage schema has no
         variant for -- can ride along. A failing tool yields an "Error: ..." result
         string, never a loop crash. Exhausted turns return the last content seen.
+
+        Returns the loop's text/tools_called alongside combined token usage across
+        every turn -- llama.cpp's non-streamed dict response carries an exact
+        "usage" key per turn, unlike the plain-streaming path.
         """
         history: list[dict] = [m.model_dump() for m in messages]
         # OpenAI tool shape -- llama-cpp-python reads tool["function"], so a bare
         # spec dict would KeyError (or be silently filtered) inside the library.
         tool_schemas = [{"type": "function", "function": spec.model_dump()} for spec in tools]
         last_content = ""
+        tools_called: list[str] = []
+        usages: list[TokenUsage] = []
         retrier = PromptJsonRetrier()
         for _ in range(5):
             extra_kwargs: dict = {"grammar": grammar} if grammar is not None else {}
@@ -103,6 +152,7 @@ class LlamaCppBackend:
                 stream=False,
                 **extra_kwargs,
             )
+            _record_usage(usages, response.get("usage"))
             message = response["choices"][0]["message"]
             if message.get("content"):
                 last_content = message["content"]
@@ -116,14 +166,20 @@ class LlamaCppBackend:
                 content = message.get("content") or ""
                 parsed = retrier.parse_tool_call_or_reply(content) if content else None
                 if not isinstance(parsed, ToolCall):
-                    return content
+                    return LoopResult(text=content, tools_called=tools_called), _combine_usage(
+                        usages
+                    )
                 history.append(dict(message))
                 try:
-                    result = await get_tool(parsed.tool_name).run(parsed.arguments)
+                    tool = get_tool(parsed.tool_name)
                 except WorkbenchError as e:
                     result = f"Error: {e.message}"
-                except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
-                    result = f"Error: {e}"
+                else:
+                    try:
+                        result = await tool.run(parsed.arguments)
+                    except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
+                        result = f"Error: {e}"
+                    tools_called.append(parsed.tool_name)
                 history.append({"role": "tool", "tool_call_id": "", "content": result})
                 continue
             history.append(dict(message))
@@ -140,15 +196,19 @@ class LlamaCppBackend:
                     result = f"Error: invalid arguments for tool '{name}': expected a JSON object"
                 else:
                     try:
-                        result = await get_tool(name).run(args)
+                        tool = get_tool(name)
                     except WorkbenchError as e:
                         result = f"Error: {e.message}"
-                    except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
-                        result = f"Error: {e}"
+                    else:
+                        try:
+                            result = await tool.run(args)
+                        except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
+                            result = f"Error: {e}"
+                        tools_called.append(name)
                 history.append(
                     {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
                 )
-        return last_content
+        return LoopResult(text=last_content, tools_called=tools_called), _combine_usage(usages)
 
     async def aclose(self) -> None:
         """No-op -- the cached Llama stays loaded for the next turn. The chat router
@@ -179,12 +239,14 @@ class LlamaCppBackend:
                 yield ChatChunk(done=True, error=f"failed to load {self._model_path}: {e}")
                 return
             try:
-                final = await self._run_native_tool_loop(llama, messages, tools, grammar)
+                loop_result, usage = await self._run_native_tool_loop(
+                    llama, messages, tools, grammar
+                )
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return
-            yield ChatChunk(delta=final)
-            yield ChatChunk(done=True)
+            yield ChatChunk(delta=loop_result.text)
+            yield ChatChunk(done=True, usage=usage, tools_called=loop_result.tools_called)
             return
         try:
             llama = await asyncio.to_thread(self._get_llama)
@@ -193,33 +255,39 @@ class LlamaCppBackend:
             yield ChatChunk(done=True, error=f"failed to load {self._model_path}: {e}")
             return
         try:
-            stream_kwargs: dict = {"grammar": grammar} if grammar is not None else {}
+            if grammar is not None:
+                # Constrained turns run to completion anyway (never streamed), so a
+                # single non-streamed call gets the full JSON and an exact token
+                # count from llama.cpp's own usage accounting in one round trip,
+                # instead of manually collecting streamed deltas.
+                response = await asyncio.to_thread(
+                    llama.create_chat_completion,
+                    messages=[m.model_dump() for m in messages],
+                    grammar=grammar,
+                    stream=False,
+                )
+                final_text = response["choices"][0]["message"]["content"] or ""
+                usages: list[TokenUsage] = []
+                _record_usage(usages, response.get("usage"))
+                yield ChatChunk(delta=final_text)
+                yield ChatChunk(done=True, usage=_combine_usage(usages))
+                return
             stream = llama.create_chat_completion(
                 messages=[m.model_dump() for m in messages],
                 stream=True,
-                **stream_kwargs,
             )
-            if grammar is not None:
-                # Constrained turns run to completion: collect the full text,
-                # then yield the final JSON as one delta + done.
-                parts: list[str] = []
-                while True:
-                    chunk = await asyncio.to_thread(next, stream, _SENTINEL)
-                    if chunk is _SENTINEL:
-                        break
-                    delta = chunk["choices"][0]["delta"].get("content")
-                    if delta:
-                        parts.append(delta)
-                yield ChatChunk(delta="".join(parts))
-                yield ChatChunk(done=True)
-                return
+            parts: list[str] = []
             while True:
                 chunk = await asyncio.to_thread(next, stream, _SENTINEL)
                 if chunk is _SENTINEL:
                     break
                 delta = chunk["choices"][0]["delta"].get("content")
                 if delta:
+                    parts.append(delta)
                     yield ChatChunk(delta=delta)
-            yield ChatChunk(done=True)
+            completion_text = "".join(parts)
+            yield ChatChunk(
+                done=True, usage=_estimate_streaming_usage(llama, messages, completion_text)
+            )
         except Exception as e:  # noqa: BLE001 -- see above
             yield ChatChunk(done=True, error=str(e))

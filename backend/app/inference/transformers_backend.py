@@ -32,9 +32,9 @@ from transformers import (
 )
 
 from app.errors import WorkbenchError
-from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
+from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage, TokenUsage
 from app.inference.structured_output import PromptJsonRetrier, matches_schema
-from app.inference.tool_loop import run_tool_loop
+from app.inference.tool_loop import LoopResult, run_tool_loop
 from app.tools import ToolSpec
 
 try:
@@ -57,6 +57,17 @@ def _detect_device() -> str:
     if torch.cuda.is_available():
         return "cuda"
     return "cpu"
+
+
+def _combine_usage(usages: list[TokenUsage]) -> TokenUsage | None:
+    """completion_tokens sums across turns; prompt_tokens takes the last turn's
+    figure (it already includes every prior turn's history)."""
+    if not usages:
+        return None
+    return TokenUsage(
+        prompt_tokens=usages[-1].prompt_tokens,
+        completion_tokens=sum(u.completion_tokens for u in usages),
+    )
 
 
 def _build_guided_processor(
@@ -154,7 +165,7 @@ class TransformersBackend:
         tokenizer: AutoTokenizer,
         conversation: str,
         output_schema: dict | None = None,
-    ) -> str:
+    ) -> tuple[str, TokenUsage]:
         """One non-streamed turn off the accumulated conversation text."""
         inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
         inputs = inputs.to(self._device)
@@ -170,7 +181,10 @@ class TransformersBackend:
             )
             generate_kwargs["logits_processor"] = LogitsProcessorList([processor])
         outputs = await asyncio.to_thread(model.generate, **generate_kwargs)
-        return tokenizer.decode(outputs[0][input_len:], skip_special_tokens=True)
+        completion_ids = outputs[0][input_len:]
+        text = tokenizer.decode(completion_ids, skip_special_tokens=True)
+        usage = TokenUsage(prompt_tokens=input_len, completion_tokens=len(completion_ids))
+        return text, usage
 
     async def _run_fallback_tool_loop(
         self,
@@ -179,7 +193,7 @@ class TransformersBackend:
         messages: list[ChatMessage],
         tools: list[ToolSpec],
         output_schema: dict | None = None,
-    ) -> str:
+    ) -> tuple[LoopResult, TokenUsage | None]:
         """Drive the shared prompt-and-retry tool loop with non-streamed generation.
 
         The full prompt text is built ONCE via the chat template; each loop turn
@@ -190,6 +204,8 @@ class TransformersBackend:
         With output_schema the loop's turns stay unconstrained (they must emit
         tool-call JSON, which the schema must not forbid) and only the final
         reply turn is schema-guided, with every tool result already in context.
+        Usage from every generate() call (loop turns and, if it runs, the final
+        guided turn) is combined into one figure for the caller.
         """
         prompt_messages = PromptJsonRetrier().build_tool_messages(
             messages, tools, output_schema
@@ -203,26 +219,36 @@ class TransformersBackend:
         # The template render above already contains every message in history's
         # initial state (prompt_messages), so only later loop turns get appended.
         rendered = len(prompt_messages)
+        usages: list[TokenUsage] = []
 
         async def _generate(history: list[ChatMessage]) -> str:
             nonlocal conversation, rendered
             for message in history[rendered:]:
                 conversation += f"\n{message.role}: {message.content}\n"
             rendered = len(history)
-            return await self._generate_turn(model, tokenizer, conversation)
+            text, usage = await self._generate_turn(model, tokenizer, conversation)
+            usages.append(usage)
+            return text
 
-        final = await run_tool_loop(_generate, prompt_messages, tools)
+        loop_result = await run_tool_loop(_generate, prompt_messages, tools)
         if output_schema is not None:
             # Optimistic fast path: the schema instruction rides every loop
             # turn, so a draft that already conforms skips the guided redraft.
             try:
-                draft = json.loads(final)
+                draft = json.loads(loop_result.text)
             except (TypeError, ValueError):
                 draft = None
             if isinstance(draft, dict) and matches_schema(draft, output_schema):
-                return final
-            return await self._generate_turn(model, tokenizer, conversation, output_schema)
-        return final
+                return loop_result, _combine_usage(usages)
+            final_text, final_usage = await self._generate_turn(
+                model, tokenizer, conversation, output_schema
+            )
+            usages.append(final_usage)
+            return (
+                LoopResult(text=final_text, tools_called=loop_result.tools_called),
+                _combine_usage(usages),
+            )
+        return loop_result, _combine_usage(usages)
 
     async def stream_chat(
         self,
@@ -248,7 +274,7 @@ class TransformersBackend:
             # delta + done: tool-calling turns can't stream partial tool calls
             # honestly, so nothing streams until the loop resolves to final text.
             try:
-                final = await self._run_fallback_tool_loop(
+                loop_result, usage = await self._run_fallback_tool_loop(
                     model, tokenizer, messages, tools, output_schema
                 )
             except WorkbenchError:
@@ -258,8 +284,8 @@ class TransformersBackend:
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return
-            yield ChatChunk(delta=final)
-            yield ChatChunk(done=True)
+            yield ChatChunk(delta=loop_result.text)
+            yield ChatChunk(done=True, usage=usage, tools_called=loop_result.tools_called)
             return
         if output_schema is not None:
             # Constrained turns run to completion under the schema guide, then
@@ -283,14 +309,16 @@ class TransformersBackend:
                     max_new_tokens=512,
                     logits_processor=LogitsProcessorList([processor]),
                 )
-                final = tokenizer.decode(
-                    outputs[0][input_len:], skip_special_tokens=True
+                completion_ids = outputs[0][input_len:]
+                final = tokenizer.decode(completion_ids, skip_special_tokens=True)
+                usage = TokenUsage(
+                    prompt_tokens=input_len, completion_tokens=len(completion_ids)
                 )
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return
             yield ChatChunk(delta=final)
-            yield ChatChunk(done=True)
+            yield ChatChunk(done=True, usage=usage)
             return
         try:
             inputs = tokenizer.apply_chat_template(
@@ -299,6 +327,7 @@ class TransformersBackend:
                 return_tensors="pt",
                 return_dict=True,
             ).to(self._device)
+            input_len = len(inputs["input_ids"][0])
             streamer = TextIteratorStreamer(tokenizer, skip_prompt=True)
             # generate() runs on a worker thread while this coroutine drains the
             # streamer. A generate crash must still terminate the stream (never hang
@@ -316,16 +345,28 @@ class TransformersBackend:
 
             thread = threading.Thread(target=_generate, daemon=True)
             thread.start()
+            parts: list[str] = []
             while True:
                 text = await asyncio.to_thread(next, streamer, _SENTINEL)
                 if text is _SENTINEL:
                     break
                 if text:
+                    parts.append(text)
                     yield ChatChunk(delta=text)
             await asyncio.to_thread(thread.join)
             if errors:
                 yield ChatChunk(done=True, error=str(errors[0]))
             else:
-                yield ChatChunk(done=True)
+                completion_text = "".join(parts)
+                completion_tokens = 0
+                if completion_text:
+                    encoded = await asyncio.to_thread(
+                        tokenizer, completion_text, add_special_tokens=False
+                    )
+                    completion_tokens = len(encoded["input_ids"])
+                yield ChatChunk(
+                    done=True,
+                    usage=TokenUsage(prompt_tokens=input_len, completion_tokens=completion_tokens),
+                )
         except Exception as e:  # noqa: BLE001 -- see above
             yield ChatChunk(done=True, error=str(e))

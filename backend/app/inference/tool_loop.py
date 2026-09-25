@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 
+from pydantic import BaseModel
+
 from app.errors import WorkbenchError
 from app.inference.schemas import ChatMessage
 from app.inference.structured_output import PromptJsonRetrier, TextReply
@@ -24,12 +26,19 @@ _RETRY_MESSAGE = (
 )
 
 
+class LoopResult(BaseModel):
+    text: str
+    # Every tool name actually executed, in call order (a tool called twice
+    # appears twice) -- feeds the eval engine's tool_called assertion.
+    tools_called: list[str] = []
+
+
 async def run_tool_loop(
     generate: Callable[[list[ChatMessage]], Awaitable[str]],
     messages: list[ChatMessage],
     tools: list[ToolSpec],
     max_iterations: int = 5,
-) -> str:
+) -> LoopResult:
     """Run model turns until a final reply, or return the last raw text.
 
     Each iteration is one model turn (max_iterations counts model turns, not tool
@@ -46,12 +55,13 @@ async def run_tool_loop(
     retrier = PromptJsonRetrier()
     history = list(messages)
     last_text = ""
+    tools_called: list[str] = []
     for _ in range(max_iterations):
         last_text = await generate(history)
         parsed = retrier.parse_tool_call_or_reply(last_text)
         history.append(ChatMessage(role="assistant", content=last_text))
         if isinstance(parsed, TextReply):
-            return last_text
+            return LoopResult(text=last_text, tools_called=tools_called)
         if parsed is None or not isinstance(parsed.arguments, dict):
             history.append(ChatMessage(role="user", content=_RETRY_MESSAGE))
             continue
@@ -75,9 +85,10 @@ async def run_tool_loop(
             result = await tool.run(parsed.arguments)
         except Exception as exc:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
             result = f"Error: {exc}"
+        tools_called.append(parsed.tool_name)
         history.append(
             ChatMessage(
                 role="user", content=f"Tool '{parsed.tool_name}' returned: {result}"
             )
         )
-    return last_text
+    return LoopResult(text=last_text, tools_called=tools_called)

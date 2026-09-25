@@ -1,18 +1,46 @@
+import json
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.config import Settings
+from app.db import get_session
 from app.errors import WorkbenchError
 from app.inference import registry
-from app.inference.schemas import ChatChunk
+from app.inference.schemas import ChatChunk, TokenUsage
 from app.main import app
+from app.models import ResponseMetricRecord
 
 client = TestClient(app)
 
 _REQUEST = {"model_id": "some/model", "messages": [{"role": "user", "content": "hi"}]}
+
+_test_engine = create_engine(
+    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
+
+
+def _override_get_session():
+    with Session(_test_engine) as session:
+        yield session
+
+
+@pytest.fixture(autouse=True)
+def _reset_db():
+    # Every chat turn now writes a response_metrics row unconditionally (Task 8) --
+    # without this override these tests would hit the real data/workbench.db.
+    SQLModel.metadata.create_all(_test_engine)
+    previous = app.dependency_overrides.get(get_session)
+    app.dependency_overrides[get_session] = _override_get_session
+    yield
+    SQLModel.metadata.drop_all(_test_engine)
+    if previous is not None:
+        app.dependency_overrides[get_session] = previous
+    else:
+        app.dependency_overrides.pop(get_session, None)
 
 
 def test_stream_chat_returns_400_when_api_key_missing():
@@ -57,12 +85,20 @@ def test_stream_chat_streams_sse_events_from_the_backend():
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/event-stream")
-    events = [line for line in response.text.splitlines() if line.startswith("data: ")]
-    assert events == [
-        'data: {"delta":"Hel","done":false,"error":null}',
-        'data: {"delta":"lo","done":false,"error":null}',
-        'data: {"delta":"","done":true,"error":null}',
+    events = [
+        json.loads(line.removeprefix("data: "))
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
     ]
+    assert [(e["delta"], e["done"], e["error"]) for e in events] == [
+        ("Hel", False, None),
+        ("lo", False, None),
+        ("", True, None),
+    ]
+    for event in events:
+        assert event["usage"] is None
+        assert event["tools_called"] == []
+        assert event["retries"] == 0
 
 
 def test_stream_chat_closes_the_backend_after_streaming():
@@ -146,3 +182,47 @@ def test_stream_chat_rejects_invalid_output_schema_before_streaming():
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_output_schema"
+
+
+def _metrics_in_db() -> list[ResponseMetricRecord]:
+    with Session(_test_engine) as session:
+        return list(session.exec(select(ResponseMetricRecord)).all())
+
+
+def test_stream_chat_persists_a_response_metric_for_every_turn():
+    async def fake_stream_chat(self, model_id, messages, tools=None, output_schema=None):
+        yield ChatChunk(delta="Hel")
+        yield ChatChunk(delta="lo")
+        yield ChatChunk(done=True, usage=TokenUsage(prompt_tokens=5, completion_tokens=3))
+
+    with (
+        patch("app.chat.router.get_settings", return_value=Settings(hf_api_key="fake-key")),
+        patch("app.inference.hf_api_backend.HFInferenceAPIBackend.stream_chat", fake_stream_chat),
+    ):
+        response = client.post("/chat/stream", json=_REQUEST)
+
+    assert response.status_code == 200
+    metrics = _metrics_in_db()
+    assert len(metrics) == 1
+    assert metrics[0].model_id == "some/model"
+    assert metrics[0].backend == "api"
+    assert metrics[0].prompt_tokens == 5
+    assert metrics[0].completion_tokens == 3
+    assert metrics[0].latency_ms > 0
+
+
+def test_stream_chat_persists_a_response_metric_even_when_the_backend_errors():
+    async def fake_stream_chat(self, model_id, messages, tools=None, output_schema=None):
+        yield ChatChunk(delta="partial")
+        yield ChatChunk(done=True, error="boom")
+
+    with (
+        patch("app.chat.router.get_settings", return_value=Settings(hf_api_key="fake-key")),
+        patch("app.inference.hf_api_backend.HFInferenceAPIBackend.stream_chat", fake_stream_chat),
+    ):
+        response = client.post("/chat/stream", json=_REQUEST)
+
+    assert response.status_code == 200
+    metrics = _metrics_in_db()
+    assert len(metrics) == 1
+    assert metrics[0].completion_tokens is None  # no usage on an error chunk
