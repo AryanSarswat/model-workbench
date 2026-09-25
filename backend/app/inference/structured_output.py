@@ -68,6 +68,14 @@ def _extract_first_json_dict(text: str) -> dict | None:
     return None
 
 
+def extract_json_object(text: str) -> dict | None:
+    """Public entry point to the {...} scanner above, for eval assertions
+    (schema_valid, json_parse_success) that need the same lenient extraction the
+    retry loops use internally -- a model can wrap JSON in chatter even on a
+    constrained turn."""
+    return _extract_first_json_dict(text)
+
+
 def _json_type_matches(value: object, type_name: str) -> bool:
     """Check one JSON Schema type name without coercion (bool is not integer)."""
     if type_name == "string":
