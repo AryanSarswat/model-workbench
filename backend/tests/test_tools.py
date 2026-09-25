@@ -21,6 +21,11 @@ def test_calculator_applies_unary_minus():
     assert asyncio.run(_run("calculator", {"expression": "2 - -3"})) == "5"
 
 
+def test_calculator_rejects_huge_exponents_instead_of_hanging():
+    result = asyncio.run(_run("calculator", {"expression": "9 ** 9 ** 9"}))
+    assert "Exponent too large" in result
+
+
 def test_calculator_errors_never_raise():
     for bad in ["1/0", "__import__('os')", "open('x')", "2 +", "", "abc"]:
         result = asyncio.run(_run("calculator", {"expression": bad}))
