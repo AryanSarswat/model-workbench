@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.errors import WorkbenchError
@@ -9,31 +11,23 @@ async def _run(name: str, args: dict) -> str:
 
 
 def test_calculator_evaluates_arithmetic():
-    import asyncio
-
     assert asyncio.run(_run("calculator", {"expression": "2 + 3 * 4"})) == "14"
     assert asyncio.run(_run("calculator", {"expression": "(2 + 3) * 4"})) == "20"
     assert asyncio.run(_run("calculator", {"expression": "2 ** 8 + 7 // 2"})) == "259"
 
 
 def test_calculator_applies_unary_minus():
-    import asyncio
-
     assert asyncio.run(_run("calculator", {"expression": "-5"})) == "-5"
     assert asyncio.run(_run("calculator", {"expression": "2 - -3"})) == "5"
 
 
 def test_calculator_errors_never_raise():
-    import asyncio
-
     for bad in ["1/0", "__import__('os')", "open('x')", "2 +", "", "abc"]:
         result = asyncio.run(_run("calculator", {"expression": bad}))
         assert result.startswith("Error: "), bad
 
 
 def test_web_fetch_reads_file_url(tmp_path):
-    import asyncio
-
     target = tmp_path / "page.txt"
     target.write_text("hello from disk")
     result = asyncio.run(_run("web_fetch", {"url": target.as_uri()}))
@@ -41,8 +35,6 @@ def test_web_fetch_reads_file_url(tmp_path):
 
 
 def test_web_fetch_rejects_unsupported_scheme():
-    import asyncio
-
     result = asyncio.run(_run("web_fetch", {"url": "gopher://example.com/x"}))
     assert result.startswith("Error: ")
 
