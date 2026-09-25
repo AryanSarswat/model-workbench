@@ -50,14 +50,11 @@ def _parse_usage(usage_dict: dict | None) -> TokenUsage | None:
 def _estimate_streaming_usage(
     llama: Llama, messages: list[ChatMessage], completion_text: str
 ) -> TokenUsage | None:
-    """Best-effort token counts for the one true-streaming path (no grammar, no
-    tools): llama.cpp's streaming chunks carry no usage field, unlike the
-    non-streamed dict responses used by the grammar/tool paths above. Prompt
-    tokens approximate a newline-joined transcript rather than the exact
-    chat-template rendering (applied internally by create_chat_completion and
-    not exposed) -- good enough for a relative tokens/sec comparison, not
-    billing-grade accounting. Returns None rather than raising: usage is a
-    nice-to-have, never worth failing a turn that already streamed successfully.
+    """Approximate usage for the plain streaming path, whose chunks carry no usage.
+
+    Prompt tokens count a newline-joined transcript, not the exact chat-template
+    rendering (not exposed by llama-cpp-python) -- fine for relative tokens/sec.
+    Returns None rather than failing a turn that already streamed.
     """
     try:
         prompt_text = "\n".join(m.content for m in messages)
@@ -66,6 +63,21 @@ def _estimate_streaming_usage(
     except Exception:  # noqa: BLE001 -- see above
         return None
     return TokenUsage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+
+
+async def _run_tool(name: str, args: dict, tools_called: list[str]) -> str:
+    """Execute one tool call; an unknown or failing tool becomes an "Error: ..."
+    result for the model, never a loop crash. Only resolved tools are recorded."""
+    try:
+        tool = get_tool(name)
+    except WorkbenchError as e:
+        return f"Error: {e.message}"
+    try:
+        result = await tool.run(args)
+    except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
+        result = f"Error: {e}"
+    tools_called.append(name)
+    return result
 
 
 def _build_grammar(output_schema: dict) -> LlamaGrammar:
@@ -88,8 +100,6 @@ class LlamaCppBackend:
         self._model_path = str(model_path)
 
     def capabilities(self) -> BackendCapabilities:
-        # JSON Schema constrains decoding via GBNF grammar (wired up once structured
-        # output lands); chat-template tool calling is natively supported.
         return BackendCapabilities(structured_output_mode="grammar", native_tool_calling=True)
 
     def prevalidate_output_schema(self, schema: dict) -> None:
@@ -119,14 +129,9 @@ class LlamaCppBackend:
     ) -> tuple[LoopResult, TokenUsage | None]:
         """Drive non-streamed chat turns until the model answers without tool calls.
 
-        History is plain dicts (converted once from ChatMessage at entry) so the
-        "tool"-role result messages -- which the public ChatMessage schema has no
-        variant for -- can ride along. A failing tool yields an "Error: ..." result
-        string, never a loop crash. Exhausted turns return the last content seen.
-
-        Returns the loop's text/tools_called alongside combined token usage across
-        every turn -- llama.cpp's non-streamed dict response carries an exact
-        "usage" key per turn, unlike the plain-streaming path.
+        History is plain dicts so "tool"-role result messages, which ChatMessage
+        has no variant for, can ride along. Exhausted turns return the last
+        content seen.
         """
         history: list[dict] = [m.model_dump() for m in messages]
         # OpenAI tool shape -- llama-cpp-python reads tool["function"], so a bare
@@ -154,11 +159,9 @@ class LlamaCppBackend:
                 last_content = message["content"]
             tool_calls = message.get("tool_calls") or []
             if not tool_calls:
-                # Small models (e.g. Qwen2.5-0.5B) emit the tool attempt as plain
-                # text (<tool_call>{"name": ..., "arguments": ...}</tool_call>)
-                # which llama-cpp-python never parses into message["tool_calls"].
-                # Fall back to the shared PromptJsonRetrier parser -- native when
-                # the template supports it, prompt-JSON otherwise.
+                # Small models (e.g. Qwen2.5-0.5B) emit the tool call as plain-text
+                # <tool_call>{...}</tool_call>, which llama-cpp-python never parses
+                # into message["tool_calls"]; fall back to the shared parser.
                 content = message.get("content") or ""
                 parsed = retrier.parse_tool_call_or_reply(content) if content else None
                 if not isinstance(parsed, ToolCall):
@@ -166,16 +169,7 @@ class LlamaCppBackend:
                         usages
                     )
                 history.append(dict(message))
-                try:
-                    tool = get_tool(parsed.tool_name)
-                except WorkbenchError as e:
-                    result = f"Error: {e.message}"
-                else:
-                    try:
-                        result = await tool.run(parsed.arguments)
-                    except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
-                        result = f"Error: {e}"
-                    tools_called.append(parsed.tool_name)
+                result = await _run_tool(parsed.tool_name, parsed.arguments, tools_called)
                 history.append({"role": "tool", "tool_call_id": "", "content": result})
                 continue
             history.append(dict(message))
@@ -188,28 +182,17 @@ class LlamaCppBackend:
                         args = json.loads(args)
                     except json.JSONDecodeError:
                         args = None
-                if not isinstance(args, dict):
-                    result = f"Error: invalid arguments for tool '{name}': expected a JSON object"
+                if isinstance(args, dict):
+                    result = await _run_tool(name, args, tools_called)
                 else:
-                    try:
-                        tool = get_tool(name)
-                    except WorkbenchError as e:
-                        result = f"Error: {e.message}"
-                    else:
-                        try:
-                            result = await tool.run(args)
-                        except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
-                            result = f"Error: {e}"
-                        tools_called.append(name)
+                    result = f"Error: invalid arguments for tool '{name}': expected a JSON object"
                 history.append(
                     {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
                 )
         return LoopResult(text=last_content, tools_called=tools_called), combine_usage(usages)
 
     async def aclose(self) -> None:
-        """No-op -- the cached Llama stays loaded for the next turn. The chat router
-        still calls this (it closes whatever backend get_backend() returned), so the
-        method exists for Protocol conformance, not because there's anything to free."""
+        """No-op: the cached Llama stays loaded for the next turn."""
 
     async def stream_chat(
         self,
@@ -218,22 +201,18 @@ class LlamaCppBackend:
         tools: list[ToolSpec] | None = None,
         output_schema: dict | None = None,
     ) -> AsyncIterator[ChatChunk]:
-        # model_id is Protocol compat only -- the registry already bound this backend
-        # to a specific local file, so there's nothing left to resolve per request.
-        # A schema compiles to a GBNF grammar up front: invalid schemas raise a
-        # 400 pre-stream (outside every try below, so the error raises instead
-        # of becoming a terminal chunk).
+        # model_id is unused: the registry already bound this backend to one file.
+        # The grammar compiles outside every try so an invalid schema raises (400)
+        # instead of becoming a terminal chunk.
         grammar = _build_grammar(output_schema) if output_schema is not None else None
+        try:
+            llama = await asyncio.to_thread(self._get_llama)
+        except Exception as e:  # noqa: BLE001 -- a load failure is a terminal chunk
+            yield ChatChunk(done=True, error=f"failed to load {self._model_path}: {e}")
+            return
         if tools:
-            # Tools mode runs non-streamed turns and yields the final reply as one
-            # delta + done: tool-calling turns can't stream partial tool calls
-            # honestly, so nothing streams until the loop resolves to final text.
+            # Tool turns are non-streamed; the final reply yields as one delta + done.
             # With a schema every native turn is grammar-constrained as well.
-            try:
-                llama = await asyncio.to_thread(self._get_llama)
-            except Exception as e:  # noqa: BLE001 -- same terminal shape as below
-                yield ChatChunk(done=True, error=f"failed to load {self._model_path}: {e}")
-                return
             try:
                 loop_result, usage = await self._run_native_tool_loop(
                     llama, messages, tools, grammar
@@ -245,17 +224,9 @@ class LlamaCppBackend:
             yield ChatChunk(done=True, usage=usage, tools_called=loop_result.tools_called)
             return
         try:
-            llama = await asyncio.to_thread(self._get_llama)
-        except Exception as e:  # noqa: BLE001 -- any load failure becomes a terminal
-            # error chunk, never a mid-stream traceback (same contract as HF backend)
-            yield ChatChunk(done=True, error=f"failed to load {self._model_path}: {e}")
-            return
-        try:
             if grammar is not None:
-                # Constrained turns run to completion anyway (never streamed), so a
-                # single non-streamed call gets the full JSON and an exact token
-                # count from llama.cpp's own usage accounting in one round trip,
-                # instead of manually collecting streamed deltas.
+                # Constrained turns never stream; a non-streamed call also returns
+                # llama.cpp's exact usage.
                 response = await asyncio.to_thread(
                     llama.create_chat_completion,
                     messages=[m.model_dump() for m in messages],
@@ -283,5 +254,5 @@ class LlamaCppBackend:
             yield ChatChunk(
                 done=True, usage=_estimate_streaming_usage(llama, messages, completion_text)
             )
-        except Exception as e:  # noqa: BLE001 -- see above
+        except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
             yield ChatChunk(done=True, error=str(e))
