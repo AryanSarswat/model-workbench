@@ -127,6 +127,16 @@ def matches_schema(data: dict, schema: dict) -> bool:
     return True
 
 
+def is_conforming_json(text: str, schema: dict) -> bool:
+    """True when text is exactly one JSON object matching schema -- the tool-loop
+    fast path that lets a conforming final draft skip the schema redraft."""
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return False
+    return matches_schema(data, schema)
+
+
 class PromptJsonRetrier:
     """Build tool-call prompts and parse free-text model output back into calls."""
 

@@ -39,7 +39,7 @@ from app.inference.schemas import (
 )
 from app.inference.structured_output import (
     PromptJsonRetrier,
-    matches_schema,
+    is_conforming_json,
     validate_output_schema,
 )
 from app.inference.tool_loop import LoopResult, run_tool_loop
@@ -203,15 +203,11 @@ class TransformersBackend:
             return text
 
         loop_result = await run_tool_loop(_generate, prompt_messages, tools)
-        if output_schema is not None:
-            # Optimistic fast path: the schema instruction rides every loop
-            # turn, so a draft that already conforms skips the guided redraft.
-            try:
-                draft = json.loads(loop_result.text)
-            except (TypeError, ValueError):
-                draft = None
-            if isinstance(draft, dict) and matches_schema(draft, output_schema):
-                return loop_result, combine_usage(usages)
+        # The schema instruction rides every loop turn, so a conforming draft
+        # skips the guided redraft.
+        if output_schema is not None and not is_conforming_json(
+            loop_result.text, output_schema
+        ):
             final_text, final_usage = await self._generate_turn(
                 model, tokenizer, conversation, output_schema
             )
