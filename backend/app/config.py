@@ -11,14 +11,16 @@ import platform
 import subprocess
 
 import psutil
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ENV_FILE = ".env"
 
 
 class Settings(BaseSettings):
     """Loaded from backend/.env (see .env.example). Never logged or persisted to the DB."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
     hf_api_key: str | None = None
 
@@ -39,6 +41,7 @@ class HardwareInfo(BaseModel):
     total_ram_gb: float
     gpu: GPUInfo
 
+    @computed_field
     @property
     def usable_memory_gb(self) -> float:
         """Memory a model actually gets loaded into, for the feasibility check.
