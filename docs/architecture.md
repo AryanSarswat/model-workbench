@@ -37,7 +37,7 @@ model-workbench/
 │   │   │   ├── transformers_backend.py
 │   │   │   ├── structured_output.py  # grammar builders + PromptJsonRetrier
 │   │   │   └── tool_loop.py        # tool-call orchestration
-│   │   ├── tools/                  # shared, hot-reloadable tool directory (see below)
+│   │   ├── tools/                  # shared tool directory, edits hot-reloadable (see below)
 │   │   ├── dataset/                 # test-case CRUD, category filtering
 │   │   ├── evals/                   # eval run engine, assertions, judge
 │   │   └── api/                     # FastAPI routers
@@ -162,8 +162,9 @@ TOOL_SPEC = ToolSpec(name="calculator", description="...", parameters={...})
 async def run(args: dict) -> str: ...
 ```
 
-Add = new file (+ one line in `_TOOL_MODULE_NAMES`). Modify = edit + `POST /tools/reload`.
-Delete = remove file + reload. A chat request filters to a subset via `tools: [...]`
+Modify = edit + `POST /tools/reload`. Add = new file + one line in `_TOOL_MODULE_NAMES`
++ restart. Delete = remove the file and its `_TOOL_MODULE_NAMES` line + restart (reload
+only re-imports modules already listed, so it can't add or drop one). A chat request filters to a subset via `tools: [...]`
 (tool names), so a new tool can be tested against one model without exposing it
 everywhere else. Filesystem-based management only — no in-app source editor
 (deliberate simplicity choice).
