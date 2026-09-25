@@ -7,12 +7,12 @@ from app.inference.schemas import BackendCapabilities, ChatMessage
 
 
 def _case(**overrides) -> TestCase:
-    defaults = dict(
-        id="case-1",
-        category="general",
-        messages=[ChatMessage(role="user", content="hi")],
-        assertions=[],
-    )
+    defaults = {
+        "id": "case-1",
+        "category": "general",
+        "messages": [ChatMessage(role="user", content="hi")],
+        "assertions": [],
+    }
     defaults.update(overrides)
     return TestCase(**defaults)
 

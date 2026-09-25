@@ -50,7 +50,10 @@ async def score_with_judge(
         await backend.aclose()
     text = "".join(parts)
     parsed = extract_json_object(text)
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("score"), (int, float)):
+    score_value = parsed.get("score") if isinstance(parsed, dict) else None
+    # bool is not a number here even though it subclasses int in Python -- same
+    # convention as structured_output.py's _json_type_matches.
+    if not isinstance(score_value, (int, float)) or isinstance(score_value, bool):
         return 0.0, "Judge response was not valid JSON with a numeric score."
     score = max(0.0, min(1.0, float(parsed["score"])))
     rationale = str(parsed.get("rationale", ""))

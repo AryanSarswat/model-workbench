@@ -70,6 +70,18 @@ def test_score_with_judge_returns_zero_on_unparseable_reply(monkeypatch):
     assert "not valid JSON" in rationale
 
 
+def test_score_with_judge_rejects_a_boolean_score(monkeypatch):
+    fake = _FakeBackend(reply='{"score": true, "rationale": "great"}')
+    monkeypatch.setattr(judge, "get_backend", lambda *a, **k: fake)
+
+    score, rationale = asyncio.run(
+        judge.score_with_judge("api", "judge/model", "fake-key", _case(), "hi")
+    )
+
+    assert score == 0.0
+    assert "not valid JSON" in rationale
+
+
 def test_score_with_judge_returns_zero_on_backend_error(monkeypatch):
     fake = _FakeBackend(error="model unavailable")
     monkeypatch.setattr(judge, "get_backend", lambda *a, **k: fake)
