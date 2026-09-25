@@ -49,7 +49,7 @@ model-workbench/
 
 ## Data model
 
-**Test case** (private dataset, `data/test_cases/*.json`, gitignored):
+**Test case** (private dataset, one file per case at `data/test_cases/<id>.json`, gitignored):
 
 ```json
 {
@@ -179,7 +179,10 @@ eval-specific inference logic. Automatically recorded per case: response, struct
 output/tool-calling modes and retry counts, and performance metrics. Assertions run
 automatically; if a case has `judge.criteria`, a second call to `judge_model_id` scores it.
 Every result also carries `manual_verdict`/`manual_notes` for hand review regardless of
-automated results. Aggregating `eval_results` by `(model_id, backend, category)` produces
+automated results. The backend is resolved once before the stream starts, so misconfiguration
+(missing key, undownloaded model) is a normal 4xx. A per-case failure (backend error,
+invalid case schema) is recorded on that result's `error` and the run continues; a run
+always ends `completed` or `failed` with a final `done` event. Aggregating `eval_results` by `(model_id, backend, category)` produces
 the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling reliability
 %, structured-output reliability %.
 
@@ -197,9 +200,8 @@ the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling r
   which has no progress-callback hook) so `GET /models/downloads/{job_id}` can be
   polled for real byte-level `{status, percent, detail}` -- snapshot percent is
   aggregate bytes over the summed Hub-reported sizes. Runs as a FastAPI background
-  task, not SSE — the eval
-  engine's `{completed, total, current_case}` progress is still planned as SSE once evals
-  are built; downloads may move to SSE too once there's a frontend to stream it to.
+  task, not SSE (unlike eval runs, which stream `{completed, total, current_case}`);
+  downloads may move to SSE too once there's a frontend to stream it to.
 
 ## API surface
 

@@ -1,7 +1,14 @@
 import subprocess
 from unittest.mock import patch
 
-from app.config import GPUInfo, HardwareInfo, _detect_gpu, _detect_nvidia_gpu, get_hardware_info
+from app.config import (
+    GPUInfo,
+    HardwareInfo,
+    _detect_gpu,
+    _detect_nvidia_gpu,
+    get_hardware_info,
+    get_memory_usage,
+)
 
 
 def test_detect_nvidia_gpu_returns_none_when_nvidia_smi_missing():
@@ -64,3 +71,41 @@ def test_usable_memory_uses_vram_for_nvidia():
         gpu=GPUInfo(kind="nvidia", name="RTX 4090", vram_gb=24.0),
     )
     assert info.usable_memory_gb == 24.0
+
+
+def test_get_memory_usage_reports_real_ram_snapshot():
+    usage = get_memory_usage()
+    assert usage.ram_used_gb > 0
+
+
+def test_get_memory_usage_reports_none_vram_without_nvidia():
+    with patch(
+        "app.config._detect_gpu", return_value=GPUInfo(kind="apple_silicon", vram_gb=None)
+    ):
+        usage = get_memory_usage()
+    assert usage.vram_used_gb is None
+
+
+def test_get_memory_usage_parses_nvidia_vram_used():
+    fake_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="4096\n")
+    with (
+        patch(
+            "app.config._detect_gpu",
+            return_value=GPUInfo(kind="nvidia", name="RTX 4090", vram_gb=24.0),
+        ),
+        patch("app.config.subprocess.run", return_value=fake_result),
+    ):
+        usage = get_memory_usage()
+    assert usage.vram_used_gb == 4.0
+
+
+def test_get_memory_usage_returns_none_vram_when_nvidia_smi_missing():
+    with (
+        patch(
+            "app.config._detect_gpu",
+            return_value=GPUInfo(kind="nvidia", name="RTX 4090", vram_gb=24.0),
+        ),
+        patch("app.config.subprocess.run", side_effect=FileNotFoundError),
+    ):
+        usage = get_memory_usage()
+    assert usage.vram_used_gb is None
