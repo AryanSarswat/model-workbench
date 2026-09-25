@@ -56,6 +56,9 @@ def test_list_downloaded_returns_seeded_records():
 
 
 def test_list_downloaded_empty_when_nothing_seeded():
+    """Also guards route order: discovery_router's /{model_id:path} matches ANY string
+    under /models/, including "downloaded" -- downloads_router must be registered first
+    in main.py or this 404s."""
     response = client.get("/models/downloaded")
     assert response.status_code == 200
     assert response.json() == []
@@ -89,13 +92,6 @@ def test_delete_missing_record_returns_404():
     response = client.delete("/models/downloaded/9999")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "download_not_found"
-
-
-def test_downloaded_route_is_not_swallowed_by_discovery_catch_all():
-    """discovery_router's /{model_id:path} matches ANY string under /models/, including
-    "downloaded" -- downloads_router must be registered first in main.py or this 404s."""
-    response = client.get("/models/downloaded")
-    assert response.status_code == 200
 
 
 def test_delete_is_safe_when_file_already_gone(tmp_path):
