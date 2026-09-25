@@ -1,13 +1,10 @@
 """Runs one test case through the same stream_chat() path used for regular chat.
-No eval-specific inference logic: assertions, judge scoring, and response_metrics
-all sit on top of the InferenceBackend Protocol. The backend is resolved once per
-run by evals/router.py (which also owns the SSE loop and closes the backend).
+The backend is resolved, and closed, once per run by evals/router.py.
 """
 
 from __future__ import annotations
 
 import json
-import time
 
 from sqlmodel import Session
 
@@ -16,8 +13,8 @@ from app.errors import WorkbenchError
 from app.evals.assertions import run_assertions
 from app.evals.judge import score_with_judge
 from app.inference.base import InferenceBackend
-from app.inference.schemas import ChatMessage, TokenUsage
-from app.metrics import build_response_metric
+from app.inference.schemas import ChatMessage
+from app.metrics import TurnRecorder
 from app.models import EvalResult, EvalRun
 from app.tools import resolve_tool_names
 
@@ -34,48 +31,27 @@ async def run_one_case(
         messages = [ChatMessage(role="system", content=case.system_prompt), *messages]
     tools = [tool.spec for tool in resolve_tool_names(case.expected_tools)] or None
 
-    started_at = time.monotonic()
-    first_chunk_at: float | None = None
-    parts: list[str] = []
-    usage: TokenUsage | None = None
-    tools_called: list[str] = []
-    retries = 0
-    error: str | None = None
+    recorder = TurnRecorder()
     try:
         if case.output_schema is not None:
             backend.prevalidate_output_schema(case.output_schema)
         async for chunk in backend.stream_chat(
             run.model_id, messages, tools=tools, output_schema=case.output_schema
         ):
-            if chunk.error is not None:
-                error = chunk.error
-            elif chunk.delta:
-                if first_chunk_at is None:
-                    first_chunk_at = time.monotonic()
-                parts.append(chunk.delta)
-            if chunk.done:
-                usage = chunk.usage
-                tools_called = chunk.tools_called
-                retries = chunk.retries
+            recorder.observe(chunk)
     except WorkbenchError as exc:
-        error = exc.message
-    finished_at = time.monotonic()
-    response_text = "".join(parts)
+        recorder.error = exc.message
+    response_text = recorder.text
 
-    metric = build_response_metric(
-        model_id=run.model_id,
-        backend_name=run.backend,
-        usage=usage,
-        started_at=started_at,
-        first_chunk_at=first_chunk_at,
-        finished_at=finished_at,
-    )
+    metric = recorder.build_metric(run.model_id, run.backend)
     session.add(metric)
     session.commit()
     session.refresh(metric)
 
     capabilities = backend.capabilities()
-    assertion_results = run_assertions(case, response_text, capabilities, tools_called, retries)
+    assertion_results = run_assertions(
+        case, response_text, capabilities, recorder.tools_called, recorder.retries
+    )
 
     judge_score = judge_rationale = None
     if case.judge is not None and run.judge_model_id is not None:
@@ -88,11 +64,11 @@ async def run_one_case(
         case_id=case.id,
         category=case.category,
         response=response_text,
-        error=error,
+        error=recorder.error,
         structured_output_mode=capabilities.structured_output_mode,
         native_tool_calling=capabilities.native_tool_calling,
-        retries=retries,
-        tools_called=",".join(tools_called),
+        retries=recorder.retries,
+        tools_called=",".join(recorder.tools_called),
         assertions_passed=sum(1 for a in assertion_results if a.passed),
         assertions_total=len(assertion_results),
         assertions_detail=json.dumps([a.model_dump() for a in assertion_results]),
