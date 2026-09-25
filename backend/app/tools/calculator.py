@@ -48,7 +48,7 @@ def _eval(node: ast.AST) -> int | float:
         op = _UNARYOPS.get(type(node.op))
         if op is None:
             raise ValueError(f"Operator {type(node.op).__name__} not allowed")
-        return _eval(node.operand)
+        return op(_eval(node.operand))
     raise ValueError(f"Disallowed expression: {type(node).__name__}")
 
 

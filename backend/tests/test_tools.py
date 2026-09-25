@@ -16,6 +16,13 @@ def test_calculator_evaluates_arithmetic():
     assert asyncio.run(_run("calculator", {"expression": "2 ** 8 + 7 // 2"})) == "259"
 
 
+def test_calculator_applies_unary_minus():
+    import asyncio
+
+    assert asyncio.run(_run("calculator", {"expression": "-5"})) == "-5"
+    assert asyncio.run(_run("calculator", {"expression": "2 - -3"})) == "5"
+
+
 def test_calculator_errors_never_raise():
     import asyncio
 
