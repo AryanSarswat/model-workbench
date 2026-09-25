@@ -1,8 +1,5 @@
-"""LLM-as-judge scoring for test cases that carry a judge.criteria rubric (see
-docs/architecture.md's eval engine section). Runs through the same `backend` the
-eval run itself used -- POST /evals/run's body has no separate judge-backend
-field -- via the public stream_chat() Protocol, so this never depends on any
-backend's private methods.
+"""LLM-as-judge scoring for test cases that carry a judge.criteria rubric. Runs on
+the same backend type as the eval run (there is no separate judge-backend field).
 """
 
 from __future__ import annotations

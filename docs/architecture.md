@@ -200,9 +200,8 @@ the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling r
   which has no progress-callback hook) so `GET /models/downloads/{job_id}` can be
   polled for real byte-level `{status, percent, detail}` -- snapshot percent is
   aggregate bytes over the summed Hub-reported sizes. Runs as a FastAPI background
-  task, not SSE — the eval
-  engine's `{completed, total, current_case}` progress is still planned as SSE once evals
-  are built; downloads may move to SSE too once there's a frontend to stream it to.
+  task, not SSE (unlike eval runs, which stream `{completed, total, current_case}`);
+  downloads may move to SSE too once there's a frontend to stream it to.
 
 ## API surface
 

@@ -1,12 +1,8 @@
 """Prompt-and-retry JSON fallback for structured output and tool calling.
 
-Remote backends (HF Inference API) offer no grammar- or guided-decoding support,
-so machine-readable output is secured the only remaining way: instruct the model
-to reply with exactly one JSON object, parse it back out of free text, and on
-failure feed the error into the next turn. This module is the ONE shared fallback
-mechanism -- per AGENTS.md nothing tool-specific may build a second
-JSON-extraction path; backends with native tool calling never touch this module.
-Schema-constrained turns share the same {...} scanner via parse_schema_reply.
+Backends without grammar/guided decoding instruct the model to reply with exactly
+one JSON object, parse it back out of free text, and feed failures into the next
+turn. This is the ONE shared JSON-extraction path (see AGENTS.md).
 """
 
 from __future__ import annotations
@@ -30,11 +26,7 @@ class TextReply(BaseModel):
 
 
 def validate_output_schema(schema: object) -> None:
-    """Reject anything that is not a JSON-serializable dict, pre-stream.
-
-    Same bucket as unknown_tool: callers validate before the first model turn
-    so a bad schema is a 400, never a mid-stream failure.
-    """
+    """Reject anything that is not a JSON-serializable dict, as a 400 pre-stream."""
     if not isinstance(schema, dict):
         raise WorkbenchError(
             400,
@@ -49,11 +41,11 @@ def validate_output_schema(schema: object) -> None:
         ) from None
 
 
-def _extract_first_json_dict(text: str) -> dict | None:
-    """Return the first {...} substring that decodes to a JSON object.
+def extract_json_object(text: str) -> dict | None:
+    """Return the first {...} substring that decodes to a JSON object, or None.
 
     Models wrap JSON in chatter/tags, so decoding starts at each `{`.
-    Returns None when nothing decodes. Never raises on string input.
+    Never raises on string input.
     """
     decoder = json.JSONDecoder()
     for start, char in enumerate(text):
@@ -66,14 +58,6 @@ def _extract_first_json_dict(text: str) -> dict | None:
         if isinstance(obj, dict):
             return obj
     return None
-
-
-def extract_json_object(text: str) -> dict | None:
-    """Public entry point to the {...} scanner above, for eval assertions
-    (schema_valid, json_parse_success) that need the same lenient extraction the
-    retry loops use internally -- a model can wrap JSON in chatter even on a
-    constrained turn."""
-    return _extract_first_json_dict(text)
 
 
 def _json_type_matches(value: object, type_name: str) -> bool:
@@ -115,16 +99,36 @@ def matches_schema(data: dict, schema: dict) -> bool:
             expected = prop.get("type")
             if expected is None:
                 continue
-            names = (
-                [expected]
-                if isinstance(expected, str)
-                else (expected if isinstance(expected, list) else [])
-            )
+            if isinstance(expected, str):
+                names = [expected]
+            elif isinstance(expected, list):
+                names = expected
+            else:
+                names = []
             if names and not any(
                 _json_type_matches(data[key], name) for name in names if isinstance(name, str)
             ):
                 return False
     return True
+
+
+def is_conforming_json(text: str, schema: dict) -> bool:
+    """True when text is exactly one JSON object matching schema -- the tool-loop
+    fast path that lets a conforming final draft skip the schema redraft."""
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return False
+    return matches_schema(data, schema)
+
+
+def _with_instruction(messages: list[ChatMessage], content: str) -> list[ChatMessage]:
+    """Insert a system instruction after any leading system message, so a
+    caller-supplied persona is never clobbered."""
+    instruction = ChatMessage(role="system", content=content)
+    if messages and messages[0].role == "system":
+        return [messages[0], instruction, *messages[1:]]
+    return [instruction, *messages]
 
 
 class PromptJsonRetrier:
@@ -138,11 +142,8 @@ class PromptJsonRetrier:
     ) -> list[ChatMessage]:
         """Prefix messages with a system instruction describing the JSON protocol.
 
-        An existing leading system message is kept first; the tool instruction is
-        inserted after it so a caller-supplied persona is never clobbered. With
-        output_schema the instruction additionally requires the FINAL reply to
-        conform to the schema, so every loop turn already knows the target shape.
-        None (the default) leaves the prompt byte-identical to the tools-only form.
+        With output_schema the instruction also requires the FINAL reply to
+        conform to it, so every loop turn already knows the target shape.
         """
         lines = [
             "Reply with exactly one JSON object per turn and nothing else.",
@@ -167,29 +168,17 @@ class PromptJsonRetrier:
                     json.dumps(output_schema),
                 ]
             )
-        instruction = ChatMessage(role="system", content="\n".join(lines))
-        if messages and messages[0].role == "system":
-            return [messages[0], instruction, *messages[1:]]
-        return [instruction, *messages]
+        return _with_instruction(messages, "\n".join(lines))
 
     def build_schema_messages(
         self, messages: list[ChatMessage], schema: dict
     ) -> list[ChatMessage]:
-        """Prefix messages with a system instruction describing the JSON schema.
-
-        An existing leading system message is kept first; the schema instruction
-        is inserted after it so a caller-supplied persona is never clobbered.
-        """
-        instruction = ChatMessage(
-            role="system",
-            content=(
-                "Reply with exactly one JSON object and nothing else.\n"
-                "The object must conform to this JSON Schema:\n" + json.dumps(schema)
-            ),
+        """Prefix messages with a system instruction describing the JSON schema."""
+        return _with_instruction(
+            messages,
+            "Reply with exactly one JSON object and nothing else.\n"
+            "The object must conform to this JSON Schema:\n" + json.dumps(schema),
         )
-        if messages and messages[0].role == "system":
-            return [messages[0], instruction, *messages[1:]]
-        return [instruction, *messages]
 
     def parse_tool_call_or_reply(self, text: str) -> ToolCall | TextReply | None:
         """Extract the first {...} JSON object from free text (models add chatter).
@@ -199,38 +188,30 @@ class PromptJsonRetrier:
         error feedback.
         """
         try:
-            obj = _extract_first_json_dict(text)
+            obj = extract_json_object(text)
         except (TypeError, ValueError):
             # Non-string input -- just means "retry".
             return None
         if obj is None:
             return None
-        try:
-            if isinstance(obj.get("tool"), str) and isinstance(obj.get("arguments"), dict):
-                return ToolCall(tool_name=obj["tool"], arguments=obj["arguments"])
-            # Qwen-style dialect: <tool_call>{"name": ..., "arguments": ...}</tool_call>.
-            # The {...} scan above already strips the surrounding tags/chatter, so
-            # only the `name` key shape needs handling here.
-            if isinstance(obj.get("name"), str) and isinstance(obj.get("arguments"), dict):
-                return ToolCall(tool_name=obj["name"], arguments=obj["arguments"])
-            if isinstance(obj.get("reply"), str):
-                return TextReply(text=obj["reply"])
-            return None
-        except (TypeError, ValueError):
-            # Malformed JSON (JSONDecodeError) or pydantic validation failure
-            # (ValidationError) -- all just mean "retry".
-            return None
+        if isinstance(obj.get("tool"), str) and isinstance(obj.get("arguments"), dict):
+            return ToolCall(tool_name=obj["tool"], arguments=obj["arguments"])
+        # Qwen-style dialect: <tool_call>{"name": ..., "arguments": ...}</tool_call>
+        # (the {...} scan already strips the tags).
+        if isinstance(obj.get("name"), str) and isinstance(obj.get("arguments"), dict):
+            return ToolCall(tool_name=obj["name"], arguments=obj["arguments"])
+        if isinstance(obj.get("reply"), str):
+            return TextReply(text=obj["reply"])
+        return None
 
     def parse_schema_reply(self, text: str) -> dict | TextReply | None:
         """Extract the single JSON object of a schema-constrained turn.
 
-        Shares the {...} scanner above -- no second extraction path. Dict on
-        success; TextReply when the model sent prose with no JSON at all; None
-        when JSON was attempted but unparseable (or input is not a string), so
-        the caller can retry with error feedback.
+        Dict on success; TextReply when the model sent prose with no JSON at all;
+        None when JSON was attempted but unparseable (or input is not a string).
         """
         try:
-            obj = _extract_first_json_dict(text)
+            obj = extract_json_object(text)
         except (TypeError, ValueError):
             return None
         if obj is not None:

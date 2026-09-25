@@ -1,8 +1,5 @@
-"""Runs a test case's assertions against one eval turn's response, per
-docs/architecture.md's eval engine section. Every assertion type here is
-independently computable from data the eval service already has after one
-stream_chat() call -- no assertion needs a second model call (that's judge.py's
-job, for the judge.criteria case)."""
+"""Runs a test case's assertions against one eval turn's response. None needs a
+second model call; that is judge.py's job."""
 
 from __future__ import annotations
 

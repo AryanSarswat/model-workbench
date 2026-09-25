@@ -207,6 +207,7 @@ def test_stream_chat_with_schema_returns_valid_json_first_try(monkeypatch):
     assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+    assert chunks[-1].retries == 0
 
 
 def test_stream_chat_with_schema_retries_garbage_then_succeeds(monkeypatch):
@@ -225,6 +226,7 @@ def test_stream_chat_with_schema_retries_garbage_then_succeeds(monkeypatch):
 
     assert [c.delta for c in chunks] == ['{"answer": 7}', ""]
     assert chunks[-1].done is True
+    assert chunks[-1].retries == 1
     # The retry fed error feedback back before the successful turn.
     assert any(
         "required schema" in m["content"] for m in sent_messages[-1] if m["role"] == "user"
@@ -364,33 +366,3 @@ def test_stream_chat_with_tools_reports_tools_called_and_summed_usage(monkeypatc
     # (it already includes the full accumulated history).
     assert chunks[-1].usage.completion_tokens == 20
     assert chunks[-1].usage.prompt_tokens == 40
-
-
-def test_stream_chat_with_schema_first_try_reports_zero_retries(monkeypatch):
-    backend = HFInferenceAPIBackend(api_key="fake-key")
-
-    async def fake_chat_completion(**kwargs):
-        return _non_streamed_completion('{"answer": 42}')
-
-    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
-
-    chunks = _run_schema_chat(backend, _SCHEMA)
-
-    assert chunks[-1].retries == 0
-
-
-def test_stream_chat_with_schema_retry_reports_nonzero_retries(monkeypatch):
-    backend = HFInferenceAPIBackend(api_key="fake-key")
-    sent_messages = []
-
-    async def fake_chat_completion(**kwargs):
-        sent_messages.append(kwargs["messages"])
-        if len(sent_messages) == 1:
-            return _non_streamed_completion("no json here at all")
-        return _non_streamed_completion('{"answer": 7}')
-
-    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
-
-    chunks = _run_schema_chat(backend, _SCHEMA)
-
-    assert chunks[-1].retries == 1

@@ -1,16 +1,14 @@
-"""Turns raw chat-turn timing/usage into a persisted response_metrics row.
-
-Both POST /chat/stream (Task 8; every regular chat turn, not just evals -- see
-docs/architecture.md's response_metrics design) and the eval engine (Task 15)
-will call build_response_metric with whatever they observed collecting a
-backend's stream_chat() output, so tokens_per_sec/TTFT math lives in exactly
-one place.
+"""Turns one chat turn's timing/usage into a response_metrics row. Shared by
+POST /chat/stream and the eval engine so the TTFT/tokens-per-sec math lives in one
+place.
 """
 
 from __future__ import annotations
 
+import time
+
 from app.config import get_memory_usage
-from app.inference.schemas import TokenUsage
+from app.inference.schemas import ChatChunk, TokenUsage
 from app.models import ResponseMetricRecord
 
 
@@ -22,16 +20,9 @@ def build_response_metric(
     first_chunk_at: float | None,
     finished_at: float,
 ) -> ResponseMetricRecord:
-    """started_at/first_chunk_at/finished_at are time.monotonic() readings from
-    the caller's own chunk-collection loop. first_chunk_at is None when no
-    non-empty delta ever arrived (e.g. an immediate error) -- ttft_ms stays
-    None rather than reporting a meaningless "immediate" TTFT. Not yet
-    persisted: the caller adds the returned record to its own DB session.
-
-    Callers must ensure started_at <= first_chunk_at <= finished_at (all three
-    come from time.monotonic() readings in one collection loop) -- this
-    function does not validate ordering, so a misordered call would silently
-    produce a negative latency_ms/ttft_ms.
+    """Timestamps are time.monotonic() readings, started_at <= first_chunk_at <=
+    finished_at (not validated). first_chunk_at is None when no non-empty delta
+    arrived, leaving ttft_ms None. The caller adds the record to its session.
     """
     latency_ms = (finished_at - started_at) * 1000
     ttft_ms = (first_chunk_at - started_at) * 1000 if first_chunk_at is not None else None
@@ -51,3 +42,44 @@ def build_response_metric(
         ram_used_gb=memory.ram_used_gb,
         vram_used_gb=memory.vram_used_gb,
     )
+
+
+class TurnRecorder:
+    """Collects one stream_chat() turn as it is consumed: reply text, TTFT, the
+    terminal chunk's metadata, and the last error."""
+
+    def __init__(self) -> None:
+        self.started_at = time.monotonic()
+        self.first_chunk_at: float | None = None
+        self.parts: list[str] = []
+        self.error: str | None = None
+        self.usage: TokenUsage | None = None
+        self.tools_called: list[str] = []
+        self.retries = 0
+
+    def observe(self, chunk: ChatChunk) -> None:
+        if chunk.error is not None:
+            self.error = chunk.error
+        elif chunk.delta:
+            if self.first_chunk_at is None:
+                self.first_chunk_at = time.monotonic()
+            self.parts.append(chunk.delta)
+        if chunk.done:
+            self.usage = chunk.usage
+            self.tools_called = chunk.tools_called
+            self.retries = chunk.retries
+
+    @property
+    def text(self) -> str:
+        return "".join(self.parts)
+
+    def build_metric(self, model_id: str, backend_name: str) -> ResponseMetricRecord:
+        """The turn's metric, finished as of now."""
+        return build_response_metric(
+            model_id=model_id,
+            backend_name=backend_name,
+            usage=self.usage,
+            started_at=self.started_at,
+            first_chunk_at=self.first_chunk_at,
+            finished_at=time.monotonic(),
+        )

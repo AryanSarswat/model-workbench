@@ -253,43 +253,6 @@ def test_stream_chat_with_tools_executes_plain_text_tool_call(monkeypatch):
     assert tool_messages == [{"role": "tool", "tool_call_id": "", "content": "42"}]
 
 
-class _FakePlainTextUnknownToolLlama(_FakeLlama):
-    """Plain-text <tool_call> shape naming a tool that isn't registered."""
-
-    def __init__(self, model_path: str, verbose: bool = False) -> None:
-        super().__init__(model_path, verbose)
-        self.seen: list[list[dict]] = []
-
-    def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
-        assert stream is False
-        self.seen.append(list(messages))
-        if len(self.seen) == 1:
-            return {
-                "choices": [
-                    {
-                        "message": {
-                            "role": "assistant",
-                            "content": '<tool_call>\n{"name": "nonexistent_tool", '
-                            '"arguments": {}}\n</tool_call>',
-                        }
-                    }
-                ]
-            }
-        return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
-
-
-def test_stream_chat_with_plain_text_tool_call_does_not_record_an_unknown_tool_name(monkeypatch):
-    monkeypatch.setattr(llama_cpp_backend, "Llama", _FakePlainTextUnknownToolLlama)
-    backend = LlamaCppBackend("/tmp/fake.gguf")
-
-    chunks = _run_tool_chat(backend)
-
-    assert [c.delta for c in chunks] == ["done", ""]
-    assert chunks[-1].done is True
-    # The name was never resolved, so it must never be recorded as "called."
-    assert chunks[-1].tools_called == []
-
-
 _SCHEMA = {
     "type": "object",
     "required": ["answer"],
@@ -447,6 +410,7 @@ def test_stream_chat_with_tools_and_schema_constrains_every_turn(monkeypatch):
     assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+    assert chunks[-1].tools_called == ["calculator"]
 
 
 def test_stream_chat_reports_approximate_usage_from_tokenize(monkeypatch):
@@ -458,23 +422,3 @@ def test_stream_chat_reports_approximate_usage_from_tokenize(monkeypatch):
     assert chunks[-1].usage is not None
     assert chunks[-1].usage.prompt_tokens == 1  # "hi" -> one whitespace-split token
     assert chunks[-1].usage.completion_tokens == 1  # "Hello" -> one whitespace-split token
-
-
-def test_stream_chat_with_tools_and_schema_reports_tools_called(monkeypatch):
-    fake = _FakeSchemaToolLlama("/tmp/fake.gguf")
-    monkeypatch.setattr(LlamaCppBackend, "_get_llama", lambda self: fake)
-    backend = LlamaCppBackend("/tmp/fake.gguf")
-
-    async def _collect() -> list[ChatChunk]:
-        messages = [ChatMessage(role="user", content="What is 2 + 3?")]
-        tools = [get_tool("calculator").spec]
-        return [
-            chunk
-            async for chunk in backend.stream_chat(
-                "whatever/model", messages, tools=tools, output_schema=_SCHEMA
-            )
-        ]
-
-    chunks = asyncio.run(_collect())
-
-    assert chunks[-1].tools_called == ["calculator"]

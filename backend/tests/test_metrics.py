@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
 from app.config import MemoryUsage
-from app.inference.schemas import TokenUsage
-from app.metrics import build_response_metric
+from app.inference.schemas import ChatChunk, TokenUsage
+from app.metrics import TurnRecorder, build_response_metric
 
 
 def _patched_memory():
@@ -67,3 +67,29 @@ def test_build_response_metric_handles_missing_usage_and_first_chunk():
     assert metric.tokens_per_sec is None
     assert metric.ttft_ms is None
     assert metric.latency_ms == 500.0
+
+
+def test_turn_recorder_collects_text_terminal_metadata_and_last_error():
+    recorder = TurnRecorder()
+    usage = TokenUsage(prompt_tokens=3, completion_tokens=2)
+
+    recorder.observe(ChatChunk(delta=""))
+    assert recorder.first_chunk_at is None  # an empty delta is not a first token
+    recorder.observe(ChatChunk(delta="Hel"))
+    recorder.observe(ChatChunk(delta="lo"))
+    recorder.observe(
+        ChatChunk(done=True, usage=usage, tools_called=["calculator"], retries=1)
+    )
+
+    assert recorder.text == "Hello"
+    assert recorder.first_chunk_at is not None
+    assert (recorder.usage, recorder.tools_called, recorder.retries) == (
+        usage,
+        ["calculator"],
+        1,
+    )
+    assert recorder.error is None
+
+    recorder.observe(ChatChunk(delta="ignored", done=True, error="boom"))
+    assert recorder.error == "boom"
+    assert recorder.text == "Hello"  # an error chunk's delta is never part of the reply

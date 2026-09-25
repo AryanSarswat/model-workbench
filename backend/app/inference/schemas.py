@@ -15,15 +15,23 @@ class TokenUsage(BaseModel):
     completion_tokens: int
 
 
+def combine_usage(turns: list[TokenUsage]) -> TokenUsage | None:
+    """Usage for a multi-turn tool/schema loop: completion_tokens sums across turns,
+    prompt_tokens is the last turn's (it already includes every prior turn's history).
+    None when no turn reported usage."""
+    if not turns:
+        return None
+    return TokenUsage(
+        prompt_tokens=turns[-1].prompt_tokens,
+        completion_tokens=sum(t.completion_tokens for t in turns),
+    )
+
+
 class ChatChunk(BaseModel):
     delta: str = ""
     done: bool = False
     error: str | None = None
-    # The next three fields are only ever populated on the terminal (done=True)
-    # chunk -- they describe the whole turn, not one delta. tools_called and
-    # retries feed the eval engine's tool_called / structured_output_first_try
-    # assertions (see docs/architecture.md's eval engine section); usage feeds
-    # response_metrics' tokens_per_sec.
+    # Set only on the terminal (done=True) chunk; they describe the whole turn.
     usage: TokenUsage | None = None
     tools_called: list[str] = []
     retries: int = 0
