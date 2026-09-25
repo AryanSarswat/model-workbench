@@ -1,10 +1,8 @@
 """Local transformers inference from a downloaded snapshot -- fallback for models
 without a GGUF build (MPS/CUDA/CPU auto-detected).
 
-Same lifecycle shape as LlamaCppBackend: the snapshot stays loaded in a process-wide
-cache (reloading weights every turn would be multi-GB per request), so aclose() is a
-no-op for Protocol conformance. Single-user tool, so no eviction -- the most recently
-used snapshot simply stays resident.
+Same lifecycle as LlamaCppBackend: loaded snapshots stay in a process-wide cache with
+no eviction, so aclose() is a no-op.
 
 Generation runs until the model's EOS token -- no token cap. trust_remote_code stays
 off: a snapshot is an arbitrary user-chosen repo, and loading it must never execute
@@ -39,18 +37,13 @@ from app.inference.schemas import (
     TokenUsage,
     combine_usage,
 )
-from app.inference.structured_output import PromptJsonRetrier, matches_schema
+from app.inference.structured_output import (
+    PromptJsonRetrier,
+    matches_schema,
+    validate_output_schema,
+)
 from app.inference.tool_loop import LoopResult, run_tool_loop
 from app.tools import ToolSpec
-
-try:
-    # Sibling-owned schema validator (structured-output worker). Tolerated, not
-    # reimplemented: if their commit is ever absent from this branch, outlines
-    # itself still rejects bad schemas at processor-build time, wrapped to the
-    # same 400 below.
-    from app.inference.structured_output import validate_output_schema
-except ImportError:
-    validate_output_schema = None  # type: ignore[assignment]
 
 _CACHE: dict[str, tuple[AutoModelForCausalLM, AutoTokenizer]] = {}
 _CACHE_LOCK = threading.Lock()
@@ -106,23 +99,17 @@ class TransformersBackend:
         self._device = _detect_device()
 
     def capabilities(self) -> BackendCapabilities:
-        # outlines guided decoding + native chat-template tool calling (both wired up
-        # once structured output / tool calling land).
         return BackendCapabilities(structured_output_mode="guided", native_tool_calling=True)
 
     def prevalidate_output_schema(self, schema: dict) -> None:
         """Reject a bad schema pre-stream without loading the model.
 
-        The default outlines-core backend builds its guide from the schema
-        string alone (build_regex_from_schema), so running that same function
-        here exercises the exact rejection path _build_guided_processor hits --
-        anything it rejects would also fail at generator time, so valid schemas
-        can never be over-restricted. Without outlines installed there is
-        nothing model-free to probe; the shared dict check runs and the
-        generator-time wrapping stays the backstop.
+        outlines-core builds its guide from the schema string alone, so
+        build_regex_from_schema hits the same rejection path as
+        _build_guided_processor. Without outlines there is nothing model-free to
+        probe; the generator-time check stays the backstop.
         """
-        if validate_output_schema is not None:
-            validate_output_schema(schema)
+        validate_output_schema(schema)
         try:
             from outlines_core.json_schema import build_regex_from_schema
         except ImportError:
@@ -150,9 +137,7 @@ class TransformersBackend:
             return cached
 
     async def aclose(self) -> None:
-        """No-op -- the cached model stays loaded for the next turn. The chat router
-        still calls this (it closes whatever backend get_backend() returned), so the
-        method exists for Protocol conformance, not because there's anything to free."""
+        """No-op: the cached model stays loaded for the next turn."""
 
     async def _generate_turn(
         self,
@@ -165,10 +150,7 @@ class TransformersBackend:
         inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
         inputs = inputs.to(self._device)
         input_len = len(inputs["input_ids"][0])
-        # Bound loop turns so short tool-call JSON can't truncate mid-object:
-        # generate() defaults to input + 20 tokens, which cuts off arguments.
-        # Guided decoding constrains validity, not length, so guided turns
-        # share the same cap.
+        # generate() defaults to input + 20 tokens, which truncates tool-call JSON.
         generate_kwargs = {**inputs, "max_new_tokens": 512}
         if output_schema is not None:
             processor = await asyncio.to_thread(
@@ -191,16 +173,13 @@ class TransformersBackend:
     ) -> tuple[LoopResult, TokenUsage | None]:
         """Drive the shared prompt-and-retry tool loop with non-streamed generation.
 
-        The full prompt text is built ONCE via the chat template; each loop turn
-        then appends prior turns and tool results as plain text blocks instead of
-        re-applying the template, which would re-render generation prompts
-        mid-conversation. Blocking generate calls run on worker threads.
+        The chat template renders the prompt ONCE; later turns and tool results
+        are appended as plain text, since re-applying the template would re-render
+        generation prompts mid-conversation.
 
-        With output_schema the loop's turns stay unconstrained (they must emit
-        tool-call JSON, which the schema must not forbid) and only the final
-        reply turn is schema-guided, with every tool result already in context.
-        Usage from every generate() call (loop turns and, if it runs, the final
-        guided turn) is combined into one figure for the caller.
+        With output_schema the loop turns stay unconstrained (they must emit
+        tool-call JSON the schema would forbid) and only a final redraft is
+        schema-guided.
         """
         prompt_messages = PromptJsonRetrier().build_tool_messages(
             messages, tools, output_schema
@@ -211,8 +190,6 @@ class TransformersBackend:
             add_generation_prompt=True,
             tokenize=False,
         )
-        # The template render above already contains every message in history's
-        # initial state (prompt_messages), so only later loop turns get appended.
         rendered = len(prompt_messages)
         usages: list[TokenUsage] = []
 
@@ -252,22 +229,18 @@ class TransformersBackend:
         tools: list[ToolSpec] | None = None,
         output_schema: dict | None = None,
     ) -> AsyncIterator[ChatChunk]:
-        # model_id is Protocol compat only -- the registry already bound this backend
-        # to a specific snapshot dir, so there's nothing left to resolve per request.
-        # An invalid schema raises pre-stream (outside every try below, so the
-        # error raises instead of becoming a terminal chunk).
-        if output_schema is not None and validate_output_schema is not None:
+        # model_id is unused: the registry already bound this backend to one
+        # snapshot. Schema errors raise (400) outside every try below instead of
+        # becoming a terminal chunk.
+        if output_schema is not None:
             validate_output_schema(output_schema)
         try:
             model, tokenizer = await asyncio.to_thread(self._get_model)
-        except Exception as e:  # noqa: BLE001 -- any load failure becomes a terminal
-            # error chunk, never a mid-stream traceback (same contract as other backends)
+        except Exception as e:  # noqa: BLE001 -- a load failure is a terminal chunk
             yield ChatChunk(done=True, error=f"failed to load {self._snapshot_dir}: {e}")
             return
         if tools:
-            # Tools mode runs non-streamed turns and yields the final reply as one
-            # delta + done: tool-calling turns can't stream partial tool calls
-            # honestly, so nothing streams until the loop resolves to final text.
+            # Tool turns are non-streamed; the final reply yields as one delta + done.
             try:
                 loop_result, usage = await self._run_fallback_tool_loop(
                     model, tokenizer, messages, tools, output_schema
@@ -283,10 +256,8 @@ class TransformersBackend:
             yield ChatChunk(done=True, usage=usage, tools_called=loop_result.tools_called)
             return
         if output_schema is not None:
-            # Constrained turns run to completion under the schema guide, then
-            # yield the final JSON as one delta + done: guided turns never
-            # stream. The processor builds before the try so a bad schema
-            # raises instead of becoming a terminal chunk.
+            # Guided turns never stream. The processor builds before the try so
+            # a bad schema raises instead of becoming a terminal chunk.
             processor = await asyncio.to_thread(
                 _build_guided_processor, model, tokenizer, output_schema
             )
@@ -325,9 +296,8 @@ class TransformersBackend:
             input_len = len(inputs["input_ids"][0])
             streamer = TextIteratorStreamer(tokenizer, skip_prompt=True)
             # generate() runs on a worker thread while this coroutine drains the
-            # streamer. A generate crash must still terminate the stream (never hang
-            # the SSE connection), so the wrapper always signals the streamer end and
-            # the original error is reported after the drain.
+            # streamer; the wrapper always ends the streamer so a crash can't hang
+            # the stream, and the error is reported after the drain.
             errors: list[Exception] = []
 
             def _generate() -> None:
@@ -363,5 +333,5 @@ class TransformersBackend:
                     done=True,
                     usage=TokenUsage(prompt_tokens=input_len, completion_tokens=completion_tokens),
                 )
-        except Exception as e:  # noqa: BLE001 -- see above
+        except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
             yield ChatChunk(done=True, error=str(e))

@@ -1,10 +1,8 @@
 """Local GGUF inference via llama-cpp-python -- runs on any hardware (CPU fallback).
 
-The model file stays loaded in a process-wide cache: constructing a fresh Llama per
-chat turn would reload multi-GB weights every request, so unlike HFInferenceAPIBackend
-(which must be closed per request to release its httpx pool) this backend's aclose()
-is a no-op and the instance is reused. Single-user tool, so no eviction -- the most
-recently used model simply stays resident.
+Loaded models stay in a process-wide cache (reloading multi-GB weights every turn
+would be far too slow), so aclose() is a no-op. No eviction: a deliberate single-user
+simplification.
 """
 
 from __future__ import annotations
