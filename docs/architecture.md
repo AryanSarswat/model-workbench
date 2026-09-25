@@ -49,7 +49,7 @@ model-workbench/
 
 ## Data model
 
-**Test case** (private dataset, `data/test_cases/*.json`, gitignored):
+**Test case** (private dataset, one file per case at `data/test_cases/<id>.json`, gitignored):
 
 ```json
 {

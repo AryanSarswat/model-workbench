@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -24,11 +24,30 @@ _ID_PATTERN = r"^[A-Za-z0-9._-]+"
 _ID_RE = re.compile(_ID_PATTERN + "$")
 
 
-class TestCase(BaseModel):
-    """Mirrors data/test_cases.template.json. Only id/category/messages are required.
+AssertionType = Literal[
+    "schema_valid",
+    "contains",
+    "regex",
+    "tool_called",
+    "structured_output_first_try",
+    "native_tool_calling",
+    "json_parse_success",
+]
 
-    Assertion and judge shapes stay permissive dicts in v1 -- the eval PR pins them.
-    """
+
+class Assertion(BaseModel):
+    type: AssertionType
+    value: str | None = None  # "contains"
+    pattern: str | None = None  # "regex"
+    name: str | None = None  # "tool_called"
+
+
+class TestCaseJudge(BaseModel):
+    criteria: str
+
+
+class TestCase(BaseModel):
+    """Mirrors data/test_cases.template.json. Only id/category/messages are required."""
 
     id: str = Field(pattern=_ID_PATTERN)
     category: str  # free-form, not an enum -- new categories need no code change
@@ -36,8 +55,8 @@ class TestCase(BaseModel):
     system_prompt: str | None = None
     output_schema: dict[str, Any] | None = None
     expected_tools: list[str] | None = None
-    assertions: list[dict[str, Any]] = Field(default_factory=list)
-    judge: dict[str, Any] | None = None
+    assertions: list[Assertion] = Field(default_factory=list)
+    judge: TestCaseJudge | None = None
     tags: list[str] = Field(default_factory=list)
 
 
