@@ -15,6 +15,18 @@ class TokenUsage(BaseModel):
     completion_tokens: int
 
 
+def combine_usage(turns: list[TokenUsage]) -> TokenUsage | None:
+    """Usage for a multi-turn tool/schema loop: completion_tokens sums across turns,
+    prompt_tokens is the last turn's (it already includes every prior turn's history).
+    None when no turn reported usage."""
+    if not turns:
+        return None
+    return TokenUsage(
+        prompt_tokens=turns[-1].prompt_tokens,
+        completion_tokens=sum(t.completion_tokens for t in turns),
+    )
+
+
 class ChatChunk(BaseModel):
     delta: str = ""
     done: bool = False

@@ -32,7 +32,13 @@ from transformers import (
 )
 
 from app.errors import WorkbenchError
-from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage, TokenUsage
+from app.inference.schemas import (
+    BackendCapabilities,
+    ChatChunk,
+    ChatMessage,
+    TokenUsage,
+    combine_usage,
+)
 from app.inference.structured_output import PromptJsonRetrier, matches_schema
 from app.inference.tool_loop import LoopResult, run_tool_loop
 from app.tools import ToolSpec
@@ -57,17 +63,6 @@ def _detect_device() -> str:
     if torch.cuda.is_available():
         return "cuda"
     return "cpu"
-
-
-def _combine_usage(usages: list[TokenUsage]) -> TokenUsage | None:
-    """completion_tokens sums across turns; prompt_tokens takes the last turn's
-    figure (it already includes every prior turn's history)."""
-    if not usages:
-        return None
-    return TokenUsage(
-        prompt_tokens=usages[-1].prompt_tokens,
-        completion_tokens=sum(u.completion_tokens for u in usages),
-    )
 
 
 def _build_guided_processor(
@@ -239,16 +234,16 @@ class TransformersBackend:
             except (TypeError, ValueError):
                 draft = None
             if isinstance(draft, dict) and matches_schema(draft, output_schema):
-                return loop_result, _combine_usage(usages)
+                return loop_result, combine_usage(usages)
             final_text, final_usage = await self._generate_turn(
                 model, tokenizer, conversation, output_schema
             )
             usages.append(final_usage)
             return (
                 LoopResult(text=final_text, tools_called=loop_result.tools_called),
-                _combine_usage(usages),
+                combine_usage(usages),
             )
-        return loop_result, _combine_usage(usages)
+        return loop_result, combine_usage(usages)
 
     async def stream_chat(
         self,

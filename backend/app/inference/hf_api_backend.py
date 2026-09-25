@@ -11,7 +11,13 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from huggingface_hub import AsyncInferenceClient
 from huggingface_hub.errors import HTTPError
 
-from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage, TokenUsage
+from app.inference.schemas import (
+    BackendCapabilities,
+    ChatChunk,
+    ChatMessage,
+    TokenUsage,
+    combine_usage,
+)
 from app.inference.structured_output import (
     PromptJsonRetrier,
     matches_schema,
@@ -24,31 +30,6 @@ _SCHEMA_RETRY_MESSAGE = (
     "That was not valid JSON conforming to the required schema. "
     "Reply with exactly one JSON object and nothing else."
 )
-
-
-class _UsageAccumulator:
-    """Combines per-turn usage across a multi-turn tool/schema loop.
-
-    completion_tokens sums (each turn generated new output); prompt_tokens takes
-    the last turn's figure (it already includes every prior turn's history, so
-    summing it would double-count). Returns None when nothing ever reported
-    usage -- a fake test client, or a provider that omits it.
-    """
-
-    def __init__(self) -> None:
-        self._turns: list[TokenUsage] = []
-
-    def record(self, usage: TokenUsage | None) -> None:
-        if usage is not None:
-            self._turns.append(usage)
-
-    def combined(self) -> TokenUsage | None:
-        if not self._turns:
-            return None
-        return TokenUsage(
-            prompt_tokens=self._turns[-1].prompt_tokens,
-            completion_tokens=sum(t.completion_tokens for t in self._turns),
-        )
 
 
 class HFInferenceAPIBackend:
@@ -140,13 +121,14 @@ class HFInferenceAPIBackend:
             # as one delta + done: neither tool-calling nor retry turns can
             # stream partial output honestly, so nothing streams until the loop
             # resolves to final text.
-            usage_acc = _UsageAccumulator()
+            usages: list[TokenUsage] = []
             tools_called: list[str] = []
             retries = 0
             try:
                 async def _generate(history: list[ChatMessage]) -> str:
                     text, usage = await self._generate_text(model_id, history)
-                    usage_acc.record(usage)
+                    if usage is not None:
+                        usages.append(usage)
                     return text
 
                 if tools:
@@ -196,7 +178,7 @@ class HFInferenceAPIBackend:
             yield ChatChunk(delta=final)
             yield ChatChunk(
                 done=True,
-                usage=usage_acc.combined(),
+                usage=combine_usage(usages),
                 tools_called=tools_called,
                 retries=retries,
             )

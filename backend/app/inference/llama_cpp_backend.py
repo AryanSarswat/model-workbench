@@ -18,7 +18,13 @@ from pathlib import Path
 from llama_cpp import Llama, LlamaGrammar
 
 from app.errors import WorkbenchError
-from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage, TokenUsage
+from app.inference.schemas import (
+    BackendCapabilities,
+    ChatChunk,
+    ChatMessage,
+    TokenUsage,
+    combine_usage,
+)
 from app.inference.structured_output import (
     PromptJsonRetrier,
     ToolCall,
@@ -32,24 +38,12 @@ _CACHE_LOCK = threading.Lock()
 _SENTINEL = object()
 
 
-def _record_usage(usages: list[TokenUsage], usage_dict: dict | None) -> None:
-    if usage_dict:
-        usages.append(
-            TokenUsage(
-                prompt_tokens=usage_dict["prompt_tokens"],
-                completion_tokens=usage_dict["completion_tokens"],
-            )
-        )
-
-
-def _combine_usage(usages: list[TokenUsage]) -> TokenUsage | None:
-    """completion_tokens sums across turns; prompt_tokens takes the last turn's
-    figure (it already includes every prior turn's history)."""
-    if not usages:
+def _parse_usage(usage_dict: dict | None) -> TokenUsage | None:
+    if not usage_dict:
         return None
     return TokenUsage(
-        prompt_tokens=usages[-1].prompt_tokens,
-        completion_tokens=sum(u.completion_tokens for u in usages),
+        prompt_tokens=usage_dict["prompt_tokens"],
+        completion_tokens=usage_dict["completion_tokens"],
     )
 
 
@@ -152,7 +146,9 @@ class LlamaCppBackend:
                 stream=False,
                 **extra_kwargs,
             )
-            _record_usage(usages, response.get("usage"))
+            usage = _parse_usage(response.get("usage"))
+            if usage is not None:
+                usages.append(usage)
             message = response["choices"][0]["message"]
             if message.get("content"):
                 last_content = message["content"]
@@ -166,7 +162,7 @@ class LlamaCppBackend:
                 content = message.get("content") or ""
                 parsed = retrier.parse_tool_call_or_reply(content) if content else None
                 if not isinstance(parsed, ToolCall):
-                    return LoopResult(text=content, tools_called=tools_called), _combine_usage(
+                    return LoopResult(text=content, tools_called=tools_called), combine_usage(
                         usages
                     )
                 history.append(dict(message))
@@ -208,7 +204,7 @@ class LlamaCppBackend:
                 history.append(
                     {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
                 )
-        return LoopResult(text=last_content, tools_called=tools_called), _combine_usage(usages)
+        return LoopResult(text=last_content, tools_called=tools_called), combine_usage(usages)
 
     async def aclose(self) -> None:
         """No-op -- the cached Llama stays loaded for the next turn. The chat router
@@ -267,10 +263,8 @@ class LlamaCppBackend:
                     stream=False,
                 )
                 final_text = response["choices"][0]["message"]["content"] or ""
-                usages: list[TokenUsage] = []
-                _record_usage(usages, response.get("usage"))
                 yield ChatChunk(delta=final_text)
-                yield ChatChunk(done=True, usage=_combine_usage(usages))
+                yield ChatChunk(done=True, usage=_parse_usage(response.get("usage")))
                 return
             stream = llama.create_chat_completion(
                 messages=[m.model_dump() for m in messages],
