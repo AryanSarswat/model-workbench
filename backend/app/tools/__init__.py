@@ -71,7 +71,8 @@ def resolve_tool_names(names: list[str] | None) -> list[Tool]:
 
 
 def reload_tools() -> None:
-    """Re-import tool modules so edits (or new files) on disk take effect."""
+    """Re-import the modules in _TOOL_MODULE_NAMES so edits on disk take effect. A new
+    tool module isn't picked up here -- it needs a _TOOL_MODULE_NAMES entry and a restart."""
     for module_name in _TOOL_MODULE_NAMES:
         module = sys.modules.get(module_name)
         if module is not None:
