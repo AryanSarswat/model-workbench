@@ -1,101 +1,57 @@
+import pytest
 from fastapi.testclient import TestClient
 
+from app.config import GPUInfo, HardwareInfo
 from app.main import app
 
 client = TestClient(app)
 
 
-def test_get_hardware_info_returns_expected_shape(monkeypatch):
-    mock_hardware = {
-        "platform": "darwin",
-        "arch": "arm64",
-        "total_ram_gb": 24.0,
-        "gpu": {"kind": "apple_silicon", "name": None, "vram_gb": None},
-    }
-    monkeypatch.setattr("app.api_config.router.get_hardware_info", lambda: type("HW", (), mock_hardware)())
-
-    response = client.get("/config/hardware")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["platform"] == "darwin"
-    assert data["arch"] == "arm64"
-    assert data["total_ram_gb"] == 24.0
-    assert data["gpu"]["kind"] == "apple_silicon"
-    assert "usable_memory_gb" in data
-    assert data["usable_memory_gb"] == 24.0
-
-
-def test_get_hf_api_key_reports_not_set_when_missing(monkeypatch):
+@pytest.fixture
+def env_file(tmp_path, monkeypatch):
+    """Point settings at a tmp .env so tests never read or write the real backend/.env."""
     monkeypatch.delenv("HF_API_KEY", raising=False)
-    monkeypatch.setattr("app.api_config.router.ENV_FILE", "/tmp/test_missing.env")
-
-    response = client.get("/config/hf-api-key")
-
-    assert response.status_code == 200
-    assert response.json() == {"is_set": False}
+    path = tmp_path / ".env"
+    monkeypatch.setattr("app.config.ENV_FILE", str(path))
+    return path
 
 
-def test_post_hf_api_key_sets_and_get_reports_set(tmp_path, monkeypatch):
-    monkeypatch.delenv("HF_API_KEY", raising=False)
-    env_file = tmp_path / ".env"
-    monkeypatch.setattr("app.api_config.router.ENV_FILE", str(env_file))
+def test_hardware_reports_usable_memory_for_the_feasibility_check(monkeypatch):
+    hardware = HardwareInfo(
+        platform="linux",
+        arch="x86_64",
+        total_ram_gb=64.0,
+        gpu=GPUInfo(kind="nvidia", name="RTX 4090", vram_gb=24.0),
+    )
+    monkeypatch.setattr("app.api_config.router.get_hardware_info", lambda: hardware)
 
-    response = client.post("/config/hf-api-key", json={"api_key": "hf_test_key_12345"})
+    body = client.get("/config/hardware").json()
 
-    assert response.status_code == 200
+    assert body["gpu"]["name"] == "RTX 4090"
+    assert body["usable_memory_gb"] == 24.0  # VRAM, not system RAM
+
+
+def test_setting_the_key_is_visible_on_the_next_request_without_a_restart(env_file):
+    assert client.get("/config/hf-api-key").json() == {"is_set": False}
+
+    response = client.post("/config/hf-api-key", json={"api_key": "hf_abc"})
+
     assert response.json() == {"is_set": True}
-
-    # Verify file was written
-    content = env_file.read_text()
-    assert "HF_API_KEY=hf_test_key_12345" in content
-
-    # Verify GET now reports set (need to reload settings, so monkeypatch it)
-    monkeypatch.setattr("app.api_config.router.get_settings", lambda: type("S", (), {"hf_api_key": "hf_test_key_12345"})())
-    response = client.get("/config/hf-api-key")
-    assert response.status_code == 200
-    assert response.json() == {"is_set": True}
+    assert client.get("/config/hf-api-key").json() == {"is_set": True}
+    assert "hf_abc" not in client.get("/config/hf-api-key").text
 
 
-def test_post_hf_api_key_preserves_other_env_lines_and_replaces_existing_key(tmp_path, monkeypatch):
-    monkeypatch.delenv("HF_API_KEY", raising=False)
-    env_file = tmp_path / ".env"
-    env_file.write_text("OTHER_VAR=value1\nHF_API_KEY=old_key\nANOTHER_VAR=value2\n")
-    monkeypatch.setattr("app.api_config.router.ENV_FILE", str(env_file))
+def test_setting_the_key_replaces_the_old_one_and_keeps_other_lines(env_file):
+    env_file.write_text("OTHER_VAR=1\nHF_API_KEY=old\n")
 
-    response = client.post("/config/hf-api-key", json={"api_key": "hf_new_key"})
+    client.post("/config/hf-api-key", json={"api_key": "new"})
 
-    assert response.status_code == 200
-
-    content = env_file.read_text()
-    assert "OTHER_VAR=value1" in content
-    assert "ANOTHER_VAR=value2" in content
-    assert "HF_API_KEY=hf_new_key" in content
-    assert "HF_API_KEY=old_key" not in content
+    assert env_file.read_text() == "OTHER_VAR=1\nHF_API_KEY=new\n"
 
 
-def test_post_hf_api_key_rejects_empty_key(tmp_path, monkeypatch):
-    monkeypatch.delenv("HF_API_KEY", raising=False)
-    env_file = tmp_path / ".env"
-    monkeypatch.setattr("app.api_config.router.ENV_FILE", str(env_file))
-
-    response = client.post("/config/hf-api-key", json={"api_key": ""})
-
-    assert response.status_code == 400
-    error = response.json()
-    assert "error" in error
-    assert error["error"]["code"] == "invalid_api_key"
-    assert "empty" in error["error"]["message"].lower()
-
-
-def test_post_hf_api_key_rejects_whitespace_only_key(tmp_path, monkeypatch):
-    monkeypatch.delenv("HF_API_KEY", raising=False)
-    env_file = tmp_path / ".env"
-    monkeypatch.setattr("app.api_config.router.ENV_FILE", str(env_file))
-
-    response = client.post("/config/hf-api-key", json={"api_key": "   \t\n"})
-
-    assert response.status_code == 400
-    error = response.json()
-    assert "error" in error
-    assert error["error"]["code"] == "invalid_api_key"
+def test_rejects_blank_or_multiline_keys_without_touching_the_file(env_file):
+    for bad in ["   ", "hf_abc\nEVIL=1"]:
+        response = client.post("/config/hf-api-key", json={"api_key": bad})
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == "invalid_api_key"
+    assert not env_file.exists()

@@ -20,13 +20,14 @@ ENV_FILE = ".env"
 class Settings(BaseSettings):
     """Loaded from backend/.env (see .env.example). Never logged or persisted to the DB."""
 
-    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
     hf_api_key: str | None = None
 
 
 def get_settings() -> Settings:
-    return Settings()
+    # ENV_FILE is read at call time so POST /config/hf-api-key takes effect without a restart.
+    return Settings(_env_file=ENV_FILE)
 
 
 class GPUInfo(BaseModel):
