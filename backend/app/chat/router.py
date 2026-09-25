@@ -7,7 +7,7 @@ with or without a session and successful or not, gets a response_metrics row.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated
 
@@ -54,7 +54,7 @@ async def _sse_events(
     messages: list[ChatMessage],
     tools: list[ToolSpec] | None = None,
     output_schema: dict | None = None,
-    on_complete: Callable[[str], None] | None = None,
+    session_id: int | None = None,
 ) -> AsyncIterator[str]:
     # Only a stream that runs to exhaustion with no error chunk files its reply: a
     # partial reply (error, exception, client disconnect) would read as the model's
@@ -70,8 +70,8 @@ async def _sse_events(
         finished = True
     finally:
         await backend.aclose()
-        if on_complete is not None and finished and recorder.error is None:
-            on_complete(recorder.text)
+        if session_id is not None and finished and recorder.error is None:
+            _store_message(session, session_id, "assistant", recorder.text)
         session.add(recorder.build_metric(model_id, backend_name))
         session.commit()
 
@@ -84,20 +84,12 @@ def stream_chat(request: ChatRequest, session: SessionDep) -> StreamingResponse:
     if request.output_schema is not None:
         backend.prevalidate_output_schema(request.output_schema)
     specs = [tool.spec for tool in resolve_tool_names(request.tools)]
-    on_complete = None
     if request.session_id is not None:
-        if session.get(ChatSession, request.session_id) is None:
-            raise WorkbenchError(
-                status_code=404,
-                code="chat_session_not_found",
-                message=f"No chat session with id {request.session_id}.",
-            )
-        _store_user_turn(session, request.session_id, request.messages)
-        session_id = request.session_id
-
-        def on_complete(reply: str) -> None:
-            _store_assistant_reply(session, session_id, reply)
-
+        _get_session_or_404(session, request.session_id)
+        # The client resends full history, so only the trailing user message is new.
+        new_turn = next((m for m in reversed(request.messages) if m.role == "user"), None)
+        if new_turn is not None:
+            _store_message(session, request.session_id, "user", new_turn.content)
     return StreamingResponse(
         _sse_events(
             session,
@@ -107,7 +99,7 @@ def stream_chat(request: ChatRequest, session: SessionDep) -> StreamingResponse:
             request.messages,
             tools=specs or None,
             output_schema=request.output_schema,
-            on_complete=on_complete,
+            session_id=request.session_id,
         ),
         media_type="text/event-stream",
     )
@@ -133,13 +125,7 @@ def list_chat_sessions(session: SessionDep) -> list[ChatSession]:
 
 @router.get("/sessions/{session_id}")
 def get_chat_session(session_id: int, session: SessionDep) -> ChatSessionDetail:
-    chat_session = session.get(ChatSession, session_id)
-    if chat_session is None:
-        raise WorkbenchError(
-            status_code=404,
-            code="chat_session_not_found",
-            message=f"No chat session with id {session_id}.",
-        )
+    chat_session = _get_session_or_404(session, session_id)
     messages = list(
         session.exec(
             select(ChatMessageRecord)
@@ -154,13 +140,7 @@ def get_chat_session(session_id: int, session: SessionDep) -> ChatSessionDetail:
 
 @router.delete("/sessions/{session_id}", status_code=204)
 def delete_chat_session(session_id: int, session: SessionDep) -> None:
-    chat_session = session.get(ChatSession, session_id)
-    if chat_session is None:
-        raise WorkbenchError(
-            status_code=404,
-            code="chat_session_not_found",
-            message=f"No chat session with id {session_id}.",
-        )
+    chat_session = _get_session_or_404(session, session_id)
     # Messages are deleted explicitly: SQLite only enforces ON DELETE CASCADE with
     # PRAGMA foreign_keys=ON, which this app never sets, so the DDL-level cascade on
     # ChatMessageRecord.session_id is a backstop, not the mechanism.
@@ -172,30 +152,23 @@ def delete_chat_session(session_id: int, session: SessionDep) -> None:
     session.commit()
 
 
-def _store_user_turn(
-    session: Session, session_id: int, messages: list[ChatMessage]
-) -> None:
-    # The client resends full history, so only the trailing user message is new.
-    new_turn = next((m for m in reversed(messages) if m.role == "user"), None)
-    if new_turn is None:
-        return
-    session.add(
-        ChatMessageRecord(
-            session_id=session_id,
-            role="user",
-            content=new_turn.content,
-            sequence=_next_sequence(session, session_id),
+def _get_session_or_404(session: Session, session_id: int) -> ChatSession:
+    chat_session = session.get(ChatSession, session_id)
+    if chat_session is None:
+        raise WorkbenchError(
+            status_code=404,
+            code="chat_session_not_found",
+            message=f"No chat session with id {session_id}.",
         )
-    )
-    session.commit()
+    return chat_session
 
 
-def _store_assistant_reply(session: Session, session_id: int, reply: str) -> None:
+def _store_message(session: Session, session_id: int, role: str, content: str) -> None:
     session.add(
         ChatMessageRecord(
             session_id=session_id,
-            role="assistant",
-            content=reply,
+            role=role,
+            content=content,
             sequence=_next_sequence(session, session_id),
         )
     )
