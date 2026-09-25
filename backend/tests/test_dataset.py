@@ -96,3 +96,13 @@ def test_missing_id_returns_404():
 def test_malformed_body_returns_422():
     assert client.post("/dataset/cases", json={"id": "bad", "category": "general"}).status_code == 422
     assert client.post("/dataset/cases", json=_case("not/url/safe")).status_code == 422
+
+
+def test_assertions_and_judge_are_validated_against_the_eval_engine_shapes():
+    good = _case(
+        assertions=[{"type": "contains", "value": "hi"}], judge={"criteria": "Be polite."}
+    )
+    assert client.post("/dataset/cases", json=good).status_code == 201
+
+    typo = _case(case_id="case-002", assertions=[{"type": "contians", "value": "hi"}])
+    assert client.post("/dataset/cases", json=typo).status_code == 422

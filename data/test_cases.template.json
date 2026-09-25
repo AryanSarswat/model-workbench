@@ -1,5 +1,5 @@
 {
-  "$comment": "Template for your private test-case dataset. Copy real cases into data/test_cases/<category>.json (gitignored) — this file is just the shape, committed as an example.",
+  "$comment": "Template for your private test-case dataset. Save each real case as data/test_cases/<id>.json (gitignored) — this file is just the shape, committed as an example.",
   "cases": [
     {
       "id": "example-general-001",
