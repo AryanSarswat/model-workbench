@@ -31,11 +31,7 @@ class ChatChunk(BaseModel):
     delta: str = ""
     done: bool = False
     error: str | None = None
-    # The next three fields are only ever populated on the terminal (done=True)
-    # chunk -- they describe the whole turn, not one delta. tools_called and
-    # retries feed the eval engine's tool_called / structured_output_first_try
-    # assertions (see docs/architecture.md's eval engine section); usage feeds
-    # response_metrics' tokens_per_sec.
+    # Set only on the terminal (done=True) chunk; they describe the whole turn.
     usage: TokenUsage | None = None
     tools_called: list[str] = []
     retries: int = 0

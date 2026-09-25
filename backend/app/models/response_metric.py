@@ -16,9 +16,7 @@ class ResponseMetricRecord(SQLModel, table=True):
     tokens_per_sec: float | None = None
     ttft_ms: float | None = None
     latency_ms: float
-    # Always None for now -- no pricing data source is wired up anywhere in this
-    # repo (see TODO.md's response_metrics entry). A column exists so a future
-    # pricing source can populate it without a schema change.
+    # Always None: no pricing source is wired up yet.
     cost_usd: float | None = None
     ram_used_gb: float
     vram_used_gb: float | None = None

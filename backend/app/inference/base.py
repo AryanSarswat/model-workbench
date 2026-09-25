@@ -1,5 +1,4 @@
-"""The common interface every inference backend implements, per docs/architecture.md's
-inference engine design -- callers (the chat router, later the eval engine) depend on this
+"""The common interface every inference backend implements; callers depend on this
 shape, never on a specific backend.
 """
 
@@ -17,13 +16,9 @@ class InferenceBackend(Protocol):
     def capabilities(self) -> BackendCapabilities: ...
 
     def prevalidate_output_schema(self, schema: dict) -> None:
-        """Reject a bad output_schema pre-stream (before StreamingResponse starts).
-
-        Default is the shared dict/serializable check only; backends whose
-        generator-time setup can reject dict-shaped-but-invalid schemas (grammar
-        compile, guide build) override this to run that same check eagerly, so
-        the failure is a 400 instead of a mid-stream error. Sync and cheap: no
-        model load.
+        """Reject a bad output_schema before StreamingResponse starts (a 400, not a
+        mid-stream error). Backends whose generator-time setup can reject a
+        dict-shaped schema run that same check here. Sync and model-free.
         """
         validate_output_schema(schema)
 

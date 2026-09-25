@@ -11,20 +11,13 @@ class EvalResult(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     run_id: int = Field(foreign_key="eval_runs.id", ondelete="CASCADE", index=True)
     case_id: str  # the test case's own uuid -- not a DB FK, the dataset lives in JSON files
-    # Snapshotted from the test case at run time, not joined live -- case_id isn't
-    # an FK (the dataset lives in JSON files), so category has to be copied here
-    # to support filtering/aggregation without re-reading JSON per query.
-    category: str
+    category: str  # snapshotted from the case so aggregation needs no JSON reads
     response: str
     error: str | None = None  # backend error or invalid case schema; assertions then fail
     structured_output_mode: str | None = None  # backend.capabilities().structured_output_mode
     native_tool_calling: bool = False
     retries: int = 0
-    # Comma-joined tool names -- SQLite has no array column type and this repo has
-    # no precedent for a JSON column, so a delimited string matches the existing
-    # simplicity bar (same tradeoff as assertions_detail below, encoded differently
-    # since tool names never contain commas but assertion details are structured).
-    tools_called: str = ""
+    tools_called: str = ""  # comma-joined tool names (tool names never contain commas)
     assertions_passed: int = 0
     assertions_total: int = 0
     assertions_detail: str = "[]"  # JSON-encoded list of {type, passed, detail}
