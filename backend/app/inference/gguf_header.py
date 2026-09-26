@@ -69,3 +69,21 @@ def find_unsupported_tensor(path: str | Path, type_count: int) -> tuple[str, int
             if ggml_type >= type_count:
                 return name, ggml_type
     return None
+
+
+def describe_unsupported(path: str | Path, type_count: int) -> str | None:
+    """Why a llama.cpp build reading ggml types below type_count can't load this
+    file; None when every tensor type is in range or the header can't be read."""
+    try:
+        unsupported = find_unsupported_tensor(path, type_count)
+    except (OSError, ValueError):
+        return None
+    if unsupported is None:
+        return None
+    tensor, ggml_type = unsupported
+    return (
+        f"unsupported quantization: tensor '{tensor}' in {Path(path).name} uses "
+        f"ggml type {ggml_type}, but this llama.cpp build reads types "
+        f"0-{type_count - 1}. The file likely needs its publisher's "
+        "llama.cpp fork; choose another quantization."
+    )

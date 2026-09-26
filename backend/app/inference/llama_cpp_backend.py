@@ -17,7 +17,7 @@ import llama_cpp
 from llama_cpp import Llama, LlamaGrammar
 
 from app.errors import WorkbenchError
-from app.inference.gguf_header import find_unsupported_tensor
+from app.inference.gguf_header import describe_unsupported
 from app.inference.schemas import (
     BackendCapabilities,
     ChatChunk,
@@ -81,19 +81,8 @@ async def _run_tool(name: str, args: dict, executed: list[ToolCallRecord]) -> st
 def _describe_load_failure(model_path: str, error: Exception) -> str:
     """The load error, naming the cause when it is a tensor type this llama.cpp
     build can't read -- llama.cpp itself only says "Failed to load model"."""
-    try:
-        unsupported = find_unsupported_tensor(model_path, llama_cpp.GGML_TYPE_COUNT)
-    except (OSError, ValueError):
-        unsupported = None  # unreadable header: keep llama.cpp's own error
-    if unsupported is None:
-        return f"failed to load {model_path}: {error}"
-    tensor, ggml_type = unsupported
-    return (
-        f"unsupported quantization: tensor '{tensor}' in {Path(model_path).name} uses "
-        f"ggml type {ggml_type}, but this llama.cpp build reads types "
-        f"0-{llama_cpp.GGML_TYPE_COUNT - 1}. The file likely needs its publisher's "
-        "llama.cpp fork; choose another quantization."
-    )
+    reason = describe_unsupported(model_path, llama_cpp.GGML_TYPE_COUNT)
+    return reason or f"failed to load {model_path}: {error}"
 
 
 def _build_grammar(output_schema: dict) -> LlamaGrammar:
