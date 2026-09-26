@@ -7,13 +7,14 @@ system|user|assistant.
 
 from __future__ import annotations
 
+import asyncio
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 
 from pydantic import BaseModel
 
 from app.errors import WorkbenchError
-from app.inference.schemas import ChatMessage, ToolCallRecord
+from app.inference.schemas import ChatChunk, ChatMessage, ToolCallRecord, ToolCallStart
 from app.inference.structured_output import PromptJsonRetrier, TextReply
 from app.tools import Tool, ToolSpec, get_tool
 
@@ -34,20 +35,50 @@ class LoopResult(BaseModel):
         return [call.name for call in self.tool_calls]
 
 
-async def run_tool(tool: Tool, args: dict) -> ToolCallRecord:
+ToolEventSink = Callable[[ChatChunk], None]
+
+
+class ToolEvents:
+    """Carries tool-call progress chunks out of a running tool loop so stream_chat
+    can yield them live instead of after the whole loop returns."""
+
+    def __init__(self) -> None:
+        self._queue: asyncio.Queue[ChatChunk | None] = asyncio.Queue()
+
+    def emit(self, chunk: ChatChunk) -> None:
+        self._queue.put_nowait(chunk)
+
+    async def stream(self, task: asyncio.Task) -> AsyncIterator[ChatChunk]:
+        """Yield emitted chunks until `task` (the loop, given `emit`) ends; the caller
+        then reads task.result(), which re-raises the loop's exception."""
+        # Done callbacks run after the task's last emit, so the sentinel comes last.
+        task.add_done_callback(lambda _: self._queue.put_nowait(None))
+        try:
+            while (chunk := await self._queue.get()) is not None:
+                yield chunk
+        finally:
+            task.cancel()  # a no-op once done; stops the loop if the client went away
+
+
+async def run_tool(tool: Tool, args: dict, on_event: ToolEventSink | None = None) -> ToolCallRecord:
     """Execute one resolved tool call; a raising tool becomes an "Error: ..." result
-    for the model, never a loop crash."""
+    for the model, never a loop crash. `on_event` hears the start and the record."""
+    if on_event is not None:
+        on_event(ChatChunk(tool_call_started=ToolCallStart(name=tool.spec.name, arguments=args)))
     started = time.monotonic()
     try:
         result = await tool.run(args)
     except Exception as exc:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
         result = f"Error: {exc}"
-    return ToolCallRecord(
+    record = ToolCallRecord(
         name=tool.spec.name,
         arguments=args,
         result=result,
         duration_ms=(time.monotonic() - started) * 1000,
     )
+    if on_event is not None:
+        on_event(ChatChunk(tool_call_finished=record))
+    return record
 
 
 async def run_tool_loop(
@@ -55,6 +86,7 @@ async def run_tool_loop(
     messages: list[ChatMessage],
     tools: list[ToolSpec],
     max_iterations: int = 5,
+    on_event: ToolEventSink | None = None,
 ) -> LoopResult:
     """Run up to max_iterations model turns until a final reply, else return the
     last raw text. Tool results, unknown-tool errors, and JSON retries are fed
@@ -91,7 +123,7 @@ async def run_tool_loop(
                 )
             )
             continue
-        call = await run_tool(tool, parsed.arguments)
+        call = await run_tool(tool, parsed.arguments, on_event)
         tool_calls.append(call)
         history.append(
             ChatMessage(

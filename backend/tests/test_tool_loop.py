@@ -2,8 +2,8 @@
 
 import asyncio
 
-from app.inference.schemas import ChatMessage
-from app.inference.tool_loop import run_tool_loop
+from app.inference.schemas import ChatChunk, ChatMessage, ToolCallStart
+from app.inference.tool_loop import ToolEvents, run_tool_loop
 from app.tools import ToolSpec, get_tool
 
 
@@ -129,3 +129,46 @@ def test_each_executed_call_keeps_its_arguments_and_the_result_the_model_saw(tmp
     assert (fetch.name, fetch.arguments) == ("web_fetch", {"url": missing})
     assert fetch.result.startswith("Error: ")
     assert all(call.duration_ms >= 0 for call in result.tool_calls)
+
+
+def test_on_event_reports_each_call_as_it_starts_and_then_its_record():
+    # The Playground shows a running card from the start event and swaps in the
+    # finished record, so the pair must bracket the call and match the loop's record.
+    turns = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"reply": "5"}',
+    ]
+    events: list[ChatChunk] = []
+
+    async def generate(history: list[ChatMessage]) -> str:
+        return turns.pop(0)
+
+    result = asyncio.run(run_tool_loop(generate, _messages(), _specs(), on_event=events.append))
+
+    started, finished = events
+    assert started.tool_call_started == ToolCallStart(
+        name="calculator", arguments={"expression": "2 + 3"}
+    )
+    assert finished.tool_call_finished == result.tool_calls[0]
+
+
+def test_tool_events_yields_a_chunk_while_the_loop_is_still_running():
+    release = asyncio.Event()
+
+    async def loop(emit) -> str:
+        emit(ChatChunk(tool_call_started=ToolCallStart(name="calculator", arguments={})))
+        await release.wait()
+        return "final"
+
+    async def scenario() -> None:
+        events = ToolEvents()
+        task = asyncio.create_task(loop(events.emit))
+        stream = events.stream(task)
+        first = await anext(stream)
+        assert first.tool_call_started.name == "calculator"
+        assert not task.done()
+        release.set()
+        assert [chunk async for chunk in stream] == []
+        assert task.result() == "final"
+
+    asyncio.run(scenario())
