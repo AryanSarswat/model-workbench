@@ -1,5 +1,5 @@
 """GET /tools (list tool specs) and POST /tools/reload (re-import tool modules
-after a file is added/edited on disk)."""
+after one is edited on disk)."""
 
 from __future__ import annotations
 
