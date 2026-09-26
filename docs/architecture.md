@@ -182,9 +182,13 @@ Every result also carries `manual_verdict`/`manual_notes` for hand review regard
 automated results. The backend is resolved once before the stream starts, so misconfiguration
 (missing key, undownloaded model) is a normal 4xx. A per-case failure (backend error,
 invalid case schema) is recorded on that result's `error` and the run continues; a run
-always ends `completed` or `failed` with a final `done` event. Aggregating `eval_results` by `(model_id, backend, category)` produces
-the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling reliability
-%, structured-output reliability %.
+always ends `completed` or `failed` with a final `done` event. `GET /evals/report`
+aggregates `eval_results` by `(model_id, backend, category)` into the model-comparison
+report: pass rate, avg tokens/sec, avg TTFT, tool-calling reliability %,
+structured-output reliability %. Only the latest result per `(model_id, backend, case_id)`
+counts (by `created_at`, then `id`), so re-running a model doesn't double-count a case; a
+`manual_verdict` (`pass`/`fail`) wins when set, otherwise a result passes iff it didn't
+error, all its assertions passed, and any judge score is at least 0.5.
 
 ## Discovery, downloads, and feasibility
 
@@ -211,7 +215,7 @@ the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling r
 | Chat | `POST /chat/stream` (SSE), `GET/DELETE /chat/sessions[/{id}]` |
 | Tools | `GET /tools`, `POST /tools/reload` |
 | Dataset | `GET/POST/PUT/DELETE /dataset/cases` (filterable by `category`) |
-| Evals | `POST /evals/run` (SSE), `GET /evals/runs[/{id}/results]`, `PATCH /evals/results/{id}` |
+| Evals | `POST /evals/run` (SSE), `GET /evals/runs[/{id}/results]`, `GET /evals/report`, `PATCH /evals/results/{id}` |
 | Config | `GET/POST /config/hf-api-key`, `GET /config/hardware` |
 
 ## Error handling
