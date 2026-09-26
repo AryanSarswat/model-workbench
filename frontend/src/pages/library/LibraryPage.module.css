@@ -1,0 +1,255 @@
+/* Layout and values copied from docs/superpowers/design/Library.dc.html. */
+
+.page {
+  flex-grow: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 56px;
+  padding: 36px 40px 40px;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 54px;
+  line-height: 1;
+  letter-spacing: -0.015em;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sectionHeadLeft {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 26px;
+}
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.diskRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px 80px 110px 150px;
+  column-gap: 20px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.diskHeadRow {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.repoLink {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.size {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.lastUsed {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.iconButton {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--rule-2);
+  border-radius: 3px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  border-color: var(--nofit);
+  color: var(--nofit);
+}
+
+.progressCell {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progressCell span {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--live);
+}
+
+.empty {
+  padding: 12px 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.toolRow {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) 280px;
+  column-gap: 20px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.toolName {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.toolDesc {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.toolArgs {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.toolsFooter {
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--rule);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.reloadStatus {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* --- aside --- */
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-top: 4px;
+  min-width: 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.cardTitle {
+  font-size: 22px;
+}
+
+.keyRow {
+  display: flex;
+  gap: 8px;
+}
+
+.keyInput {
+  flex-grow: 1;
+  font-family: var(--mono);
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.machine {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 28px 24px 0;
+}
+
+.machineTitle {
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+
+.dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  row-gap: 0;
+}
+
+.dt {
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.dd {
+  margin: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.thresholdNote {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
