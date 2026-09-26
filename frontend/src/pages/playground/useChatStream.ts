@@ -1,7 +1,7 @@
 import { useCallback, useReducer, useRef, useState } from 'react'
 import { streamChat } from '../../api/endpoints'
-import type { BackendName, ChatMessage } from '../../api/types'
-import { chatReducer } from './chatReducer'
+import type { BackendName } from '../../api/types'
+import { chatReducer, turnsToHistory } from './chatReducer'
 import { buildChatRequest } from './requestBuilder'
 
 export interface SendMessageOptions {
@@ -31,12 +31,14 @@ export function useChatStream() {
       const trimmed = content.trim()
       if (!trimmed || isStreaming) return
 
-      // The client resends full history every turn; system prompt is added separately.
-      const history: ChatMessage[] = turns.map((turn) => ({ role: turn.role, content: turn.content }))
+      // The client resends full history every turn (system prompt is added
+      // separately); a turn that errored or was stopped mid-stream is left out, since
+      // its content is empty or partial and would corrupt the next turn's context.
+      const history = turnsToHistory(turns)
       const userId = nextId('user')
       const assistantId = nextId('assistant')
       const hadSchema = options.outputSchema !== null
-      dispatch({ type: 'send', userId, assistantId, content: trimmed, hadSchema })
+      dispatch({ type: 'send', userId, assistantId, content: trimmed, hadSchema, modelId: options.modelId, backend: options.backend })
 
       const request = buildChatRequest({
         modelId: options.modelId,
@@ -52,6 +54,7 @@ export function useChatStream() {
       setIsStreaming(true)
       const startedAt = performance.now()
       let firstDeltaAt: number | null = null
+      let settled = false
 
       try {
         for await (const chunk of streamChat(request, controller.signal)) {
@@ -74,7 +77,11 @@ export function useChatStream() {
               retries: chunk.retries,
               metrics: { ttftMs: firstDeltaAt !== null ? firstDeltaAt - startedAt : null, tokensPerSec, totalMs },
             })
+            settled = true
           }
+        }
+        if (!settled) {
+          dispatch({ type: 'error', id: assistantId, error: new Error('Stream ended unexpectedly.') })
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
