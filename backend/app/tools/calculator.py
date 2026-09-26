@@ -26,8 +26,10 @@ _BINOPS = {
     ast.Div: operator.truediv,
     ast.FloorDiv: operator.floordiv,
     ast.Mod: operator.mod,
-    ast.Pow: operator.pow,
 }
+
+# Model-supplied input: an unbounded exponent (e.g. 9**9**9) would hang the server.
+_MAX_EXPONENT = 1000
 
 _UNARYOPS = {ast.UAdd: operator.pos, ast.USub: operator.neg}
 
@@ -40,15 +42,20 @@ def _eval(node: ast.AST) -> int | float:
             raise TypeError(f"Only numbers allowed, got {node.value!r}")
         return node.value
     if isinstance(node, ast.BinOp):
+        left, right = _eval(node.left), _eval(node.right)
+        if isinstance(node.op, ast.Pow):
+            if abs(right) > _MAX_EXPONENT:
+                raise ValueError(f"Exponent too large (max {_MAX_EXPONENT})")
+            return left**right
         op = _BINOPS.get(type(node.op))
         if op is None:
             raise ValueError(f"Operator {type(node.op).__name__} not allowed")
-        return op(_eval(node.left), _eval(node.right))
+        return op(left, right)
     if isinstance(node, ast.UnaryOp):
         op = _UNARYOPS.get(type(node.op))
         if op is None:
             raise ValueError(f"Operator {type(node.op).__name__} not allowed")
-        return _eval(node.operand)
+        return op(_eval(node.operand))
     raise ValueError(f"Disallowed expression: {type(node).__name__}")
 
 
