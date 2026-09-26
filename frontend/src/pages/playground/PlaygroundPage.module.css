@@ -1,0 +1,12 @@
+.page {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
