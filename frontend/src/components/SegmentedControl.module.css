@@ -1,0 +1,28 @@
+.group {
+  display: flex;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.segment {
+  height: 34px;
+  padding: 0 16px;
+  border: 0;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+}
+
+.segment[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.mono {
+  padding: 0 14px;
+  font-family: var(--mono);
+  font-size: 12px;
+}

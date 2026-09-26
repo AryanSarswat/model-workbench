@@ -1,0 +1,84 @@
+.bar {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 48px;
+  padding: 0 40px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--sans);
+}
+
+.brand,
+.brand:hover {
+  font-family: var(--serif);
+  font-size: 25px;
+  font-style: italic;
+  line-height: 1;
+  color: var(--paper);
+  text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  align-self: stretch;
+  gap: 28px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  border-top: 3px solid transparent;
+  border-bottom: 3px solid transparent;
+  color: var(--bar-muted);
+}
+
+.tab:hover,
+.tab[aria-current='page'] {
+  color: var(--paper);
+}
+
+.tab[aria-current='page'] {
+  border-bottom-color: var(--bar-accent);
+}
+
+.meta {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--bar-meta);
+  white-space: nowrap;
+}
+
+.strong {
+  color: var(--paper);
+}
+
+.key {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dotSet,
+.dotUnset {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.dotSet {
+  background: var(--bar-key);
+}
+
+/* Not in the mockups: an unset key uses the bar's accent to draw the eye. */
+.dotUnset {
+  background: var(--bar-accent);
+}

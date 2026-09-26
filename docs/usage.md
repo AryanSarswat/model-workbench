@@ -1,6 +1,7 @@
 # Usage
 
-Backend-only for now (see [architecture.md](architecture.md) for the roadmap).
+Backend (FastAPI, `backend/`) and frontend (Vite + React, `frontend/`); see
+[architecture.md](architecture.md) for the design and roadmap.
 
 Dependencies are managed with [uv](https://docs.astral.sh/uv/); `backend/uv.lock` pins
 exact versions so local dev, CI, and Docker all install the same thing. A root `Makefile`
@@ -26,6 +27,25 @@ A local request for a backend whose extra is missing fails as a 400
 make run   # uv run --project backend uvicorn app.main:app --reload --app-dir backend
 ```
 
+## Run the frontend
+
+Needs Node 22.22+ or 24 (CI uses Node 22).
+
+```bash
+make fe-setup   # cd frontend && npm ci
+make run        # terminal 1: the API on :8000
+make fe-dev     # terminal 2: Vite dev server on :5173
+```
+
+The dev server proxies `/api/*` to `http://localhost:8000` (prefix stripped), so the
+frontend talks to the backend same-origin and the backend needs no CORS setup.
+
+```bash
+make fe-test    # vitest
+make fe-lint    # eslint + tsc
+make fe-build   # production build into frontend/dist/
+```
+
 ## Run tests
 
 ```bash
@@ -45,8 +65,9 @@ make docker-run     # docker run --rm -p 8000:8000 model-workbench-backend
 ## Before opening a PR
 
 ```bash
-make ci   # backend lint+test+coverage, then a Docker build/boot/health check --
-          # the same two jobs GitHub Actions runs, so a pass here means the PR checks will pass
+make ci   # backend lint+test+coverage, frontend lint/typecheck/test/build, then a Docker
+          # build/boot/health check -- the same jobs GitHub Actions runs, so a pass here
+          # means the PR checks will pass
 ```
 
 Note: the container's `data/` directory is ephemeral (lost when the container is removed).

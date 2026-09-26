@@ -1,0 +1,39 @@
+/* Design tokens, copied from the approved mockups. */
+:root {
+  --paper: #F2EFE7;
+  --sheet: #FAF8F3;
+  --rule: #DCD6C8;
+  --rule-2: #C4BCA9;
+  --ink: #1A1916;
+  --ink-2: #4F4B43;
+  --ink-3: #6B665C;
+  --live: #C23B1B;
+
+  --serif: 'Newsreader', Georgia, serif;
+  --sans: 'Schibsted Grotesk', 'Helvetica Neue', Helvetica, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+  /* Surfaces */
+  --hover: #E6E1D5; /* button hover, idle chip */
+  --row-hover: #ECE8DE;
+  --track: #E3DED2; /* bar and progress backgrounds */
+  --inset: #E8E3D8; /* user messages, read-only fields */
+  --solid-hover: #34322C;
+
+  /* Verdicts: chip background / text, and bar segments */
+  --fit-bg: #DDE7F0;
+  --fit: #255E8C;
+  --tight-bg: #F3E5CE;
+  --tight: #8A4E07;
+  --nofit-bg: #F0DAD5;
+  --nofit: #8E2A20;
+  --seg-fit: #3B78AB;
+  --seg-tight: #D39A45;
+  --hatch-light: #E7C3BC;
+
+  /* Top bar */
+  --bar-muted: #A39D90;
+  --bar-meta: #BDB7AA;
+  --bar-accent: #E0603E;
+  --bar-key: #6FA8D6;
+}

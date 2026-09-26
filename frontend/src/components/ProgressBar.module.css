@@ -1,0 +1,8 @@
+.track {
+  background: var(--track);
+}
+
+.fill {
+  height: 100%;
+  background: var(--live);
+}

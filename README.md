@@ -5,7 +5,7 @@ run them locally (downloaded) or via the HF Inference API, chat with them, probe
 output and tool-calling, and evaluate them against your own private, categorized test-case
 dataset.
 
-**Status:** early development — backend first, frontend to follow.
+**Status:** early development — backend complete, frontend in progress.
 
 ## Why
 
@@ -36,8 +36,8 @@ adopt the same workflow with your own cases.
 
 ## Status
 
-Backend is being built first, end-to-end, before the frontend. See the design doc for the
-full architecture and phasing.
+The backend is complete; the frontend (Phase 2) is being built on top of it. See the
+design doc for the full architecture and phasing.
 
 ## License
 
