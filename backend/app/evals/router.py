@@ -1,5 +1,5 @@
-"""POST /evals/run (SSE progress) + GET /evals/runs[/{id}/results] + PATCH
-/evals/results/{id}.
+"""POST /evals/run (SSE progress) + GET /evals/runs[/{id}/results] + GET
+/evals/report + PATCH /evals/results/{id}.
 
 The run streams progress for the lifetime of the request, persisting each case's
 result as it goes so GET /evals/runs/{id}/results works from a second request.
@@ -21,7 +21,8 @@ from app.config import get_settings
 from app.dataset.store import TestCase, load_cases
 from app.db import get_session
 from app.errors import WorkbenchError
-from app.evals.schemas import EvalRunRequest, ManualVerdictUpdate
+from app.evals.report import build_eval_report
+from app.evals.schemas import EvalReportRow, EvalRunRequest, ManualVerdictUpdate
 from app.evals.service import run_one_case
 from app.inference.base import InferenceBackend
 from app.inference.registry import get_backend
@@ -109,6 +110,11 @@ def get_eval_run_results(run_id: int, session: SessionDep) -> list[EvalResult]:
     if run is None:
         raise WorkbenchError(404, "eval_run_not_found", f"No eval run with id {run_id}.")
     return list(session.exec(select(EvalResult).where(EvalResult.run_id == run_id)).all())
+
+
+@router.get("/report")
+def get_eval_report(session: SessionDep) -> list[EvalReportRow]:
+    return build_eval_report(session)
 
 
 @router.patch("/results/{result_id}")
