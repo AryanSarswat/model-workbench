@@ -1,0 +1,17 @@
+.notice {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--nofit);
+  background: var(--nofit-bg);
+  color: var(--nofit);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.code {
+  font-family: var(--mono);
+  font-size: 11px;
+}

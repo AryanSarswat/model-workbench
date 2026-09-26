@@ -1,0 +1,137 @@
+/* Base styles and the design's shared utility classes (values from the mockups). */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  font-family: var(--sans);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  color: var(--live);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.btn {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.btn-solid {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.btn-solid:hover {
+  background: var(--solid-hover);
+  color: var(--paper);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.field {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 3px;
+  background: var(--sheet);
+  font-size: 13px;
+}
+
+.v-fit {
+  background: var(--fit-bg);
+  color: var(--fit);
+}
+
+.v-tight {
+  background: var(--tight-bg);
+  color: var(--tight);
+}
+
+.v-nofit {
+  background: var(--nofit-bg);
+  color: var(--nofit);
+}
+
+.v-idle {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
+/* Not in the mockups: an outlined live-red chip for in-progress states. */
+.v-live {
+  background: transparent;
+  color: var(--live);
+  box-shadow: inset 0 0 0 1px var(--live);
+}
+
+.seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.seg-fit {
+  background: var(--seg-fit);
+}
+
+.seg-tight {
+  background: var(--seg-tight);
+}
+
+.hatch {
+  background: repeating-linear-gradient(135deg, var(--nofit) 0 2px, var(--hatch-light) 2px 5px);
+}
