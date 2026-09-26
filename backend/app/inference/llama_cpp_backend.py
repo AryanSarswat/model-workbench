@@ -31,7 +31,7 @@ from app.inference.structured_output import (
     ToolCall,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult, run_tool
+from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool
 from app.tools import ToolSpec, get_tool
 
 _CACHE: dict[str, Llama] = {}
@@ -66,14 +66,16 @@ def _estimate_streaming_usage(
     return TokenUsage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
 
 
-async def _run_tool(name: str, args: dict, executed: list[ToolCallRecord]) -> str:
+async def _run_tool(
+    name: str, args: dict, executed: list[ToolCallRecord], on_event: ToolEventSink | None
+) -> str:
     """Execute one tool call; an unknown or failing tool becomes an "Error: ..."
     result for the model, never a loop crash. Only resolved tools are recorded."""
     try:
         tool = get_tool(name)
     except WorkbenchError as e:
         return f"Error: {e.message}"
-    call = await run_tool(tool, args)
+    call = await run_tool(tool, args, on_event)
     executed.append(call)
     return call.result
 
@@ -142,6 +144,7 @@ class LlamaCppBackend:
         messages: list[ChatMessage],
         tools: list[ToolSpec],
         grammar: LlamaGrammar | None = None,
+        on_event: ToolEventSink | None = None,
     ) -> tuple[LoopResult, TokenUsage | None]:
         """Drive non-streamed chat turns until the model answers without tool calls.
 
@@ -185,7 +188,7 @@ class LlamaCppBackend:
                         usages
                     )
                 history.append(dict(message))
-                result = await _run_tool(parsed.tool_name, parsed.arguments, executed)
+                result = await _run_tool(parsed.tool_name, parsed.arguments, executed, on_event)
                 history.append({"role": "tool", "tool_call_id": "", "content": result})
                 continue
             history.append(dict(message))
@@ -199,7 +202,7 @@ class LlamaCppBackend:
                     except json.JSONDecodeError:
                         args = None
                 if isinstance(args, dict):
-                    result = await _run_tool(name, args, executed)
+                    result = await _run_tool(name, args, executed, on_event)
                 else:
                     result = f"Error: invalid arguments for tool '{name}': expected a JSON object"
                 history.append(
@@ -227,12 +230,17 @@ class LlamaCppBackend:
             yield ChatChunk(done=True, error=_describe_load_failure(self._model_path, e))
             return
         if tools:
-            # Tool turns are non-streamed; the final reply yields as one delta + done.
-            # With a schema every native turn is grammar-constrained as well.
+            # Tool turns are non-streamed apart from each call's start/finish event;
+            # the final reply yields as one delta + done. With a schema every native
+            # turn is grammar-constrained as well.
+            events = ToolEvents()
             try:
-                loop_result, usage = await self._run_native_tool_loop(
-                    llama, messages, tools, grammar
+                loop = asyncio.create_task(
+                    self._run_native_tool_loop(llama, messages, tools, grammar, events.emit)
                 )
+                async for event in events.stream(loop):
+                    yield event
+                loop_result, usage = loop.result()
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return
