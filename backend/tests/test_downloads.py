@@ -217,3 +217,46 @@ def test_get_download_job_missing_returns_404():
     response = client.get("/models/downloads/9999")
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "download_job_not_found"
+
+
+def test_list_download_jobs_returns_newest_first():
+    """Newest first -- also proves /models/downloads isn't swallowed by the
+    discovery router's /{model_id:path} catch-all (it returns a list)."""
+    with Session(_test_engine) as session:
+        job1 = DownloadJob(repo_id="model1", status="completed")
+        job2 = DownloadJob(repo_id="model2", status="pending")
+        job3 = DownloadJob(repo_id="model3", status="downloading")
+
+        for job in [job1, job2, job3]:
+            session.add(job)
+            session.commit()
+            session.refresh(job)
+
+    response = client.get("/models/downloads")
+
+    assert response.status_code == 200
+    jobs = response.json()
+    assert len(jobs) == 3
+    assert jobs[0]["id"] > jobs[1]["id"] > jobs[2]["id"]
+
+
+def test_list_download_jobs_with_active_filter():
+    """active=true should only return jobs with status pending or downloading."""
+    with Session(_test_engine) as session:
+        job1 = DownloadJob(repo_id="model1", status="completed")
+        job2 = DownloadJob(repo_id="model2", status="failed")
+        job3 = DownloadJob(repo_id="model3", status="pending")
+        job4 = DownloadJob(repo_id="model4", status="downloading")
+
+        for job in [job1, job2, job3, job4]:
+            session.add(job)
+            session.commit()
+            session.refresh(job)
+
+    response = client.get("/models/downloads?active=true")
+
+    assert response.status_code == 200
+    jobs = response.json()
+    assert len(jobs) == 2
+    statuses = {job["status"] for job in jobs}
+    assert statuses == {"pending", "downloading"}

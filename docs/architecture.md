@@ -207,7 +207,7 @@ the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling r
 
 | Area | Endpoints |
 |---|---|
-| Discovery/downloads | `GET /models/discover`, `GET /models/{id}`, `GET /models/{id}/feasibility`, `POST /models/{id}/download`, `GET /models/downloads/{job_id}`, `GET /models/downloaded`, `DELETE /models/downloaded/{id}` |
+| Discovery/downloads | `GET /models/discover`, `GET /models/{id}`, `GET /models/{id}/feasibility`, `POST /models/{id}/download`, `GET /models/downloads`, `GET /models/downloads/{job_id}`, `GET /models/downloaded`, `DELETE /models/downloaded/{id}` |
 | Chat | `POST /chat/stream` (SSE), `GET/DELETE /chat/sessions[/{id}]` |
 | Tools | `GET /tools`, `POST /tools/reload` |
 | Dataset | `GET/POST/PUT/DELETE /dataset/cases` (filterable by `category`) |

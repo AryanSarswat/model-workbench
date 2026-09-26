@@ -57,6 +57,16 @@ def delete_downloaded(record_id: int, session: SessionDep) -> None:
     session.commit()
 
 
+@router.get("/downloads")
+def list_download_jobs(session: SessionDep, active: bool = False) -> list[DownloadJob]:
+    """Every download job, newest first; `active=true` keeps only pending/downloading."""
+    query = select(DownloadJob)
+    if active:
+        query = query.where(DownloadJob.status.in_(["pending", "downloading"]))
+    query = query.order_by(DownloadJob.created_at.desc(), DownloadJob.id.desc())
+    return list(session.exec(query).all())
+
+
 @router.get("/downloads/{job_id}")
 def get_download_job(job_id: int, session: SessionDep) -> DownloadJob:
     job = session.get(DownloadJob, job_id)
