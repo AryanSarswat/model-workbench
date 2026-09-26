@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
 import { listDownloaded, listTools } from '../../api/endpoints'
@@ -39,19 +39,21 @@ export default function PlaygroundPage() {
   const records = useMemo(() => downloadedQuery.data ?? [], [downloadedQuery.data])
   const modelOptions = useMemo(() => modelOptionsFor(backend, records), [backend, records])
 
-  // Auto-pick a local model once its options are known: prefer the URL's ?model=&quant=
-  // the first time we land on the backend it named, otherwise just the first option.
-  // Re-runs whenever the backend changes so switching away and back doesn't strand a
-  // stale selection.
-  const autoPickedFor = useRef<BackendName | null>(null)
-  useEffect(() => {
-    if (backend === 'api' || downloadedQuery.isPending) return
-    if (autoPickedFor.current === backend) return
-    autoPickedFor.current = backend
+  // Keep the local-model selection valid: whenever we're on gguf/transformers, the
+  // list has loaded, and the current modelId isn't one of its options (first landing
+  // on this backend, or the previously selected model vanished/doesn't apply here),
+  // pick one -- preferring the URL's ?model=&quant= the first time we land on the
+  // backend it named, otherwise just the first option. This runs during render
+  // (React's documented pattern for adjusting state to match another value) rather
+  // than in an effect: it converges in at most one extra render, since the picked
+  // modelId is always a member of modelOptions and the condition then goes false.
+  // Keying off "not a current option" (rather than a one-shot latch) means switching
+  // gguf -> api -> gguf re-picks instead of leaving a stale api model_id selected for
+  // gguf, which is exactly the bug this guards against.
+  if (backend !== 'api' && !downloadedQuery.isPending && !modelOptions.some((option) => option.modelId === modelId)) {
     const useUrlParams = backend === initialBackend
     setModelId(pickPrefilledModelId(modelOptions, useUrlParams ? paramModel : null, useUrlParams ? paramQuant : null))
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- paramModel/paramQuant/initialBackend are fixed for the page's lifetime
-  }, [backend, downloadedQuery.isPending, modelOptions])
+  }
 
   const schemaParse = schemaEnabled ? parseSchemaJson(schemaText) : null
   const schemaError = schemaParse && !schemaParse.ok ? schemaParse.error : null
@@ -94,15 +96,16 @@ export default function PlaygroundPage() {
           onBackendChange={setBackend}
           modelId={modelId}
           onModelIdChange={setModelId}
-          records={records}
+          options={modelOptions}
           recordsLoading={downloadedQuery.isPending}
+          recordsError={downloadedQuery.error}
           structuredOutputLabel={backendInfo.guarantee}
           structuredOutputTone={backendInfo.guarantee === 'guaranteed' ? 'fit' : 'tight'}
           toolsLabel={nativeTools ? 'native' : 'fallback'}
           toolsTone={nativeTools ? 'fit' : 'tight'}
           onNewChat={newChat}
         />
-        <Transcript turns={turns} backend={backend} modelId={modelId} />
+        <Transcript turns={turns} />
         <Composer value={draft} onChange={setDraft} onSend={handleSend} onStop={stop} isStreaming={isStreaming} sendDisabled={sendDisabled} />
       </main>
       <RequestPanel

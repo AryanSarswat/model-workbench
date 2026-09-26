@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
+import type { DownloadedModelRecord } from '../../api/types'
 import PlaygroundPage from './PlaygroundPage'
 
 function sseResponse(events: object[]): Response {
@@ -15,10 +16,10 @@ function sseResponse(events: object[]): Response {
   return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } })
 }
 
-function renderPlayground(initialEntry: string, chatEvents: object[]) {
+function renderPlayground(initialEntry: string, chatEvents: object[], downloadedModels: DownloadedModelRecord[] = []) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
-    if (url === '/api/models/downloaded') return Response.json([])
+    if (url === '/api/models/downloaded') return Response.json(downloadedModels)
     if (url === '/api/tools') return Response.json([{ name: 'calculator', description: 'Evaluate an arithmetic expression', parameters: {} }])
     if (url === '/api/chat/stream' && init?.method === 'POST') return sseResponse(chatEvents)
     return new Response('not mocked', { status: 500 })
@@ -82,5 +83,44 @@ describe('PlaygroundPage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Send' }))
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/chat/stream')).toBe(false)
+  })
+
+  it('re-picks a valid gguf model after switching gguf -> api -> gguf, instead of resending the stale api id', async () => {
+    const ggufRecord: DownloadedModelRecord = {
+      id: 1,
+      repo_id: 'Qwen/Qwen3-14B',
+      backend: 'gguf',
+      quant: 'Q4_K_M.gguf',
+      local_path: '/models/qwen',
+      size_bytes: 1,
+      downloaded_at: '2024-01-01T00:00:00Z',
+      last_used_at: null,
+    }
+    const fetchMock = renderPlayground(
+      '/playground',
+      [{ delta: 'ok', done: true, error: null, usage: { prompt_tokens: 1, completion_tokens: 1 }, tools_called: [], retries: 0 }],
+      [ggufRecord],
+    )
+    await screen.findByText('calculator')
+
+    fireEvent.click(screen.getByRole('button', { name: 'GGUF' }))
+    const modelSelect = await screen.findByLabelText<HTMLSelectElement>('Model')
+    await screen.findByDisplayValue('Qwen/Qwen3-14B')
+    expect(modelSelect.value).toBe('Qwen/Qwen3-14B') // only downloaded quant -> bare repo_id
+
+    fireEvent.click(screen.getByRole('button', { name: 'API' }))
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'org/some-api-model' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'GGUF' }))
+    const modelSelectAgain = await screen.findByLabelText<HTMLSelectElement>('Model')
+    expect(modelSelectAgain.value).toBe('Qwen/Qwen3-14B') // re-picked, not left on the stale api id
+
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hi' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    await screen.findByText('ok')
+    const chatCall = fetchMock.mock.calls.find(([url]) => url === '/api/chat/stream')
+    const body = JSON.parse((chatCall?.[1] as RequestInit).body as string) as Record<string, unknown>
+    expect(body).toMatchObject({ model_id: 'Qwen/Qwen3-14B', backend: 'gguf' })
   })
 })
