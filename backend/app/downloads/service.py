@@ -45,10 +45,10 @@ def run_download(job_id: int, repo_id: str, filename: str) -> None:
 
         try:
             dest_path = _safe_dest(MODELS_DIR, repo_id, filename)
+            dest_path.parent.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             _fail_job(session, job, str(e))
             return
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
 
         last_reported_percent = -1
 
@@ -108,10 +108,10 @@ def run_snapshot_download(job_id: int, repo_id: str, files: list[SnapshotFile]) 
 
         try:
             dest_dir = _safe_dest(MODELS_DIR, repo_id, "snapshot")
+            dest_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:
             _fail_job(session, job, str(e))
             return
-        dest_dir.mkdir(parents=True, exist_ok=True)
         total_bytes = sum(f.size_bytes or 0 for f in files)
         total_label = f"{total_bytes // (1024 * 1024)} MB" if total_bytes else "unknown total"
         completed_bytes = 0

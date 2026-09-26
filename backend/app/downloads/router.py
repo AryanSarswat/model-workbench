@@ -2,7 +2,7 @@
 
 Two download kinds: a single GGUF file (`filename` from `GET /models/{id}`'s
 gguf_files), or a full transformers snapshot (`snapshot: true` -- every non-GGUF file
-in the repo, for the future transformers backend). Progress for both is polled via
+in the repo, for the transformers backend). Progress for both is polled via
 `GET /models/downloads/{job_id}`.
 """
 
