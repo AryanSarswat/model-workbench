@@ -29,7 +29,7 @@ make run   # uv run --project backend uvicorn app.main:app --reload --app-dir ba
 
 ## Run the frontend
 
-Needs Node 22.13+ (CI uses Node 22).
+Needs Node 22.22+ or 24 (CI uses Node 22).
 
 ```bash
 make fe-setup   # cd frontend && npm ci
