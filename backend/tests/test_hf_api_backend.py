@@ -126,8 +126,12 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
 
     chunks = _run_tool_chat(backend)
 
-    # The whole loop resolves to one delta + done (tools mode never streams).
-    assert [c.delta for c in chunks] == ['{"reply": "the answer is 5"}', ""]
+    # The call streams its start and finish live; the reply itself is one delta +
+    # done (tools mode never streams partial turns).
+    started, finished, reply, done = chunks
+    assert started.tool_call_started.name == "calculator"
+    assert finished.tool_call_finished == done.tool_calls[0]
+    assert reply.delta == '{"reply": "the answer is 5"}'
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     # The real calculator ran and its result reached the model on the next turn.
@@ -275,7 +279,7 @@ def test_stream_chat_with_tools_and_schema_skips_schema_loop_when_draft_conforms
 
     # The tool loop's draft already conformed, so no schema-loop turn ran:
     # five tool-loop turns, zero schema-loop turns.
-    assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
+    assert [c.delta for c in chunks[-2:]] == ['{"answer": 42}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     assert len(calls) == 5
@@ -297,7 +301,7 @@ def test_stream_chat_with_tools_and_schema_constrains_the_final_reply(monkeypatc
     chunks = _run_schema_chat(backend, _SCHEMA, tools=_tools())
 
     # Tool loop ran first (calculator), then the final reply was schema-shaped.
-    assert [c.delta for c in chunks] == ['{"answer": 42}', ""]
+    assert [c.delta for c in chunks[-2:]] == ['{"answer": 42}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
 

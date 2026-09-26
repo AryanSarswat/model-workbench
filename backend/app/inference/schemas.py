@@ -37,10 +37,21 @@ class ToolCallRecord(BaseModel):
     duration_ms: float
 
 
+class ToolCallStart(BaseModel):
+    """A tool call that has begun executing; its ToolCallRecord follows when it ends."""
+
+    name: str
+    arguments: dict
+
+
 class ChatChunk(BaseModel):
     delta: str = ""
     done: bool = False
     error: str | None = None
+    # Live progress of a tool turn, one chunk each: calls run one at a time, so a
+    # finished record always closes the most recent start.
+    tool_call_started: ToolCallStart | None = None
+    tool_call_finished: ToolCallRecord | None = None
     # Set only on the terminal (done=True) chunk; they describe the whole turn.
     usage: TokenUsage | None = None
     tools_called: list[str] = []

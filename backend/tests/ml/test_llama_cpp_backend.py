@@ -156,17 +156,42 @@ def test_stream_chat_with_tools_executes_the_call_and_streams_the_final_text(mon
 
     chunks = _run_tool_chat(backend)
 
-    # Tools mode never streams partial turns: one delta + done.
-    assert [c.delta for c in chunks] == ["5", ""]
-    assert chunks[-1].done is True
-    assert chunks[-1].error is None
-    assert chunks[-1].tools_called == ["calculator"]
-    [call] = chunks[-1].tool_calls
+    # The call is announced as it starts and as it finishes; the reply itself
+    # never streams partial turns: one delta + done.
+    started, finished, reply, done = chunks
+    assert started.tool_call_started.name == "calculator"
+    assert started.tool_call_started.arguments == {"expression": "2 + 3"}
+    assert (reply.delta, done.done, done.error) == ("5", True, None)
+    assert done.tools_called == ["calculator"]
+    [call] = done.tool_calls
     assert (call.name, call.arguments, call.result) == ("calculator", {"expression": "2 + 3"}, "5")
+    assert finished.tool_call_finished == call
     # The real calculator ran: its result rode back as a tool-role message.
     llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
     tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
     assert tool_messages == [{"role": "tool", "tool_call_id": "call_1", "content": "5"}]
+
+
+class _FakeFailsAfterToolLlama(_FakeToolLlama):
+    """Runs one calculator call, then the next model turn blows up."""
+
+    def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
+        if self.seen:
+            raise RuntimeError("model crashed")
+        return super().create_chat_completion(messages, stream, tools, tool_choice)
+
+
+def test_stream_chat_with_tools_ends_in_an_error_chunk_after_live_tool_events(monkeypatch):
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FakeFailsAfterToolLlama)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    chunks = _run_tool_chat(backend)
+
+    started, finished, failed = chunks
+    assert started.tool_call_started.name == "calculator"
+    assert finished.tool_call_finished.result == "5"
+    assert failed.done is True
+    assert "model crashed" in failed.error
 
 
 class _FakeUnknownToolLlama(_FakeLlama):
@@ -212,7 +237,7 @@ def test_stream_chat_with_tools_returns_empty_when_turns_run_out(monkeypatch):
 
     chunks = _run_tool_chat(backend)
 
-    assert [c.delta for c in chunks] == ["", ""]
+    assert [c.delta for c in chunks[-2:]] == ["", ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
 
@@ -248,7 +273,7 @@ def test_stream_chat_with_tools_executes_plain_text_tool_call(monkeypatch):
 
     chunks = _run_tool_chat(backend)
 
-    assert [c.delta for c in chunks] == ["42", ""]
+    assert [c.delta for c in chunks[-2:]] == ["42", ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
@@ -410,7 +435,7 @@ def test_stream_chat_with_tools_and_schema_constrains_every_turn(monkeypatch):
 
     assert len(fake.grammars) == 2
     assert all(isinstance(g, LlamaGrammar) for g in fake.grammars)
-    assert [c.delta for c in chunks] == ['{"answer": 5}', ""]
+    assert [c.delta for c in chunks[-2:]] == ['{"answer": 5}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     assert chunks[-1].tools_called == ["calculator"]
