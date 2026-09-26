@@ -53,6 +53,15 @@
   border-color: var(--nofit);
 }
 
+.blockRunning {
+  border-style: dashed;
+}
+
+/* A running call has no result section below its arguments. */
+.blockRunning .args {
+  border-bottom: none;
+}
+
 .chips {
   display: flex;
   gap: 6px;

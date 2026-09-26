@@ -16,12 +16,24 @@ function sseResponse(events: object[]): Response {
   return new Response(body, { headers: { 'Content-Type': 'text/event-stream' } })
 }
 
-function renderPlayground(initialEntry: string, chatEvents: object[], downloadedModels: DownloadedModelRecord[] = []) {
+// An SSE response the test feeds one event at a time, to observe the page mid-stream.
+function liveSseResponse() {
+  const encoder = new TextEncoder()
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  const body = new ReadableStream<Uint8Array>({ start: (c) => void (controller = c) })
+  return {
+    response: new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }),
+    push: (event: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)),
+    close: () => controller.close(),
+  }
+}
+
+function renderPlayground(initialEntry: string, chatEvents: object[] | Response, downloadedModels: DownloadedModelRecord[] = []) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url === '/api/models/downloaded') return Response.json(downloadedModels)
     if (url === '/api/tools') return Response.json([{ name: 'calculator', description: 'Evaluate an arithmetic expression', parameters: {} }])
-    if (url === '/api/chat/stream' && init?.method === 'POST') return sseResponse(chatEvents)
+    if (url === '/api/chat/stream' && init?.method === 'POST') return Array.isArray(chatEvents) ? sseResponse(chatEvents) : chatEvents
     return new Response('not mocked', { status: 500 })
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -102,6 +114,35 @@ describe('PlaygroundPage', () => {
     expect(screen.queryByText(page)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Show full result' }))
     expect(screen.getByText(page)).toBeInTheDocument()
+  })
+
+  it('shows a tool call while it runs, then swaps in its result when it finishes', async () => {
+    const url = 'https://example.com/'
+    const record = { name: 'web_fetch', arguments: { url }, result: 'hello from the page', duration_ms: 350 }
+    const idle = { delta: '', done: false, error: null, usage: null, tools_called: [], tool_calls: [], retries: 0 }
+    const sse = liveSseResponse()
+    renderPlayground('/playground?model=org%2Fmodel&backend=api', sse.response)
+    await screen.findByText('calculator')
+
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'fetch it' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    sse.push({ ...idle, tool_call_started: { name: 'web_fetch', arguments: { url } } })
+    expect(await screen.findByText('fetching…')).toBeInTheDocument()
+    expect(screen.getByText(url)).toBeInTheDocument()
+    expect(screen.getByText('running tool')).toBeInTheDocument()
+    expect(screen.queryByText('result · sent to model')).not.toBeInTheDocument()
+
+    sse.push({ ...idle, tool_call_finished: record })
+    sse.push({ ...idle, delta: 'The page says hello.' })
+    sse.push({ ...idle, done: true, tools_called: ['web_fetch'], tool_calls: [record] })
+    sse.close()
+
+    expect(await screen.findByText('hello from the page')).toBeInTheDocument()
+    expect(screen.getByText('The page says hello.')).toBeInTheDocument()
+    expect(screen.queryByText('fetching…')).not.toBeInTheDocument()
+    expect(screen.queryByText('running tool')).not.toBeInTheDocument()
+    expect(screen.getAllByText(url)).toHaveLength(1) // one card, not a running copy left behind
   })
 
   it('blocks sending when the JSON Schema editor holds invalid JSON', async () => {
