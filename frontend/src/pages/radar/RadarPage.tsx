@@ -1,7 +1,8 @@
 import { useQueries, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { ApiError } from '../../api/client'
-import { discoverModels, getFeasibility } from '../../api/endpoints'
+import { discoverModels, modelPath } from '../../api/endpoints'
 import { useHardware } from '../../api/hooks'
 import type { DiscoverSort, DiscoveredModel, FeasibilityReport } from '../../api/types'
 import { Button } from '../../components/Button'
@@ -12,10 +13,8 @@ import { PageHeader } from '../../components/PageHeader'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { formatCount, formatRelative } from '../../lib/format'
 import { GaugeAxisLabels, MemoryGauge } from './MemoryGauge'
-import { VERDICT_CHIP_TONE, VERDICT_LABEL, bestVerdict, formatMemoryRange } from './gauge'
+import { VERDICT_CHIP_TONE, VERDICT_LABEL, bestVerdict, feasibilityQueryOptions, formatMemoryRange } from './gauge'
 import styles from './RadarPage.module.css'
-
-const FEASIBILITY_STALE_TIME = 10 * 60 * 1000
 
 const SORT_OPTIONS: { value: DiscoverSort; label: string }[] = [
   { value: 'trending', label: 'Trending' },
@@ -28,9 +27,15 @@ interface Row {
   feasibility: UseQueryResult<FeasibilityReport>
 }
 
-function shortFeasibilityError(error: unknown): string {
-  if (error instanceof ApiError && error.code === 'feasibility_unknown') return 'No size data available'
-  return 'Gated or unavailable'
+// `gated` comes from the model itself, never inferred from the error -- the backend has
+// no "gated" error code, so guessing at one would misreport plain network/lookup failures.
+function shortFeasibilityError(error: unknown, gated: DiscoveredModel['gated']): string {
+  if (gated) return 'Gated'
+  if (error instanceof ApiError) {
+    if (error.code === 'feasibility_unknown') return 'No size data available'
+    if (error.code === 'hf_hub_unreachable') return 'Hub unavailable'
+  }
+  return 'Unavailable'
 }
 
 // GGUF / transformers chips derived from a repo's feasibility option labels.
@@ -50,12 +55,7 @@ export default function RadarPage() {
   const models = modelsQuery.data ?? []
 
   const feasibilityResults = useQueries({
-    queries: models.map((model) => ({
-      queryKey: ['models', model.id, 'feasibility'],
-      queryFn: () => getFeasibility(model.id),
-      staleTime: FEASIBILITY_STALE_TIME,
-      retry: false,
-    })),
+    queries: models.map((model) => feasibilityQueryOptions(model.id)),
   })
 
   const filter = filterText.trim().toLowerCase()
@@ -106,18 +106,18 @@ export default function RadarPage() {
 function RadarTable({ usableMemoryGb, rows }: { usableMemoryGb: number; rows: Row[] }) {
   return (
     <section aria-label="Models" className={styles.table}>
-      <div role="row" className={styles.headerRow}>
-        <div className="eyebrow" role="columnheader">#</div>
-        <div className="eyebrow" role="columnheader">Model</div>
-        <div className="eyebrow" role="columnheader">Released</div>
-        <div className="eyebrow" role="columnheader">Downloads</div>
-        <div className="eyebrow" role="columnheader">Likes</div>
-        <div role="columnheader">
+      <div className={styles.headerRow}>
+        <div className="eyebrow">#</div>
+        <div className="eyebrow">Model</div>
+        <div className="eyebrow">Released</div>
+        <div className="eyebrow">Downloads</div>
+        <div className="eyebrow">Likes</div>
+        <div>
           <div className="eyebrow" style={{ marginBottom: 4 }}>Memory needed</div>
           <GaugeAxisLabels usableMemoryGb={usableMemoryGb} />
         </div>
-        <div className="eyebrow" role="columnheader">Best option</div>
-        <div role="columnheader" />
+        <div className="eyebrow">Best option</div>
+        <div />
       </div>
 
       {rows.map(({ model, rank, feasibility }) => (
@@ -157,15 +157,16 @@ function RadarRow({
   feasibility: UseQueryResult<FeasibilityReport>
   usableMemoryGb: number
 }) {
+  const href = `/models/${modelPath(model.id)}`
+  const errorLabel = feasibility.isError ? shortFeasibilityError(feasibility.error, model.gated) : null
+
   return (
-    <div role="row" className={styles.row}>
-      <div role="cell" className={styles.rank}>
-        {String(rank).padStart(2, '0')}
-      </div>
-      <div role="cell" className={styles.modelCell}>
-        <a href={`/models/${model.id}`} className={styles.modelLink}>
+    <div className={styles.row}>
+      <div className={styles.rank}>{String(rank).padStart(2, '0')}</div>
+      <div className={styles.modelCell}>
+        <Link to={href} className={styles.modelLink}>
           {model.id}
-        </a>
+        </Link>
         <div className={styles.formatChips}>
           {feasibility.data &&
             formatChips(feasibility.data.options).map((chip) => (
@@ -175,27 +176,21 @@ function RadarRow({
             ))}
         </div>
       </div>
-      <div role="cell" className={styles.released}>
-        {formatRelative(model.created_at)}
+      <div className={styles.released}>{formatRelative(model.created_at)}</div>
+      <div className={styles.count}>{formatCount(model.downloads)}</div>
+      <div className={styles.count}>{formatCount(model.likes)}</div>
+      <div>
+        <FeasibilityGauge feasibility={feasibility} usableMemoryGb={usableMemoryGb} errorLabel={errorLabel} />
       </div>
-      <div role="cell" className={styles.count}>
-        {formatCount(model.downloads)}
+      <div className={styles.verdictCell}>
+        <FeasibilityVerdict feasibility={feasibility} errorLabel={errorLabel} />
       </div>
-      <div role="cell" className={styles.count}>
-        {formatCount(model.likes)}
-      </div>
-      <div role="cell">
-        <FeasibilityGauge feasibility={feasibility} usableMemoryGb={usableMemoryGb} modelId={model.id} />
-      </div>
-      <div role="cell" className={styles.verdictCell}>
-        <FeasibilityVerdict feasibility={feasibility} />
-      </div>
-      <a href={`/models/${model.id}`} className={['btn', styles.openLink].join(' ')} role="cell">
+      <Button to={href} className={styles.openLink}>
         Open
         <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
           <path d="M3 8h10M9 4l4 4-4 4" />
         </svg>
-      </a>
+      </Button>
     </div>
   )
 }
@@ -203,11 +198,11 @@ function RadarRow({
 function FeasibilityGauge({
   feasibility,
   usableMemoryGb,
-  modelId,
+  errorLabel,
 }: {
   feasibility: UseQueryResult<FeasibilityReport>
   usableMemoryGb: number
-  modelId: string
+  errorLabel: string | null
 }) {
   if (feasibility.isPending) {
     return (
@@ -221,7 +216,7 @@ function FeasibilityGauge({
     return (
       <div className={styles.gaugeCell}>
         <div style={{ height: 10, background: 'var(--track)' }} aria-hidden="true" />
-        <div className={styles.range}>{shortFeasibilityError(feasibility.error)}</div>
+        <div className={styles.range}>{errorLabel}</div>
       </div>
     )
   }
@@ -229,14 +224,20 @@ function FeasibilityGauge({
   const lo = Math.min(...estimates)
   const hi = Math.max(...estimates)
   return (
-    <div className={styles.gaugeCell} aria-label={`Memory needed for ${modelId}`}>
+    <div className={styles.gaugeCell}>
       <MemoryGauge lo={lo} hi={hi} usableMemoryGb={usableMemoryGb} />
       <div className={styles.range}>{formatMemoryRange(lo, hi, feasibility.data.options.length)}</div>
     </div>
   )
 }
 
-function FeasibilityVerdict({ feasibility }: { feasibility: UseQueryResult<FeasibilityReport> }) {
+function FeasibilityVerdict({
+  feasibility,
+  errorLabel,
+}: {
+  feasibility: UseQueryResult<FeasibilityReport>
+  errorLabel: string | null
+}) {
   if (feasibility.isPending) {
     return (
       <>
@@ -249,7 +250,7 @@ function FeasibilityVerdict({ feasibility }: { feasibility: UseQueryResult<Feasi
     return (
       <>
         <Chip tone="idle">Unknown</Chip>
-        <span className={styles.note}>{shortFeasibilityError(feasibility.error)}</span>
+        <span className={styles.note}>{errorLabel}</span>
       </>
     )
   }
