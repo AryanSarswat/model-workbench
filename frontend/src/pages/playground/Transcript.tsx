@@ -1,7 +1,6 @@
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { LiveDot } from '../../components/LiveDot'
-import type { BackendName } from '../../api/types'
 import { NATIVE_TOOL_CALLING } from './capabilities'
 import type { ChatTurn } from './chatReducer'
 import { formatMs, formatSeconds, formatTokensPerSec } from './format'
@@ -9,7 +8,7 @@ import { backendDisplayLabel, shortModelName } from './modelOptions'
 import { parseSchemaJson } from './requestBuilder'
 import styles from './Transcript.module.css'
 
-export function Transcript({ turns, backend, modelId }: { turns: ChatTurn[]; backend: BackendName; modelId: string }) {
+export function Transcript({ turns }: { turns: ChatTurn[] }) {
   return (
     <div className={styles.transcript}>
       {turns.map((turn) =>
@@ -19,15 +18,18 @@ export function Transcript({ turns, backend, modelId }: { turns: ChatTurn[]; bac
             <p className={styles.userText}>{turn.content}</p>
           </article>
         ) : (
-          <AssistantTurn key={turn.id} turn={turn} backend={backend} modelId={modelId} />
+          <AssistantTurn key={turn.id} turn={turn} />
         ),
       )}
     </div>
   )
 }
 
-function AssistantTurn({ turn, backend, modelId }: { turn: ChatTurn; backend: BackendName; modelId: string }) {
-  const toolsNative = NATIVE_TOOL_CALLING[backend]
+// Each turn renders with the model/backend it was actually sent with (stored on the
+// turn by useChatStream), not the page's current selection -- otherwise switching
+// models mid-chat would relabel earlier turns.
+function AssistantTurn({ turn }: { turn: ChatTurn }) {
+  const toolsNative = NATIVE_TOOL_CALLING[turn.backend]
   const toolsChipLabel = toolsNative ? 'native' : 'fallback'
   const toolsChipTone = toolsNative ? 'fit' : 'tight'
   const showToolBlocks = turn.toolsCalled.length > 0
@@ -43,7 +45,7 @@ function AssistantTurn({ turn, backend, modelId }: { turn: ChatTurn; backend: Ba
     <article className={styles.assistantTurn}>
       <div className={styles.header}>
         <div className="eyebrow">
-          {shortModelName(modelId)} · {backendDisplayLabel(backend, modelId)}
+          {shortModelName(turn.modelId)} · {backendDisplayLabel(turn.backend, turn.modelId)}
         </div>
         {turn.streaming && <LiveDot>streaming</LiveDot>}
       </div>
@@ -75,9 +77,16 @@ function AssistantTurn({ turn, backend, modelId }: { turn: ChatTurn; backend: Ba
       )}
 
       {!turn.hadSchema && (
-        <p className={styles.reply} aria-live="polite">
+        <p className={styles.reply}>
           {turn.content}
           {turn.streaming && <span className={styles.caret} aria-hidden="true" />}
+        </p>
+      )}
+
+      {/* Announced once, when the turn settles -- not per token, unlike the paragraph above. */}
+      {settled && !turn.hadSchema && (
+        <p className={styles.srOnly} aria-live="polite">
+          {turn.content ? `Reply ready: ${turn.content}` : 'Reply ready.'}
         </p>
       )}
 
