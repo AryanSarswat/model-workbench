@@ -42,8 +42,8 @@ describe('ggufModelOptions', () => {
 
 describe('pickPrefilledModelId', () => {
   const options = [
-    { modelId: 'Qwen/Qwen3-14B:Q4_K_M.gguf', label: 'Qwen/Qwen3-14B (Q4_K_M.gguf)' },
-    { modelId: 'other/repo', label: 'other/repo' },
+    { modelId: 'Qwen/Qwen3-14B:Q4_K_M.gguf', label: 'Qwen/Qwen3-14B (Q4_K_M.gguf)', unloadable: null },
+    { modelId: 'other/repo', label: 'other/repo', unloadable: null },
   ]
 
   it('matches an exact model+quant combination', () => {

@@ -130,6 +130,7 @@ describe('PlaygroundPage', () => {
       size_bytes: 1,
       downloaded_at: '2024-01-01T00:00:00Z',
       last_used_at: null,
+      unsupported_reason: null,
     }
     const fetchMock = renderPlayground(
       '/playground',
@@ -157,5 +158,31 @@ describe('PlaygroundPage', () => {
     const chatCall = fetchMock.mock.calls.find(([url]) => url === '/api/chat/stream')
     const body = JSON.parse((chatCall?.[1] as RequestInit).body as string) as Record<string, unknown>
     expect(body).toMatchObject({ model_id: 'Qwen/Qwen3-14B', backend: 'gguf' })
+  })
+
+  it('flags a downloaded gguf this llama.cpp build cannot load and blocks sending before any message', async () => {
+    const reason = "unsupported quantization: tensor 'output.weight' in Ternary-Bonsai-2-27B-PQ2_0.gguf uses ggml type 142"
+    const fetchMock = renderPlayground('/playground?backend=gguf', [], [
+      {
+        id: 1,
+        repo_id: 'prism-ml/Ternary-Bonsai-2-27B-gguf',
+        backend: 'gguf',
+        quant: 'Ternary-Bonsai-2-27B-PQ2_0.gguf',
+        local_path: '/models/bonsai',
+        size_bytes: 1,
+        downloaded_at: '2024-01-01T00:00:00Z',
+        last_used_at: null,
+        unsupported_reason: reason,
+      },
+    ])
+
+    expect(await screen.findByText('quant PQ2_0 · not loadable')).toBeInTheDocument()
+    expect(screen.getByText(reason)).toBeInTheDocument()
+    expect(screen.queryByText(/^JSON ·/)).not.toBeInTheDocument() // capabilities don't apply
+
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'hi' } })
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/chat/stream')).toBe(false)
   })
 })

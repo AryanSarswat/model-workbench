@@ -3,6 +3,12 @@ import type { BackendName, DownloadedModelRecord } from '../../api/types'
 export interface ModelOption {
   modelId: string // value to send as ChatRequest.model_id
   label: string
+  unloadable: { quant: string; reason: string } | null // a GGUF the local llama.cpp can't read
+}
+
+// "PQ2_0" from "Ternary-Bonsai-2-27B-PQ2_0.gguf" or "model.Q4_K_M.gguf".
+function quantName(filename: string): string {
+  return filename.replace(/\.gguf$/i, '').split(/[-.]/).pop() || filename
 }
 
 // gguf model_id is the bare repo_id when only one quant of that repo is downloaded,
@@ -15,7 +21,10 @@ export function ggufModelOptions(records: DownloadedModelRecord[]): ModelOption[
     const ambiguous = (countByRepo.get(record.repo_id) ?? 0) > 1
     const modelId = ambiguous ? `${record.repo_id}:${record.quant}` : record.repo_id
     const label = ambiguous ? `${record.repo_id} (${record.quant})` : record.repo_id
-    return { modelId, label }
+    const unloadable = record.unsupported_reason
+      ? { quant: quantName(record.quant ?? ''), reason: record.unsupported_reason }
+      : null
+    return { modelId, label, unloadable }
   })
 }
 
@@ -27,7 +36,7 @@ export function transformersModelOptions(records: DownloadedModelRecord[]): Mode
   for (const record of records) {
     if (seen.has(record.repo_id)) continue
     seen.add(record.repo_id)
-    options.push({ modelId: record.repo_id, label: record.repo_id })
+    options.push({ modelId: record.repo_id, label: record.repo_id, unloadable: null })
   }
   return options
 }

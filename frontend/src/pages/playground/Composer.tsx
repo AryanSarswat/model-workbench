@@ -10,6 +10,7 @@ export function Composer({
   onStop,
   isStreaming,
   sendDisabled,
+  sendBlockedReason,
 }: {
   value: string
   onChange: (value: string) => void
@@ -17,6 +18,7 @@ export function Composer({
   onStop: () => void
   isStreaming: boolean
   sendDisabled: boolean
+  sendBlockedReason: string | null // shown beside Send, e.g. why the model can't load
 }) {
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Enter inserts a newline; only Cmd/Ctrl+Enter (or the button) sends.
@@ -39,11 +41,17 @@ export function Composer({
           onKeyDown={handleKeyDown}
         />
       </Field>
+      {sendBlockedReason && (
+        <p id="composer-blocked-reason" className={styles.blockedReason}>
+          {sendBlockedReason}
+        </p>
+      )}
       <Button
         variant="outline"
         className={[styles.action, isStreaming && styles.stop].filter(Boolean).join(' ')}
         onClick={isStreaming ? onStop : onSend}
         disabled={!isStreaming && sendDisabled}
+        aria-describedby={sendBlockedReason ? 'composer-blocked-reason' : undefined}
       >
         {isStreaming ? (
           <>

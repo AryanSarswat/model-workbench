@@ -62,7 +62,8 @@ export default function PlaygroundPage() {
   const { turns, isStreaming, sendMessage, stop, newChat } = useChatStream()
 
   const trimmedModelId = modelId.trim()
-  const sendDisabled = trimmedModelId === '' || draft.trim() === '' || schemaError !== null
+  const unloadable = modelOptions.find((option) => option.modelId === modelId)?.unloadable ?? null
+  const sendDisabled = trimmedModelId === '' || draft.trim() === '' || schemaError !== null || unloadable !== null
 
   function handleSend() {
     if (sendDisabled || isStreaming) return
@@ -97,6 +98,7 @@ export default function PlaygroundPage() {
           modelId={modelId}
           onModelIdChange={setModelId}
           options={modelOptions}
+          unloadable={unloadable}
           recordsLoading={downloadedQuery.isPending}
           recordsError={downloadedQuery.error}
           structuredOutputLabel={backendInfo.guarantee}
@@ -106,7 +108,15 @@ export default function PlaygroundPage() {
           onNewChat={newChat}
         />
         <Transcript turns={turns} />
-        <Composer value={draft} onChange={setDraft} onSend={handleSend} onStop={stop} isStreaming={isStreaming} sendDisabled={sendDisabled} />
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSend={handleSend}
+          onStop={stop}
+          isStreaming={isStreaming}
+          sendDisabled={sendDisabled}
+          sendBlockedReason={unloadable?.reason ?? null}
+        />
       </main>
       <RequestPanel
         systemPrompt={systemPrompt}

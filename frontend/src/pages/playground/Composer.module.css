@@ -31,3 +31,11 @@
   border-color: var(--live);
   color: var(--live);
 }
+
+.blockedReason {
+  margin: 0;
+  max-width: 320px;
+  align-self: center;
+  font-size: 12px;
+  color: var(--nofit);
+}
