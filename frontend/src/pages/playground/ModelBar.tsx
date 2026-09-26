@@ -2,11 +2,12 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '../../components/Button'
 import { Chip, type ChipTone } from '../../components/Chip'
+import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { BACKEND_NAMES, BACKENDS } from '../../lib/backends'
-import type { BackendName, DownloadedModelRecord } from '../../api/types'
-import { modelOptionsFor } from './modelOptions'
+import type { BackendName } from '../../api/types'
+import type { ModelOption } from './modelOptions'
 import styles from './ModelBar.module.css'
 
 export function ModelBar({
@@ -14,8 +15,9 @@ export function ModelBar({
   onBackendChange,
   modelId,
   onModelIdChange,
-  records,
+  options,
   recordsLoading,
+  recordsError,
   structuredOutputLabel,
   structuredOutputTone,
   toolsLabel,
@@ -26,16 +28,15 @@ export function ModelBar({
   onBackendChange: (backend: BackendName) => void
   modelId: string
   onModelIdChange: (modelId: string) => void
-  records: DownloadedModelRecord[]
+  options: ModelOption[]
   recordsLoading: boolean
+  recordsError: unknown
   structuredOutputLabel: string
   structuredOutputTone: ChipTone
   toolsLabel: string
   toolsTone: ChipTone
   onNewChat: () => void
 }) {
-  const options = modelOptionsFor(backend, records)
-
   return (
     <div className={styles.bar}>
       {backend === 'api' ? (
@@ -48,6 +49,11 @@ export function ModelBar({
             onChange={(event) => onModelIdChange(event.target.value)}
           />
         </Field>
+      ) : recordsError ? (
+        <div className={styles.backendField}>
+          <span className="eyebrow">Model</span>
+          <ErrorNotice error={recordsError} />
+        </div>
       ) : recordsLoading ? (
         <ModelHint>Loading downloaded models…</ModelHint>
       ) : options.length === 0 ? (
