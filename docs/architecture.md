@@ -5,14 +5,14 @@
 model-workbench discovers trending Hugging Face models, runs them either locally
 (downloaded) or via the HF Inference API behind one common interface, and evaluates them
 against a private, categorized set of test cases. Single Python backend (FastAPI), React
-frontend (built after the backend is complete).
+frontend (Vite + TypeScript) in `frontend/`.
 
 ## Roadmap
 
-- **Phase 1 (current): backend only, text-generation/chat models only.** Discovery,
+- **Phase 1 (done): backend only, text-generation/chat models only.** Discovery,
   download, inference, structured output, tool calling, and evals are all implemented and
   testable via HTTP/SSE without a UI.
-- **Phase 2: frontend.** Built against the Phase 1 API once the backend is solid.
+- **Phase 2 (current): frontend.** Built against the Phase 1 API (see Frontend below).
 - **Phase 3+: additional modalities** (vision-language, audio, image-generation,
   embeddings), each as its own `InferenceBackend` implementation plugging into the same
   registry/download/eval infrastructure — not a restructure.
@@ -42,6 +42,7 @@ model-workbench/
 │   │   ├── evals/                   # eval run engine, assertions, judge
 │   │   └── api/                     # FastAPI routers
 │   └── tests/
+├── frontend/                        # Vite + React app (see Frontend below)
 ├── data/                            # gitignored except templates
 │   └── test_cases.template.json
 └── docs/
@@ -213,6 +214,36 @@ the model-comparison report: pass rate, avg tokens/sec, avg cost, tool-calling r
 | Dataset | `GET/POST/PUT/DELETE /dataset/cases` (filterable by `category`) |
 | Evals | `POST /evals/run` (SSE), `GET /evals/runs[/{id}/results]`, `PATCH /evals/results/{id}` |
 | Config | `GET/POST /config/hf-api-key`, `GET /config/hardware` |
+
+## Frontend
+
+Vite + React + TypeScript in `frontend/`, plain CSS (no component library).
+
+```
+frontend/src/
+├── api/          # client.ts (fetch + ApiError), sse.ts, types.ts, endpoints.ts, hooks.ts
+├── lib/          # formatting, the eval pass rule, per-backend labels/guarantees
+├── styles/       # tokens.css (design tokens) + global.css (shared utility classes)
+├── components/   # primitives, Topbar, AppShell
+├── pages/<screen>/  # one folder per route; page-specific hooks and CSS Modules live here
+└── routes.tsx    # route table under AppShell
+```
+
+- **API access**: every call goes to `/api/...`; the Vite dev server proxies that to
+  `localhost:8000` with the prefix stripped, so the backend needs no CORS config.
+  `types.ts` mirrors the backend models; `endpoints.ts` has one typed function per
+  endpoint. Non-2xx responses throw `ApiError` (status, code, message, details from the
+  `{error: {...}}` shape).
+- **SSE over fetch**: `POST /chat/stream` and `POST /evals/run` stream SSE from a POST,
+  which `EventSource` can't send, so `postSse` reads the fetch body stream and parses
+  `data:` events itself (abortable via `AbortSignal`).
+- **Server state**: TanStack Query. Shared hooks (hardware, HF key status) live in
+  `api/hooks.ts`; each page keeps its own.
+- **Routing**: React Router — `/` (Radar), `/models/:author/:name`, `/playground`
+  (`?model=&backend=&quant=`), `/evals`, `/evals/runs/:runId`, `/dataset`, `/library`.
+- **Endpoints added for the UI**: `GET /models/downloads?active=` (download jobs, newest
+  first) and `GET /evals/report` (pass rate and reliability per model, backend and
+  category, latest result per case). `lib/evalPass.ts` mirrors the report's pass rule.
 
 ## Error handling
 

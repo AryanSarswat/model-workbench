@@ -4,10 +4,10 @@ Context for any coding agent (or human) working in this repo.
 
 ## What this is
 
-A backend-first project. See [docs/architecture.md](docs/architecture.md) for the full
-design and [docs/usage.md](docs/usage.md) for setup/run/test commands. Do not build
-frontend code yet — the backend is being completed first, end-to-end, before Phase 2
-(frontend) starts.
+A FastAPI backend (`backend/`) and a Vite + React frontend (`frontend/`). The backend
+(Phase 1) is complete; Phase 2, the frontend, is in progress. See
+[docs/architecture.md](docs/architecture.md) for the full design and
+[docs/usage.md](docs/usage.md) for setup/run/test commands.
 
 ## Working conventions
 
@@ -20,8 +20,9 @@ frontend code yet — the backend is being completed first, end-to-end, before P
   Living reference docs belong in `docs/*.md` and should be kept up to date as the
   architecture evolves; specs/plans (if produced during a work session) are gitignored
   under `docs/superpowers/`.
-- **CI must stay green.** Every push runs lint (`ruff check`), `pytest --cov`, and a Docker
-  build-and-boot check via GitHub Actions (`.github/workflows/ci.yml`). Both `backend` and
+- **CI must stay green.** Every push runs lint (`ruff check`), `pytest --cov`, the
+  frontend's lint/typecheck/test/build, and a Docker build-and-boot check via GitHub
+  Actions (`.github/workflows/ci.yml`, jobs `backend`, `frontend`, `docker`). `backend` and
   `docker` are required status checks on `main` — a PR literally cannot merge until they pass.
 - **Private dataset never gets committed.** `data/test_cases/` and `data/*.db` are
   gitignored. Only `data/test_cases.template.json` is tracked.
@@ -61,11 +62,17 @@ make lint            # ruff check
 make run             # run the API (from repo root)
 make docker-build    # build the backend image
 make docker-run      # run the backend image
-make ci              # everything both CI jobs (`backend` + `docker`) run, end to end
+make fe-setup        # cd frontend && npm ci
+make fe-dev          # Vite dev server (proxies /api to `make run` on :8000)
+make fe-test         # vitest
+make fe-lint         # eslint + tsc
+make fe-build        # production build
+make ci              # everything the CI jobs (`backend`, `frontend`, `docker`) run, end to end
 ```
 
 **Run `make ci` before opening a PR.** It runs the exact backend lint/test/coverage
-sequence and the Docker build/boot/health check that `.github/workflows/ci.yml` runs — a
+sequence, the frontend checks, and the Docker build/boot/health check that
+`.github/workflows/ci.yml` runs — a
 pass locally means the PR checks will pass, catching a Docker-only failure before pushing
 instead of after.
 
