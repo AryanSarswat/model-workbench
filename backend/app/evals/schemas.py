@@ -5,6 +5,8 @@ storage.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -16,7 +18,7 @@ class EvalRunRequest(BaseModel):
 
 
 class ManualVerdictUpdate(BaseModel):
-    manual_verdict: str | None = None
+    manual_verdict: Literal["pass", "fail"] | None = None  # the report's pass rule reads these
     manual_notes: str | None = None
 
 
