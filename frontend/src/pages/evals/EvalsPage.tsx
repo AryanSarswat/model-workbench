@@ -11,7 +11,7 @@ import { BACKENDS, BACKEND_NAMES, type BackendInfo } from '../../lib/backends'
 import type { ActiveEvalRun } from './activeRun'
 import { aggregateReport, type EvalMatrix, type MatrixCell } from './aggregateReport'
 import styles from './EvalsPage.module.css'
-import { useActiveEvalRun, useDatasetCategories, useDownloadedRepoIds, useEvalReport, useStartEvalRun } from './queries'
+import { useActiveEvalRun, useDatasetCategories, useDownloadedModels, useEvalReport, useStartEvalRun } from './queries'
 import { buildRunRequest, modelIdSuggestions, sortedCategories, type RunFormState } from './runForm'
 
 export default function EvalsPage() {
@@ -54,12 +54,12 @@ function RunForm({ activeRun }: { activeRun: ActiveEvalRun | null }) {
     judgeModelId: '',
   })
 
-  const downloadedQuery = useDownloadedRepoIds()
+  const downloadedQuery = useDownloadedModels()
   const reportQuery = useEvalReport()
   const categoriesQuery = useDatasetCategories()
   const startRun = useStartEvalRun()
 
-  const modelSuggestions = modelIdSuggestions(downloadedQuery.data ?? [], (reportQuery.data ?? []).map((row) => row.model_id))
+  const modelSuggestions = modelIdSuggestions(form.backend, downloadedQuery.data ?? [], reportQuery.data ?? [])
   const categories = sortedCategories(categoriesQuery.data ?? [])
   const alreadyRunning = activeRun?.status === 'streaming'
 
@@ -137,6 +137,20 @@ function RunningStrip({ activeRun }: { activeRun: ActiveEvalRun }) {
   if (activeRun.status === 'error') {
     return <ErrorNotice error={new Error(activeRun.error ?? 'The eval run failed.')} />
   }
+  if (activeRun.status === 'done') {
+    return (
+      <section aria-label="Finished run" className={styles.finished}>
+        <span>
+          Finished · <strong>{activeRun.request.model_id}</strong> · {BACKENDS[activeRun.request.backend ?? 'api'].label}
+        </span>
+        {activeRun.runId != null && (
+          <Link to={`/evals/runs/${activeRun.runId}`} className={styles.watchLink}>
+            View results
+          </Link>
+        )}
+      </section>
+    )
+  }
   if (activeRun.event == null) return null
   const { event, request, runId } = activeRun
   const percent = event.total > 0 ? (event.completed / event.total) * 100 : 0
@@ -195,14 +209,11 @@ function ComparisonMatrix({ matrix }: { matrix: EvalMatrix }) {
       </div>
 
       {matrix.rows.map((row) => (
-        <Link
-          key={`${row.modelId}\u0000${row.backend}`}
-          to={`/evals/runs/${row.latestRunId}`}
-          className={styles.row}
-          style={{ gridTemplateColumns }}
-        >
+        <div key={`${row.modelId}\u0000${row.backend}`} className={styles.row} style={{ gridTemplateColumns }}>
           <div className={styles.rowHead}>
-            <span className={styles.modelId}>{row.modelId}</span>
+            <Link to={`/evals/runs/${row.latestRunId}`} className={styles.modelId}>
+              {row.modelId}
+            </Link>
             <span>
               <Chip tone="idle">{BACKENDS[row.backend].label}</Chip>
             </span>
@@ -214,7 +225,7 @@ function ComparisonMatrix({ matrix }: { matrix: EvalMatrix }) {
           <div className={styles.tokValue}>{row.tokensPerSec != null ? row.tokensPerSec.toFixed(1) : '—'}</div>
           <MetricBar value={row.toolCallReliability} />
           <MetricBar value={row.structuredOutputReliability} modeWord={modeWord(BACKENDS[row.backend].structuredOutputMode)} />
-        </Link>
+        </div>
       ))}
     </section>
   )

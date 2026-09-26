@@ -1,7 +1,9 @@
 // Queries and mutations used by ReviewPage.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
 import { getCase, getEvalRunResults, listEvalRuns, updateEvalResult } from '../../api/endpoints'
 import type { ManualVerdictUpdate } from '../../api/types'
+import { reportKey } from '../evals/activeRun'
 
 const reviewKeys = {
   run: (runId: number) => ['eval-review', 'run', runId] as const,
@@ -20,6 +22,18 @@ export function useEvalRun(runId: number) {
 }
 
 export function useEvalRunResults(runId: number, isRunning: boolean) {
+  const queryClient = useQueryClient()
+  // The 2s polls of this query and of the run's own status aren't synchronized, so the
+  // run can flip out of "running" right after a results poll and before the next one --
+  // missing whichever case completed last. Refetch once more the moment that happens.
+  const wasRunning = useRef(isRunning)
+  useEffect(() => {
+    if (wasRunning.current && !isRunning) {
+      queryClient.invalidateQueries({ queryKey: reviewKeys.results(runId) })
+    }
+    wasRunning.current = isRunning
+  }, [isRunning, runId, queryClient])
+
   return useQuery({
     queryKey: reviewKeys.results(runId),
     queryFn: () => getEvalRunResults(runId),
@@ -27,17 +41,10 @@ export function useEvalRunResults(runId: number, isRunning: boolean) {
   })
 }
 
-// The Prompt panel's actual fetch for the selected case. 404 means the case was since
-// deleted from the dataset -- the page shows a fallback message for that, not an error.
+// The Prompt panel's fetch for the selected case. 404 means the case was since deleted
+// from the dataset -- the page shows a fallback message for that, not an error.
 export function useCase(caseId: string) {
   return useQuery({ queryKey: reviewKeys.case(caseId), queryFn: () => getCase(caseId), retry: false })
-}
-
-// A passive read of whatever useCase() has already cached for this case, used by the
-// case list to show a one-line prompt snippet only when it's already been fetched --
-// never triggers its own request.
-export function useCachedCase(caseId: string) {
-  return useQuery({ queryKey: reviewKeys.case(caseId), queryFn: () => getCase(caseId), enabled: false, staleTime: Infinity })
 }
 
 export function useUpdateEvalResult(runId: number) {
@@ -46,8 +53,7 @@ export function useUpdateEvalResult(runId: number) {
     mutationFn: ({ resultId, update }: { resultId: number; update: ManualVerdictUpdate }) => updateEvalResult(resultId, update),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: reviewKeys.results(runId) })
-      // Must match EvalsPage's report query key so the matrix picks up the new verdict.
-      queryClient.invalidateQueries({ queryKey: ['evals', 'report'] })
+      queryClient.invalidateQueries({ queryKey: reportKey })
     },
   })
 }

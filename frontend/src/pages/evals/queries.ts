@@ -16,10 +16,10 @@ export function useDatasetCategories() {
   })
 }
 
-export function useDownloadedRepoIds() {
+export function useDownloadedModels() {
   return useQuery({
-    queryKey: ['evals', 'downloaded-repo-ids'] as const,
-    queryFn: async () => (await listDownloaded()).map((record) => record.repo_id),
+    queryKey: ['evals', 'downloaded-models'] as const,
+    queryFn: listDownloaded,
   })
 }
 

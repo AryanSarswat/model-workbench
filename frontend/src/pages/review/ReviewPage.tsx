@@ -9,7 +9,7 @@ import { BACKENDS } from '../../lib/backends'
 import { resultPassed } from '../../lib/evalPass'
 import { formatRelative } from '../../lib/format'
 import styles from './ReviewPage.module.css'
-import { useCachedCase, useCase, useEvalRun, useEvalRunResults, useUpdateEvalResult } from './queries'
+import { useCase, useEvalRun, useEvalRunResults, useUpdateEvalResult } from './queries'
 import {
   countByStatus,
   filterResults,
@@ -34,8 +34,14 @@ export default function ReviewPage() {
   const run = runQuery.data ?? null
   const counts = countByStatus(results)
   const filtered = filterResults(results, filter)
-  const selectedCaseId = searchParams.get('case') ?? results[0]?.case_id ?? null
-  const selectedResult = results.find((result) => result.case_id === selectedCaseId) ?? null
+
+  // A selection the current filter hides (or that no longer exists) is treated as
+  // cleared: fall back to the first row that's actually visible in the list, so the
+  // detail panel always matches what's highlighted (or "No cases match this filter"
+  // when the filtered list is empty).
+  const requestedCaseId = searchParams.get('case')
+  const selectedCaseId = filtered.some((result) => result.case_id === requestedCaseId) ? requestedCaseId : (filtered[0]?.case_id ?? null)
+  const selectedResult = filtered.find((result) => result.case_id === selectedCaseId) ?? null
 
   function selectCase(caseId: string) {
     const next = new URLSearchParams(searchParams)
@@ -44,7 +50,7 @@ export default function ReviewPage() {
   }
 
   function goToNextUnreviewed() {
-    const nextId = nextUnreviewedCaseId(results, selectedCaseId)
+    const nextId = nextUnreviewedCaseId(filtered, selectedCaseId)
     if (nextId) selectCase(nextId)
   }
 
@@ -137,14 +143,12 @@ export default function ReviewPage() {
 }
 
 function CaseRow({ result, selected, onSelect }: { result: EvalResult; selected: boolean; onSelect: () => void }) {
-  const cached = useCachedCase(result.case_id)
-  const snippet = cached.data ? lastUserMessage(cached.data) : null
   const passed = resultPassed(result)
   return (
     <button type="button" className={styles.caseRow} aria-current={selected} onClick={onSelect}>
       <span className={styles.caseId}>{result.case_id}</span>
       <Chip tone={passed ? 'fit' : 'nofit'}>{passed ? 'pass' : 'fail'}</Chip>
-      <span className={styles.caseSnippet}>{snippet ?? result.category}</span>
+      <span className={styles.caseSnippet}>{result.category}</span>
     </button>
   )
 }
