@@ -1,9 +1,17 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '../../api/client'
-import { getEvalReport, getFeasibility, getModel, listDownloadJobs, listDownloaded, startDownload } from '../../api/endpoints'
-import type { DownloadJob, DownloadRequest, DownloadedModelRecord, EvalReportRow, FeasibilityOption, ModelDetail } from '../../api/types'
+import { getDownloadJob, getEvalReport, getModel, listDownloadJobs, listDownloaded, startDownload } from '../../api/endpoints'
+import type {
+  DownloadJob,
+  DownloadRequest,
+  DownloadedModelRecord,
+  EvalReportRow,
+  FeasibilityOption,
+  FeasibilityReport,
+  ModelDetail,
+} from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
@@ -13,7 +21,7 @@ import { ProgressBar } from '../../components/ProgressBar'
 import { BACKENDS } from '../../lib/backends'
 import { formatCount, formatRelative } from '../../lib/format'
 import { GaugeAxisLabels, MemoryGauge } from '../radar/MemoryGauge'
-import { VERDICT_CHIP_TONE, VERDICT_LABEL } from '../radar/gauge'
+import { VERDICT_CHIP_TONE, VERDICT_LABEL, feasibilityQueryOptions } from '../radar/gauge'
 import styles from './ModelPage.module.css'
 import {
   bestEvalBackend,
@@ -28,7 +36,10 @@ import {
   splitModelId,
 } from './modelHelpers'
 
-const FEASIBILITY_STALE_TIME = 10 * 60 * 1000
+interface FailedDownload {
+  id: number
+  message: string
+}
 
 export default function ModelPage() {
   const { author, name } = useParams()
@@ -49,11 +60,7 @@ function ModelPageBody({ modelId }: { modelId: string }) {
   const queryClient = useQueryClient()
 
   const modelQuery = useQuery({ queryKey: ['models', modelId], queryFn: () => getModel(modelId) })
-  const feasibilityQuery = useQuery({
-    queryKey: ['models', modelId, 'feasibility'],
-    queryFn: () => getFeasibility(modelId),
-    staleTime: FEASIBILITY_STALE_TIME,
-  })
+  const feasibilityQuery = useQuery(feasibilityQueryOptions(modelId))
   const downloadedQuery = useQuery({ queryKey: ['models', 'downloaded'], queryFn: listDownloaded })
   const activeJobsQuery = useQuery({
     queryKey: ['models', 'downloads', 'active'],
@@ -65,23 +72,46 @@ function ModelPageBody({ modelId }: { modelId: string }) {
   })
   const evalReportQuery = useQuery({ queryKey: ['evals', 'report'], queryFn: getEvalReport })
 
-  // listDownloadJobs(true) only returns pending/downloading jobs, so a completed download
-  // simply disappears from it on the next poll -- invalidate the downloaded-models list so
-  // that row flips from "downloading" to "on disk".
-  const previousActiveJobIds = useRef<Set<number>>(new Set())
+  const modelActiveJobs = useMemo(
+    () => (activeJobsQuery.data ?? []).filter((job) => job.repo_id === modelId),
+    [activeJobsQuery.data, modelId],
+  )
+
+  // listDownloadJobs(true) only returns pending/downloading jobs, so a finished download
+  // (whether it completed or failed) simply disappears from it on the next poll. Track
+  // every job id we've seen active for this model -- starting with the id the download
+  // mutation returns, so a job that finishes before the very next poll (racing the 202)
+  // is still caught -- and once a tracked id drops out of the active list, ask the backend
+  // for its final status: completed invalidates the downloaded-models list so the row
+  // flips to "on disk"; failed surfaces its error.
+  const trackedJobIds = useRef<Set<number>>(new Set())
+  const [failedDownloads, setFailedDownloads] = useState<FailedDownload[]>([])
+
   useEffect(() => {
-    const currentIds = new Set((activeJobsQuery.data ?? []).map((job) => job.id))
-    const justCompleted = [...previousActiveJobIds.current].some((id) => !currentIds.has(id))
-    if (justCompleted) {
-      queryClient.invalidateQueries({ queryKey: ['models', 'downloaded'] })
-      queryClient.invalidateQueries({ queryKey: ['models', 'downloads', 'active'] })
-    }
-    previousActiveJobIds.current = currentIds
-  }, [activeJobsQuery.data, queryClient])
+    for (const job of modelActiveJobs) trackedJobIds.current.add(job.id)
+    const currentIds = new Set(modelActiveJobs.map((job) => job.id))
+    const finishedIds = [...trackedJobIds.current].filter((id) => !currentIds.has(id))
+    if (finishedIds.length === 0) return
+    finishedIds.forEach((id) => trackedJobIds.current.delete(id))
+    void Promise.all(
+      finishedIds.map(async (id) => {
+        const job = await getDownloadJob(id)
+        if (job.status === 'completed') {
+          queryClient.invalidateQueries({ queryKey: ['models', 'downloaded'] })
+        } else if (job.status === 'failed') {
+          const label = job.filename ?? 'snapshot'
+          setFailedDownloads((prev) => [...prev, { id, message: `${label}: ${job.error ?? 'Download failed.'}` }])
+        }
+      }),
+    )
+  }, [modelActiveJobs, queryClient])
 
   const downloadMutation = useMutation({
     mutationFn: (request: DownloadRequest) => startDownload(modelId, request),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['models', 'downloads', 'active'] }),
+    onSuccess: (job) => {
+      trackedJobIds.current.add(job.id)
+      queryClient.invalidateQueries({ queryKey: ['models', 'downloads', 'active'] })
+    },
   })
 
   if (modelQuery.isPending) {
@@ -103,7 +133,6 @@ function ModelPageBody({ modelId }: { modelId: string }) {
 
   const detail = modelQuery.data
   const downloaded = downloadedQuery.data ?? []
-  const activeJobs = (activeJobsQuery.data ?? []).filter((job) => job.repo_id === modelId)
 
   return (
     <main className={styles.main}>
@@ -114,12 +143,14 @@ function ModelPageBody({ modelId }: { modelId: string }) {
           detail={detail}
           feasibilityQuery={feasibilityQuery}
           downloaded={downloaded}
-          activeJobs={activeJobs}
+          activeJobs={modelActiveJobs}
           onDownload={(request) => downloadMutation.mutate(request)}
+          downloadPending={downloadMutation.isPending}
           downloadError={downloadMutation.error}
+          failedDownloads={failedDownloads}
         />
         <aside className={styles.aside}>
-          <DownloadingCard jobs={activeJobs} />
+          <DownloadingCard jobs={modelActiveJobs} />
           <EvalHistoryCard modelId={modelId} evalReportQuery={evalReportQuery} />
         </aside>
       </div>
@@ -178,15 +209,19 @@ function WaysToRunIt({
   downloaded,
   activeJobs,
   onDownload,
+  downloadPending,
   downloadError,
+  failedDownloads,
 }: {
   modelId: string
   detail: ModelDetail
-  feasibilityQuery: UseQueryResult<{ available_memory_gb: number; options: FeasibilityOption[] }>
+  feasibilityQuery: UseQueryResult<FeasibilityReport>
   downloaded: DownloadedModelRecord[]
   activeJobs: DownloadJob[]
   onDownload: (request: DownloadRequest) => void
+  downloadPending: boolean
   downloadError: unknown
+  failedDownloads: FailedDownload[]
 }) {
   return (
     <section aria-labelledby="ways" className={styles.waysSection}>
@@ -204,17 +239,20 @@ function WaysToRunIt({
       {feasibilityQuery.isPending && <p>Loading feasibility…</p>}
       {feasibilityQuery.isError && <ErrorNotice error={feasibilityQuery.error} />}
       {downloadError != null && <ErrorNotice error={downloadError} />}
+      {failedDownloads.map((failed) => (
+        <ErrorNotice key={failed.id} error={new Error(failed.message)} />
+      ))}
 
       {feasibilityQuery.data && (
         <>
-          <div role="row" className={styles.optionsHeaderRow}>
-            <div className="eyebrow" role="columnheader">Option</div>
-            <div className="eyebrow" role="columnheader">Backend</div>
-            <div role="columnheader">
+          <div className={styles.optionsHeaderRow}>
+            <div className="eyebrow">Option</div>
+            <div className="eyebrow">Backend</div>
+            <div>
               <GaugeAxisLabels usableMemoryGb={feasibilityQuery.data.available_memory_gb} />
             </div>
-            <div className="eyebrow" role="columnheader">Verdict</div>
-            <div role="columnheader" />
+            <div className="eyebrow">Verdict</div>
+            <div />
           </div>
 
           {feasibilityQuery.data.options.map((option) => (
@@ -227,20 +265,21 @@ function WaysToRunIt({
               downloaded={downloaded}
               activeJobs={activeJobs}
               onDownload={onDownload}
+              downloadPending={downloadPending}
             />
           ))}
         </>
       )}
 
-      <div role="row" className={styles.optionRow}>
-        <div role="cell" className={styles.optionCell}>
+      <div className={styles.optionRow}>
+        <div className={styles.optionCell}>
           <div className={styles.optionLabel}>Hugging Face Inference API</div>
           <div className={styles.optionReason}>Runs remotely. Works if HF routes this model to an enabled provider.</div>
         </div>
-        <div role="cell" className={styles.optionBackend}>api</div>
-        <div role="cell" className={styles.optionReason}>No local memory used</div>
-        <div role="cell"><Chip tone="idle">Remote</Chip></div>
-        <div role="cell" className={styles.actionCell}>
+        <div className={styles.optionBackend}>api</div>
+        <div className={styles.optionReason}>No local memory used</div>
+        <div><Chip tone="idle">Remote</Chip></div>
+        <div className={styles.actionCell}>
           <Button to={optionPlaygroundLink(modelId, 'api')} className={styles.actionButton}>
             Chat via API
           </Button>
@@ -258,6 +297,7 @@ function OptionRow({
   downloaded,
   activeJobs,
   onDownload,
+  downloadPending,
 }: {
   modelId: string
   detail: ModelDetail
@@ -266,6 +306,7 @@ function OptionRow({
   downloaded: DownloadedModelRecord[]
   activeJobs: DownloadJob[]
   onDownload: (request: DownloadRequest) => void
+  downloadPending: boolean
 }) {
   const backend = optionBackend(option.label)
   const isSnapshot = backend === 'transformers'
@@ -276,21 +317,19 @@ function OptionRow({
   const sizeLabel = optionSizeLabel(option, detail)
 
   return (
-    <div role="row" className={styles.optionRow}>
-      <div role="cell" className={styles.optionCell}>
+    <div className={styles.optionRow}>
+      <div className={styles.optionCell}>
         <div className={styles.optionLabel}>{option.label}</div>
         <div className={styles.optionReason}>{sizeLabel ? `${sizeLabel} · ${option.reason}` : option.reason}</div>
       </div>
-      <div role="cell" className={styles.optionBackend}>
-        {backend}
-      </div>
-      <div role="cell">
+      <div className={styles.optionBackend}>{backend}</div>
+      <div>
         <MemoryGauge lo={0} hi={option.estimated_memory_gb} usableMemoryGb={usableMemoryGb} />
       </div>
-      <div role="cell">
+      <div>
         <Chip tone={VERDICT_CHIP_TONE[option.verdict]}>{VERDICT_LABEL[option.verdict]}</Chip>
       </div>
-      <div role="cell" className={styles.actionCell}>
+      <div className={styles.actionCell}>
         {onDisk ? (
           <Button to={optionPlaygroundLink(modelId, backend, filename)} variant="solid" className={styles.actionButton}>
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -304,7 +343,11 @@ function OptionRow({
             <ProgressBar value={activeJob.percent} label={`${option.label} download progress`} height={4} />
           </div>
         ) : (
-          <Button className={styles.actionButton} onClick={() => onDownload(isSnapshot ? { snapshot: true } : { filename })}>
+          <Button
+            className={styles.actionButton}
+            disabled={downloadPending}
+            onClick={() => onDownload(isSnapshot ? { snapshot: true } : { filename })}
+          >
             {isSnapshot ? 'Get snapshot' : 'Download'}
           </Button>
         )}

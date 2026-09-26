@@ -147,4 +147,64 @@ describe('ModelPage', () => {
       ),
     )
   })
+
+  it('flips a row to On disk · Chat once its active job drops out of the active list', async () => {
+    let activePolls = 0
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/models/downloads?active=true') {
+        activePolls += 1
+        return activePolls === 1 ? Response.json([activeJob]) : Response.json([])
+      }
+      if (url === '/api/models/downloads/7') {
+        return Response.json({ ...activeJob, status: 'completed', percent: 100 })
+      }
+      if (url === '/api/models/downloaded') {
+        return activePolls < 2 ? Response.json([]) : Response.json([downloadedRecord])
+      }
+      const responses = withCommon({})
+      return responses[url] ?? new Response('not mocked', { status: 500 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={createMemoryRouter(routes, { initialEntries: ['/models/Qwen/Qwen3-14B'] })} />
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('Downloading 62%')).toBeInTheDocument()
+
+    // The job disappears from the next 1s poll; the page asks for its final status and,
+    // since it completed, invalidates the downloaded list so the row flips over.
+    expect(
+      await screen.findByRole('link', { name: /On disk · Chat/ }, { timeout: 3000 }),
+    ).toHaveAttribute('href', '/playground?model=Qwen%2FQwen3-14B&backend=gguf&quant=Qwen3-14B-Q4_K_M.gguf')
+  })
+
+  it('surfaces a failed download error once the job drops out of the active list', async () => {
+    let activePolls = 0
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/models/downloads?active=true') {
+        activePolls += 1
+        return activePolls === 1 ? Response.json([activeJob]) : Response.json([])
+      }
+      if (url === '/api/models/downloads/7') {
+        return Response.json({ ...activeJob, status: 'failed', percent: 40, error: 'Disk full' })
+      }
+      const responses = withCommon({ '/api/models/downloaded': Response.json([]) })
+      return responses[url] ?? new Response('not mocked', { status: 500 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={createMemoryRouter(routes, { initialEntries: ['/models/Qwen/Qwen3-14B'] })} />
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('Downloading 62%')).toBeInTheDocument()
+    expect(await screen.findByText(/Disk full/, undefined, { timeout: 3000 })).toBeInTheDocument()
+  })
 })
