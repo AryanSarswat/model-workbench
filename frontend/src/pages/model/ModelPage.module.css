@@ -1,0 +1,259 @@
+.main {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 32px 40px 0;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 40px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.breadcrumb {
+  display: flex;
+  gap: 8px;
+}
+
+.breadcrumbLink {
+  color: var(--ink-3);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 64px;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.metaId {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+
+.tagsRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.content {
+  flex-grow: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 48px;
+  min-height: 0;
+}
+
+.waysSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.waysHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.waysTitle {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 26px;
+}
+
+.waysSubtitle {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.optionsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 220px 92px 124px;
+  column-gap: 20px;
+  align-items: center;
+}
+
+.optionsHeaderRow {
+  composes: optionsGrid;
+  align-items: end;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.optionRow {
+  composes: optionsGrid;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.optionCell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.optionLabel {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.optionReason {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.optionBackend {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.actionCell {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.actionButton {
+  width: 124px;
+}
+
+.downloadProgress {
+  width: 124px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.downloadPercent {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--live);
+}
+
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+.downloadingCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.downloadingJobHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.downloadingFilename {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.downloadingDetail {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.historySection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.historyHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.historyTitle {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 22px;
+}
+
+.historyBackend {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.historyRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 52px;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.historyBarTrack {
+  height: 6px;
+  background: var(--track);
+}
+
+.historyBarFill {
+  height: 6px;
+  background: var(--seg-fit);
+}
+
+.historyPct {
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: right;
+}
+
+.historyFooter {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.historyEmpty {
+  font-size: 13px;
+  color: var(--ink-2);
+}
