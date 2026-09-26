@@ -73,7 +73,7 @@ export function useChatStream() {
               type: 'done',
               id: assistantId,
               usage: chunk.usage,
-              toolsCalled: chunk.tools_called,
+              toolCalls: chunk.tool_calls,
               retries: chunk.retries,
               metrics: { ttftMs: firstDeltaAt !== null ? firstDeltaAt - startedAt : null, tokensPerSec, totalMs },
             })

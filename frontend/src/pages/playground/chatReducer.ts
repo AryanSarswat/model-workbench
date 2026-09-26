@@ -1,4 +1,4 @@
-import type { BackendName, ChatMessage, TokenUsage } from '../../api/types'
+import type { BackendName, ChatMessage, TokenUsage, ToolCallRecord } from '../../api/types'
 
 export interface TurnMetrics {
   ttftMs: number | null // request start -> first non-empty delta
@@ -13,7 +13,7 @@ export interface ChatTurn {
   streaming: boolean
   stopped: boolean // settled by an aborted Stop, not by done/error
   error: unknown // rendered via <ErrorNotice>; null when the turn has no error
-  toolsCalled: string[]
+  toolCalls: ToolCallRecord[]
   retries: number
   usage: TokenUsage | null
   metrics: TurnMetrics | null
@@ -25,7 +25,7 @@ export interface ChatTurn {
 export type ChatAction =
   | { type: 'send'; userId: string; assistantId: string; content: string; hadSchema: boolean; modelId: string; backend: BackendName }
   | { type: 'delta'; id: string; text: string }
-  | { type: 'done'; id: string; usage: TokenUsage | null; toolsCalled: string[]; retries: number; metrics: TurnMetrics }
+  | { type: 'done'; id: string; usage: TokenUsage | null; toolCalls: ToolCallRecord[]; retries: number; metrics: TurnMetrics }
   | { type: 'error'; id: string; error: unknown }
   | { type: 'stop'; id: string }
   | { type: 'reset' }
@@ -46,7 +46,7 @@ function newTurn(
     streaming,
     stopped: false,
     error: null,
-    toolsCalled: [],
+    toolCalls: [],
     retries: 0,
     usage: null,
     metrics: null,
@@ -71,7 +71,7 @@ export function chatReducer(state: ChatTurn[], action: ChatAction): ChatTurn[] {
     case 'done':
       return state.map((turn) =>
         turn.id === action.id
-          ? { ...turn, streaming: false, usage: action.usage, toolsCalled: action.toolsCalled, retries: action.retries, metrics: action.metrics }
+          ? { ...turn, streaming: false, usage: action.usage, toolCalls: action.toolCalls, retries: action.retries, metrics: action.metrics }
           : turn,
       )
     case 'error':

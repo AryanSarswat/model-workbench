@@ -1,4 +1,6 @@
-import { Chip } from '../../components/Chip'
+import { useState } from 'react'
+import type { ToolCallRecord } from '../../api/types'
+import { Chip, type ChipTone } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { LiveDot } from '../../components/LiveDot'
 import { NATIVE_TOOL_CALLING } from './capabilities'
@@ -32,7 +34,7 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
   const toolsNative = NATIVE_TOOL_CALLING[turn.backend]
   const toolsChipLabel = toolsNative ? 'native' : 'fallback'
   const toolsChipTone = toolsNative ? 'fit' : 'tight'
-  const showToolBlocks = turn.toolsCalled.length > 0
+  const showToolBlocks = turn.toolCalls.length > 0
   const settled = !turn.streaming && !turn.error
 
   let schemaBlock: { valid: boolean; body: string } | null = null
@@ -52,13 +54,8 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
 
       {showToolBlocks && (
         <>
-          {turn.toolsCalled.map((name, index) => (
-            <div key={`${name}-${index}`} className={styles.block}>
-              <div className={styles.blockHeader}>
-                <span className={styles.blockTitle}>tool call · {name}</span>
-                <Chip tone={toolsChipTone}>{toolsChipLabel}</Chip>
-              </div>
-            </div>
+          {turn.toolCalls.map((call, index) => (
+            <ToolCallCard key={index} call={call} modeLabel={toolsChipLabel} modeTone={toolsChipTone} />
           ))}
           {turn.retries > 0 && <p className={styles.retriesNote}>retried {turn.retries}×</p>}
         </>
@@ -101,6 +98,52 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
 
       {turn.error != null && <ErrorNotice error={turn.error} />}
     </article>
+  )
+}
+
+// Longer results start collapsed to a preview; the full text is one click away.
+const PREVIEW_CHARS = 280
+
+function ToolCallCard({ call, modeLabel, modeTone }: { call: ToolCallRecord; modeLabel: string; modeTone: ChipTone }) {
+  const [expanded, setExpanded] = useState(false)
+  // Tools report failure as an "Error: ..." result rather than raising (see backend app/tools).
+  const failed = call.result.startsWith('Error:')
+  const collapsible = call.result.length > PREVIEW_CHARS
+  const shown = collapsible && !expanded ? `${call.result.slice(0, PREVIEW_CHARS)}…` : call.result
+
+  return (
+    <div className={[styles.block, failed && styles.blockFailed].filter(Boolean).join(' ')}>
+      <div className={styles.blockHeader}>
+        <span className={styles.blockTitle}>tool call · {call.name}</span>
+        <span className={styles.chips}>
+          <Chip tone={modeTone}>{modeLabel}</Chip>
+          <Chip tone={failed ? 'nofit' : 'fit'}>{failed ? 'error' : `ok · ${call.result.length.toLocaleString()} chars`}</Chip>
+        </span>
+      </div>
+      {Object.keys(call.arguments).length > 0 && (
+        <dl className={styles.args}>
+          {Object.entries(call.arguments).map(([key, value]) => (
+            <div key={key} className={styles.arg}>
+              <dt>{key}</dt>
+              <dd>{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <div className={styles.result}>
+        <div className={styles.resultMeta}>
+          <span>result · sent to model</span>
+          <span>{formatMs(call.duration_ms)}</span>
+        </div>
+        <pre className={[styles.code, failed && styles.errorText].filter(Boolean).join(' ')}>{shown}</pre>
+        {failed && <p className={styles.resultNote}>The model received this error as the tool's result.</p>}
+        {collapsible && (
+          <button type="button" className={styles.toggle} onClick={() => setExpanded(!expanded)}>
+            {expanded ? 'Show less' : 'Show full result'}
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 

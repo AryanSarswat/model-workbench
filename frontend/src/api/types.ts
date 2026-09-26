@@ -118,14 +118,24 @@ export interface TokenUsage {
   completion_tokens: number
 }
 
-// One SSE event of POST /chat/stream. usage/tools_called/retries are set on the
-// terminal (done) chunk only.
+// One executed tool call. `result` is exactly the text the model was sent back
+// ("Error: ..." when the tool failed).
+export interface ToolCallRecord {
+  name: string
+  arguments: Record<string, unknown>
+  result: string
+  duration_ms: number
+}
+
+// One SSE event of POST /chat/stream. usage/tools_called/tool_calls/retries are set
+// on the terminal (done) chunk only.
 export interface ChatChunk {
   delta: string
   done: boolean
   error: string | null
   usage: TokenUsage | null
   tools_called: string[]
+  tool_calls: ToolCallRecord[]
   retries: number
 }
 

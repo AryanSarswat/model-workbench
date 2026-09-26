@@ -42,9 +42,9 @@ function renderPlayground(initialEntry: string, chatEvents: object[], downloaded
 describe('PlaygroundPage', () => {
   it('sends a message and renders the streamed reply with its metrics', async () => {
     const fetchMock = renderPlayground('/playground?model=Qwen%2FQwen3-14B&backend=api', [
-      { delta: 'Hel', done: false, error: null, usage: null, tools_called: [], retries: 0 },
-      { delta: 'lo', done: false, error: null, usage: null, tools_called: [], retries: 0 },
-      { delta: '', done: true, error: null, usage: { prompt_tokens: 10, completion_tokens: 5 }, tools_called: [], retries: 0 },
+      { delta: 'Hel', done: false, error: null, usage: null, tools_called: [], tool_calls: [], retries: 0 },
+      { delta: 'lo', done: false, error: null, usage: null, tools_called: [], tool_calls: [], retries: 0 },
+      { delta: '', done: true, error: null, usage: { prompt_tokens: 10, completion_tokens: 5 }, tools_called: [], tool_calls: [], retries: 0 },
     ])
 
     await screen.findByText('calculator') // tools loaded
@@ -67,6 +67,41 @@ describe('PlaygroundPage', () => {
       tools: null,
       output_schema: null,
     })
+  })
+
+  it('shows each tool call with its arguments and the result the model was sent back', async () => {
+    const url = 'https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409'
+    const page = 'x'.repeat(2000)
+    renderPlayground('/playground?model=org%2Fmodel&backend=api', [
+      { delta: 'Sorry, I cannot.', done: false, error: null, usage: null, tools_called: [], tool_calls: [], retries: 0 },
+      {
+        delta: '',
+        done: true,
+        error: null,
+        usage: null,
+        tools_called: ['web_fetch', 'web_fetch'],
+        tool_calls: [
+          { name: 'web_fetch', arguments: { url }, result: 'Error: HTTP Error 403: Forbidden', duration_ms: 412 },
+          { name: 'web_fetch', arguments: { url: 'https://example.com/' }, result: page, duration_ms: 700 },
+        ],
+        retries: 0,
+      },
+    ])
+    await screen.findByText('calculator')
+
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'weather?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    // A failed call is visibly a failure, with the URL it was asked for -- not just a tool name.
+    expect(await screen.findByText(url)).toBeInTheDocument()
+    expect(screen.getByText('Error: HTTP Error 403: Forbidden')).toBeInTheDocument()
+    expect(screen.getByText('error')).toBeInTheDocument()
+    expect(screen.getByText('412 ms')).toBeInTheDocument()
+
+    // A long result is previewed, and the full text the model saw is one click away.
+    expect(screen.queryByText(page)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show full result' }))
+    expect(screen.getByText(page)).toBeInTheDocument()
   })
 
   it('blocks sending when the JSON Schema editor holds invalid JSON', async () => {
@@ -98,7 +133,7 @@ describe('PlaygroundPage', () => {
     }
     const fetchMock = renderPlayground(
       '/playground',
-      [{ delta: 'ok', done: true, error: null, usage: { prompt_tokens: 1, completion_tokens: 1 }, tools_called: [], retries: 0 }],
+      [{ delta: 'ok', done: true, error: null, usage: { prompt_tokens: 1, completion_tokens: 1 }, tools_called: [], tool_calls: [], retries: 0 }],
       [ggufRecord],
     )
     await screen.findByText('calculator')

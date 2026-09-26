@@ -49,6 +49,91 @@
   border-bottom: 1px solid var(--rule);
 }
 
+.blockFailed {
+  border-color: var(--nofit);
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+}
+
+.args {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.arg {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.arg dt {
+  color: var(--ink-3);
+}
+
+.arg dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.result .code {
+  align-self: stretch;
+  padding: 10px 12px;
+  background: var(--inset);
+}
+
+.resultMeta {
+  align-self: stretch;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+
+.errorText {
+  color: var(--nofit);
+}
+
+.resultNote {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.toggle {
+  padding: 4px 12px;
+  border: 1px solid var(--rule-2);
+  background: var(--sheet);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--hover);
+}
+
 .blockTitle {
   font-family: var(--mono);
   font-size: 12px;
