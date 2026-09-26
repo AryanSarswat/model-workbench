@@ -9,6 +9,7 @@ from app.db import get_session
 from app.discovery.schemas import GgufFile, ModelDetail, SnapshotFile
 from app.main import app
 from app.models import DownloadedModelRecord, DownloadJob
+from tests.gguf_fixtures import write_gguf
 
 _test_engine = create_engine(
     "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
@@ -62,6 +63,39 @@ def test_list_downloaded_empty_when_nothing_seeded():
     response = client.get("/models/downloaded")
     assert response.status_code == 200
     assert response.json() == []
+
+
+# llama-cpp-python 0.3.35 reads ggml types 0..42. Patched in because CI runs without
+# the `local` extra, where the listing can't know the build and reports nothing.
+_TYPE_COUNT_PATCH = patch("app.downloads.router.llama_cpp_type_count", return_value=43)
+
+
+def test_list_downloaded_flags_a_gguf_this_llama_cpp_cannot_load(tmp_path):
+    # PrismML's PQ2_0 files store weights as ggml type 142, which stock llama.cpp lacks.
+    bad = write_gguf(tmp_path / "bonsai-PQ2_0.gguf", {"output.weight": 142})
+    good = write_gguf(tmp_path / "llama-Q4_K_M.gguf", {"output.weight": 12})
+    _seed(quant=bad.name, local_path=str(bad))
+    _seed(quant=good.name, local_path=str(good))
+    _seed(backend="transformers", quant=None, local_path=str(tmp_path))
+
+    with _TYPE_COUNT_PATCH:
+        bad_row, good_row, snapshot_row = client.get("/models/downloaded").json()
+
+    assert "unsupported quantization" in bad_row["unsupported_reason"]
+    assert "output.weight" in bad_row["unsupported_reason"]
+    assert "142" in bad_row["unsupported_reason"]
+    assert good_row["unsupported_reason"] is None
+    assert snapshot_row["unsupported_reason"] is None
+
+
+def test_list_downloaded_survives_a_missing_gguf_file(tmp_path):
+    _seed(local_path=str(tmp_path / "deleted-by-hand.gguf"))
+
+    with _TYPE_COUNT_PATCH:
+        response = client.get("/models/downloaded")
+
+    assert response.status_code == 200
+    assert response.json()[0]["unsupported_reason"] is None
 
 
 def test_delete_downloaded_removes_db_record_and_file(tmp_path):

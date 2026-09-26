@@ -111,7 +111,10 @@ enabled provider, surfaced as a normal 4xx rather than a crash). `LlamaCppBacken
 llama-cpp-python, runs on any hardware) resolves its file from the downloaded-models table
 in the registry (`repo_id`, or `repo_id:filename` when several quants are on disk) and
 keeps the loaded model in a process-wide cache — no eviction, a deliberate single-user
-simplicity trade-off. `TransformersBackend` (fallback for models
+simplicity trade-off. A GGUF whose tensor types the installed llama.cpp can't read (e.g. a
+fork-only quantization) is caught by a header scan (`gguf_header.py`): the load error
+names it, and `GET /models/downloaded` reports it up front as `unsupported_reason`
+(cached per file mtime). `TransformersBackend` (fallback for models
 without a GGUF build; MPS/CUDA/CPU auto-detected) resolves its snapshot dir from the
 downloaded-models table by plain `repo_id` and keeps the loaded model in a process-wide
 cache like the llama.cpp backend. Unconstrained generation streams via
