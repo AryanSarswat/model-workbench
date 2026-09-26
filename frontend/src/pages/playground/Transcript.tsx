@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ToolCallRecord } from '../../api/types'
+import type { ToolCallRecord, ToolCallStart } from '../../api/types'
 import { Chip, type ChipTone } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { LiveDot } from '../../components/LiveDot'
@@ -34,7 +34,7 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
   const toolsNative = NATIVE_TOOL_CALLING[turn.backend]
   const toolsChipLabel = toolsNative ? 'native' : 'fallback'
   const toolsChipTone = toolsNative ? 'fit' : 'tight'
-  const showToolBlocks = turn.toolCalls.length > 0
+  const showToolBlocks = turn.toolCalls.length > 0 || turn.runningTool !== null
   const settled = !turn.streaming && !turn.error
 
   let schemaBlock: { valid: boolean; body: string } | null = null
@@ -49,7 +49,7 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
         <div className="eyebrow">
           {shortModelName(turn.modelId)} · {backendDisplayLabel(turn.backend, turn.modelId)}
         </div>
-        {turn.streaming && <LiveDot>streaming</LiveDot>}
+        {turn.streaming && <LiveDot>{turn.runningTool ? 'running tool' : 'streaming'}</LiveDot>}
       </div>
 
       {showToolBlocks && (
@@ -57,6 +57,7 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
           {turn.toolCalls.map((call, index) => (
             <ToolCallCard key={index} call={call} modeLabel={toolsChipLabel} modeTone={toolsChipTone} />
           ))}
+          {turn.runningTool && <RunningToolCard call={turn.runningTool} modeLabel={toolsChipLabel} modeTone={toolsChipTone} />}
           {turn.retries > 0 && <p className={styles.retriesNote}>retried {turn.retries}×</p>}
         </>
       )}
@@ -120,16 +121,7 @@ function ToolCallCard({ call, modeLabel, modeTone }: { call: ToolCallRecord; mod
           <Chip tone={failed ? 'nofit' : 'fit'}>{failed ? 'error' : `ok · ${call.result.length.toLocaleString()} chars`}</Chip>
         </span>
       </div>
-      {Object.keys(call.arguments).length > 0 && (
-        <dl className={styles.args}>
-          {Object.entries(call.arguments).map(([key, value]) => (
-            <div key={key} className={styles.arg}>
-              <dt>{key}</dt>
-              <dd>{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <ToolArgs args={call.arguments} />
       <div className={styles.result}>
         <div className={styles.resultMeta}>
           <span>result · sent to model</span>
@@ -144,6 +136,36 @@ function ToolCallCard({ call, modeLabel, modeTone }: { call: ToolCallRecord; mod
         )}
       </div>
     </div>
+  )
+}
+
+// The call executing right now: what it was asked, with no result yet.
+function RunningToolCard({ call, modeLabel, modeTone }: { call: ToolCallStart; modeLabel: string; modeTone: ChipTone }) {
+  return (
+    <div className={[styles.block, styles.blockRunning].join(' ')}>
+      <div className={styles.blockHeader}>
+        <span className={styles.blockTitle}>tool call · {call.name}</span>
+        <span className={styles.chips}>
+          <Chip tone={modeTone}>{modeLabel}</Chip>
+          <Chip tone="idle">{call.name === 'web_fetch' ? 'fetching…' : 'running…'}</Chip>
+        </span>
+      </div>
+      <ToolArgs args={call.arguments} />
+    </div>
+  )
+}
+
+function ToolArgs({ args }: { args: Record<string, unknown> }) {
+  if (Object.keys(args).length === 0) return null
+  return (
+    <dl className={styles.args}>
+      {Object.entries(args).map(([key, value]) => (
+        <div key={key} className={styles.arg}>
+          <dt>{key}</dt>
+          <dd>{typeof value === 'string' ? value : JSON.stringify(value)}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }
 

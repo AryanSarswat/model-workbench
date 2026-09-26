@@ -57,6 +57,41 @@ describe('chatReducer', () => {
     expect(state[1]).toMatchObject({ streaming: false, error })
   })
 
+  it('shows a tool call as running until its finished record replaces it', () => {
+    let state = chatReducer([], send('u1', 'a1', 'hi'))
+    state = chatReducer(state, { type: 'toolStarted', id: 'a1', call: { name: 'calculator', arguments: { expression: '2 + 3' } } })
+
+    expect(state[1]).toMatchObject({ runningTool: { name: 'calculator', arguments: { expression: '2 + 3' } }, toolCalls: [] })
+
+    state = chatReducer(state, { type: 'toolFinished', id: 'a1', call: calculatorCall })
+
+    expect(state[1]).toMatchObject({ runningTool: null, toolCalls: [calculatorCall] })
+  })
+
+  it("done's tool call list wins over the live events, and nothing is left running", () => {
+    const fetchCall: ToolCallRecord = { name: 'web_fetch', arguments: { url: 'https://example.com/' }, result: 'hi', duration_ms: 3 }
+    let state = chatReducer([], send('u1', 'a1', 'hi'))
+    state = chatReducer(state, { type: 'toolStarted', id: 'a1', call: { name: 'web_fetch', arguments: { url: 'https://example.com/' } } })
+    state = chatReducer(state, {
+      type: 'done',
+      id: 'a1',
+      usage: null,
+      toolCalls: [calculatorCall, fetchCall],
+      retries: 0,
+      metrics: { ttftMs: null, tokensPerSec: null, totalMs: 1 },
+    })
+
+    expect(state[1]).toMatchObject({ runningTool: null, toolCalls: [calculatorCall, fetchCall] })
+  })
+
+  it('an error mid-call leaves no call running', () => {
+    let state = chatReducer([], send('u1', 'a1', 'hi'))
+    state = chatReducer(state, { type: 'toolStarted', id: 'a1', call: { name: 'calculator', arguments: {} } })
+    state = chatReducer(state, { type: 'error', id: 'a1', error: new Error('model crashed') })
+
+    expect(state[1]).toMatchObject({ streaming: false, runningTool: null })
+  })
+
   it('stop settles the turn without an error, flagged as stopped', () => {
     let state = chatReducer([], send('u1', 'a1', 'hi'))
     state = chatReducer(state, { type: 'stop', id: 'a1' })
