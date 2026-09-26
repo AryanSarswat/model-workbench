@@ -71,6 +71,36 @@ describe('formToCase', () => {
     expect(testCase).toBeNull()
     expect(errors).toContain('At least one message with content is required.')
   })
+
+  // A blank value here would otherwise save as null and always fail at eval time
+  // (backend/app/evals/assertions.py requires it for these three types).
+  it.each([
+    ['contains', 'a value'],
+    ['regex', 'a pattern'],
+    ['tool_called', 'a tool name'],
+  ] as const)('rejects a blank argument for a %s assertion', (type, label) => {
+    const form = {
+      ...emptyForm('coding'),
+      id: 'coding-005',
+      messages: [{ role: 'user' as const, content: 'hi' }],
+      assertions: [{ type, argument: '   ' }],
+    }
+    const { testCase, errors } = formToCase(form)
+    expect(testCase).toBeNull()
+    expect(errors).toContain(`Assertion 1 (${type}) requires ${label}.`)
+  })
+
+  it('accepts assertions with no argument requirement left blank', () => {
+    const form = {
+      ...emptyForm('coding'),
+      id: 'coding-006',
+      messages: [{ role: 'user' as const, content: 'hi' }],
+      assertions: [{ type: 'schema_valid' as const, argument: '' }],
+    }
+    const { testCase, errors } = formToCase(form)
+    expect(errors).toEqual([])
+    expect(testCase?.assertions).toEqual([{ type: 'schema_valid' }])
+  })
 })
 
 describe('caseToForm / duplicateForm round trip', () => {

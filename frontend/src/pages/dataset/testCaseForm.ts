@@ -32,6 +32,20 @@ export function assertionArgPlaceholder(type: AssertionType): string {
   }
 }
 
+// Short label for validation messages ("Assertion 2 (contains) requires a value.").
+function assertionArgLabel(type: AssertionType): string {
+  switch (type) {
+    case 'contains':
+      return 'a value'
+    case 'regex':
+      return 'a pattern'
+    case 'tool_called':
+      return 'a tool name'
+    default:
+      return 'a value'
+  }
+}
+
 export interface MessageForm {
   role: ChatMessage['role']
   content: string
@@ -127,6 +141,15 @@ export function formToCase(form: CaseFormState): FormToCaseResult {
     }
   }
 
+  // A blank value here always fails the corresponding assertion at eval time
+  // (backend/app/evals/assertions.py), so treat it as a validation error rather than
+  // silently saving a null.
+  form.assertions.forEach((a, index) => {
+    if (assertionNeedsArgument(a.type) && !a.argument.trim()) {
+      errors.push(`Assertion ${index + 1} (${a.type}) requires ${assertionArgLabel(a.type)}.`)
+    }
+  })
+
   if (errors.length > 0) return { testCase: null, errors }
 
   const tags = form.tags
@@ -135,7 +158,7 @@ export function formToCase(form: CaseFormState): FormToCaseResult {
     .filter(Boolean)
 
   const assertions: Assertion[] = form.assertions.map((a) => {
-    const argument = a.argument.trim() || null
+    const argument = a.argument.trim()
     switch (a.type) {
       case 'contains':
         return { type: a.type, value: argument }
