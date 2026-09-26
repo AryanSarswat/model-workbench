@@ -1,4 +1,5 @@
-.PHONY: setup run test test-ml test-all lint ci lock docker-build docker-run docker-ci
+.PHONY: setup run test test-ml test-all lint ci lock docker-build docker-run docker-ci \
+	fe-setup fe-dev fe-test fe-lint fe-build fe-ci
 
 # Local dev gets everything, including the heavy `local` extra (torch/llama.cpp)
 # that CI deliberately skips -- without it tests/ml/ can't even be collected.
@@ -26,18 +27,44 @@ test-all:
 lint:
 	cd backend && uv run ruff check .
 
-# Local pre-PR gate: everything both GitHub Actions jobs run (`backend` + `docker`),
-# PLUS the ML suite CI skips -- so a pass here means the PR checks will pass AND the
-# locally-run ML tests are green. Catching either failure locally is a lot cheaper than
-# a push-wait-fail-fix round trip.
+# Local pre-PR gate: everything the GitHub Actions jobs run (`backend`, `frontend`,
+# `docker`), PLUS the ML suite CI skips -- so a pass here means the PR checks will pass
+# AND the locally-run ML tests are green. Catching either failure locally is a lot
+# cheaper than a push-wait-fail-fix round trip.
 ci:
 	cd backend && uv sync --locked --extra dev --extra local
 	cd backend && uv run ruff check .
 	cd backend && uv run pytest --cov --cov-report=term-missing
+	$(MAKE) fe-ci
 	$(MAKE) docker-ci
 
 lock:
 	cd backend && uv lock
+
+# Frontend (frontend/, Vite + React). `fe-dev` proxies /api to `make run` on :8000,
+# so run both side by side.
+fe-setup:
+	cd frontend && npm ci
+
+fe-dev:
+	cd frontend && npm run dev
+
+fe-test:
+	cd frontend && npm test
+
+fe-lint:
+	cd frontend && npm run lint
+	cd frontend && npm run typecheck
+
+fe-build:
+	cd frontend && npm run build
+
+# Same sequence as the `frontend` CI job.
+fe-ci:
+	cd frontend && npm ci
+	$(MAKE) fe-lint
+	$(MAKE) fe-test
+	$(MAKE) fe-build
 
 docker-build:
 	docker build -f backend/Dockerfile -t model-workbench-backend .
