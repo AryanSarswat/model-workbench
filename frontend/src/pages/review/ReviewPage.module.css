@@ -1,0 +1,303 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 28px 40px 22px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.heading {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.breadcrumb {
+  display: flex;
+  gap: 8px;
+}
+
+.breadcrumb a {
+  color: var(--ink-3);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 400;
+  font-size: 44px;
+  line-height: 1;
+}
+
+.meta {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.summary {
+  display: flex;
+  gap: 8px;
+}
+
+.summaryChip {
+  height: 28px;
+  font-size: 12px;
+}
+
+.body {
+  flex-grow: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) 380px;
+}
+
+/* Case list */
+.caseNav {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--rule);
+}
+
+.caseList {
+  overflow-y: auto;
+}
+
+.filterRow {
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.caseRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  align-items: center;
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.caseRow:hover {
+  background: var(--row-hover);
+}
+
+.caseRow[aria-current='true'] {
+  background: var(--track);
+}
+
+.caseId {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.caseSnippet {
+  grid-column: 1 / -1;
+  font-size: 13px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Prompt / response panel */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 28px 36px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prompt {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  line-height: 1.4;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.code {
+  margin: 0;
+  padding: 14px 16px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+}
+
+.chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Assertions / judge / verdict aside */
+.aside {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding: 28px;
+  background: var(--sheet);
+  border-left: 1px solid var(--rule);
+  overflow-y: auto;
+}
+
+.asideSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bordered {
+  padding-top: 22px;
+  border-top: 1px solid var(--rule);
+}
+
+.assertion {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.assertionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assertionType {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.assertionDetail {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.judgeScore {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.judgeScoreValue {
+  font-family: var(--serif);
+  font-size: 40px;
+  line-height: 1;
+}
+
+.judgeScoreMax {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+
+.judgeRationale {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.verdictForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+.verdictOptions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.verdictOption {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink);
+}
+
+.verdictOption[data-selected='true'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.verdictOption input {
+  margin: 0;
+  accent-color: var(--paper);
+}
+
+.notes {
+  height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-2);
+  border-radius: 3px;
+  background: var(--paper);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.verdictActions {
+  display: flex;
+  gap: 8px;
+}
+
+.verdictActions button {
+  flex-grow: 1;
+}

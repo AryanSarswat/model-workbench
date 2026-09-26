@@ -1,0 +1,185 @@
+.page {
+  padding: 36px 40px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* Run form, sat in PageHeader's actions slot. */
+.form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.field {
+  width: 150px;
+}
+
+.modelField {
+  width: 230px;
+  font-family: var(--mono);
+}
+
+.backendField {
+  width: 150px;
+  font-family: var(--mono);
+}
+
+.judgeField {
+  width: 200px;
+  font-family: var(--mono);
+}
+
+.formNote {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+/* Running strip */
+.running {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 260px auto;
+  gap: 24px;
+  align-items: center;
+  padding: 14px 20px;
+  border: 1px solid var(--live);
+  background: var(--sheet);
+}
+
+.runningMeta {
+  font-size: 14px;
+}
+
+.runningProgress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.watchLink {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Finished-run banner, replacing the running strip once a run completes. */
+.finished {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border: 1px solid var(--rule);
+  background: var(--sheet);
+  font-size: 14px;
+}
+
+/* Comparison matrix */
+.matrix {
+  display: flex;
+  flex-direction: column;
+}
+
+.matrixHead {
+  display: grid;
+  column-gap: 12px;
+  align-items: end;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.row {
+  display: grid;
+  column-gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+.rowHead {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.modelId {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.cell {
+  height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 12px;
+}
+
+.cellPct {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cellCount {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #3f3c35; /* mockup literal, close to but distinct from --ink-2 */
+}
+
+.overall {
+  font-family: var(--serif);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.tokValue {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.metricValue {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.modeWord {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+
+.barTrack {
+  height: 4px;
+  background: var(--track);
+}
+
+.barFill {
+  height: 4px;
+  background: var(--ink);
+}
+
+.footnote {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  max-width: 900px;
+}
