@@ -27,6 +27,16 @@ def combine_usage(turns: list[TokenUsage]) -> TokenUsage | None:
     )
 
 
+class ToolCallRecord(BaseModel):
+    """One executed tool call: what the model asked for and what it was sent back."""
+
+    name: str
+    arguments: dict
+    # Exactly the text fed back to the model -- a failure is its "Error: ..." text.
+    result: str
+    duration_ms: float
+
+
 class ChatChunk(BaseModel):
     delta: str = ""
     done: bool = False
@@ -34,6 +44,7 @@ class ChatChunk(BaseModel):
     # Set only on the terminal (done=True) chunk; they describe the whole turn.
     usage: TokenUsage | None = None
     tools_called: list[str] = []
+    tool_calls: list[ToolCallRecord] = []
     retries: int = 0
 
 

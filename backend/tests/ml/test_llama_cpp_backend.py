@@ -160,6 +160,8 @@ def test_stream_chat_with_tools_executes_the_call_and_streams_the_final_text(mon
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     assert chunks[-1].tools_called == ["calculator"]
+    [call] = chunks[-1].tool_calls
+    assert (call.name, call.arguments, call.result) == ("calculator", {"expression": "2 + 3"}, "5")
     # The real calculator ran: its result rode back as a tool-role message.
     llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
     tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]

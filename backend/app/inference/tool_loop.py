@@ -7,14 +7,15 @@ system|user|assistant.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Awaitable, Callable
 
 from pydantic import BaseModel
 
 from app.errors import WorkbenchError
-from app.inference.schemas import ChatMessage
+from app.inference.schemas import ChatMessage, ToolCallRecord
 from app.inference.structured_output import PromptJsonRetrier, TextReply
-from app.tools import ToolSpec, get_tool
+from app.tools import Tool, ToolSpec, get_tool
 
 _RETRY_MESSAGE = (
     "That was not valid JSON. Reply with exactly one JSON object: "
@@ -26,7 +27,27 @@ _RETRY_MESSAGE = (
 class LoopResult(BaseModel):
     text: str
     # Every tool actually executed, in call order (repeats included).
-    tools_called: list[str] = []
+    tool_calls: list[ToolCallRecord] = []
+
+    @property
+    def tools_called(self) -> list[str]:
+        return [call.name for call in self.tool_calls]
+
+
+async def run_tool(tool: Tool, args: dict) -> ToolCallRecord:
+    """Execute one resolved tool call; a raising tool becomes an "Error: ..." result
+    for the model, never a loop crash."""
+    started = time.monotonic()
+    try:
+        result = await tool.run(args)
+    except Exception as exc:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
+        result = f"Error: {exc}"
+    return ToolCallRecord(
+        name=tool.spec.name,
+        arguments=args,
+        result=result,
+        duration_ms=(time.monotonic() - started) * 1000,
+    )
 
 
 async def run_tool_loop(
@@ -46,13 +67,13 @@ async def run_tool_loop(
     retrier = PromptJsonRetrier()
     history = list(messages)
     last_text = ""
-    tools_called: list[str] = []
+    tool_calls: list[ToolCallRecord] = []
     for _ in range(max_iterations):
         last_text = await generate(history)
         parsed = retrier.parse_tool_call_or_reply(last_text)
         history.append(ChatMessage(role="assistant", content=last_text))
         if isinstance(parsed, TextReply):
-            return LoopResult(text=last_text, tools_called=tools_called)
+            return LoopResult(text=last_text, tool_calls=tool_calls)
         if parsed is None:
             history.append(ChatMessage(role="user", content=_RETRY_MESSAGE))
             continue
@@ -70,14 +91,11 @@ async def run_tool_loop(
                 )
             )
             continue
-        try:
-            result = await tool.run(parsed.arguments)
-        except Exception as exc:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
-            result = f"Error: {exc}"
-        tools_called.append(parsed.tool_name)
+        call = await run_tool(tool, parsed.arguments)
+        tool_calls.append(call)
         history.append(
             ChatMessage(
-                role="user", content=f"Tool '{parsed.tool_name}' returned: {result}"
+                role="user", content=f"Tool '{parsed.tool_name}' returned: {call.result}"
             )
         )
-    return LoopResult(text=last_text, tools_called=tools_called)
+    return LoopResult(text=last_text, tool_calls=tool_calls)

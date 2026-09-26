@@ -102,3 +102,30 @@ def test_two_different_tools_called_in_sequence_are_both_recorded(tmp_path):
 
     assert result.text == '{"reply": "done"}'
     assert result.tools_called == ["calculator", "web_fetch"]
+
+
+def test_each_executed_call_keeps_its_arguments_and_the_result_the_model_saw(tmp_path):
+    # The UI needs what each call was asked and what it returned -- including a
+    # failing fetch, whose "Error: ..." text is all the model ever saw.
+    missing = (tmp_path / "missing.txt").as_uri()
+    specs = [get_tool("calculator").spec, get_tool("web_fetch").spec]
+    turns = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        f'{{"tool": "web_fetch", "arguments": {{"url": "{missing}"}}}}',
+        '{"reply": "done"}',
+    ]
+
+    async def generate(history: list[ChatMessage]) -> str:
+        return turns.pop(0)
+
+    result = asyncio.run(run_tool_loop(generate, _messages(), specs))
+
+    calc, fetch = result.tool_calls
+    assert (calc.name, calc.arguments, calc.result) == (
+        "calculator",
+        {"expression": "2 + 3"},
+        "5",
+    )
+    assert (fetch.name, fetch.arguments) == ("web_fetch", {"url": missing})
+    assert fetch.result.startswith("Error: ")
+    assert all(call.duration_ms >= 0 for call in result.tool_calls)

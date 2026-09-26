@@ -24,7 +24,7 @@ from app.inference.structured_output import (
     matches_schema,
     validate_output_schema,
 )
-from app.inference.tool_loop import run_tool_loop
+from app.inference.tool_loop import LoopResult, run_tool_loop
 from app.tools import ToolSpec
 
 _SCHEMA_RETRY_MESSAGE = (
@@ -109,7 +109,7 @@ class HFInferenceAPIBackend:
             # Tool and schema turns are non-streamed (retries can't stream partial
             # output honestly); the final reply yields as one delta + done.
             usages: list[TokenUsage] = []
-            tools_called: list[str] = []
+            loop_result = LoopResult(text="")
             retries = 0
 
             async def _generate(history: list[ChatMessage]) -> str:
@@ -129,7 +129,6 @@ class HFInferenceAPIBackend:
                     )
                     loop_result = await run_tool_loop(_generate, prompt_messages, tools)
                     final = loop_result.text
-                    tools_called = loop_result.tools_called
                     history = [*messages, ChatMessage(role="assistant", content=final)]
                 # Without tools final is "", which never conforms.
                 if output_schema is not None and not is_conforming_json(final, output_schema):
@@ -143,7 +142,8 @@ class HFInferenceAPIBackend:
             yield ChatChunk(
                 done=True,
                 usage=combine_usage(usages),
-                tools_called=tools_called,
+                tools_called=loop_result.tools_called,
+                tool_calls=loop_result.tool_calls,
                 retries=retries,
             )
             return

@@ -213,7 +213,7 @@ class TransformersBackend:
             )
             usages.append(final_usage)
             return (
-                LoopResult(text=final_text, tools_called=loop_result.tools_called),
+                LoopResult(text=final_text, tool_calls=loop_result.tool_calls),
                 combine_usage(usages),
             )
         return loop_result, combine_usage(usages)
@@ -249,7 +249,12 @@ class TransformersBackend:
                 yield ChatChunk(done=True, error=str(e))
                 return
             yield ChatChunk(delta=loop_result.text)
-            yield ChatChunk(done=True, usage=usage, tools_called=loop_result.tools_called)
+            yield ChatChunk(
+                done=True,
+                usage=usage,
+                tools_called=loop_result.tools_called,
+                tool_calls=loop_result.tool_calls,
+            )
             return
         if output_schema is not None:
             # Guided turns never stream. The processor builds before the try so
