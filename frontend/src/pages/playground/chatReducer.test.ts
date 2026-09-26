@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import type { ToolCallRecord } from '../../api/types'
 import { chatReducer, turnsToHistory, type ChatAction } from './chatReducer'
+
+const calculatorCall: ToolCallRecord = { name: 'calculator', arguments: { expression: '2 + 3' }, result: '5', duration_ms: 1 }
 
 // Shorthand for the common 'send' action shape used across these tests.
 function send(userId: string, assistantId: string, content: string): ChatAction {
@@ -31,7 +34,7 @@ describe('chatReducer', () => {
       type: 'done',
       id: 'a1',
       usage: { prompt_tokens: 10, completion_tokens: 5 },
-      toolsCalled: ['calculator'],
+      toolCalls: [calculatorCall],
       retries: 1,
       metrics: { ttftMs: 120, tokensPerSec: 25, totalMs: 400 },
     })
@@ -40,7 +43,7 @@ describe('chatReducer', () => {
       content: 'Hello',
       streaming: false,
       usage: { prompt_tokens: 10, completion_tokens: 5 },
-      toolsCalled: ['calculator'],
+      toolCalls: [calculatorCall],
       retries: 1,
       metrics: { ttftMs: 120, tokensPerSec: 25, totalMs: 400 },
     })
@@ -72,7 +75,7 @@ describe('chatReducer', () => {
 describe('turnsToHistory', () => {
   it('includes settled user/assistant pairs in order', () => {
     let state = chatReducer([], send('u1', 'a1', 'first'))
-    state = chatReducer(state, { type: 'done', id: 'a1', usage: null, toolsCalled: [], retries: 0, metrics: { ttftMs: 1, tokensPerSec: null, totalMs: 1 } })
+    state = chatReducer(state, { type: 'done', id: 'a1', usage: null, toolCalls: [], retries: 0, metrics: { ttftMs: 1, tokensPerSec: null, totalMs: 1 } })
     state = chatReducer(state, { type: 'delta', id: 'a1', text: 'reply one' })
 
     expect(turnsToHistory(state)).toEqual([
@@ -84,7 +87,7 @@ describe('turnsToHistory', () => {
   it('drops an errored pair and a stopped pair, keeping surrounding settled pairs', () => {
     let state = chatReducer([], send('u1', 'a1', 'first'))
     state = chatReducer(state, { type: 'delta', id: 'a1', text: 'ok' })
-    state = chatReducer(state, { type: 'done', id: 'a1', usage: null, toolsCalled: [], retries: 0, metrics: { ttftMs: 1, tokensPerSec: null, totalMs: 1 } })
+    state = chatReducer(state, { type: 'done', id: 'a1', usage: null, toolCalls: [], retries: 0, metrics: { ttftMs: 1, tokensPerSec: null, totalMs: 1 } })
 
     state = chatReducer(state, send('u2', 'a2', 'second'))
     state = chatReducer(state, { type: 'error', id: 'a2', error: new Error('boom') })
@@ -94,7 +97,7 @@ describe('turnsToHistory', () => {
 
     state = chatReducer(state, send('u4', 'a4', 'fourth'))
     state = chatReducer(state, { type: 'delta', id: 'a4', text: 'ok again' })
-    state = chatReducer(state, { type: 'done', id: 'a4', usage: null, toolsCalled: [], retries: 0, metrics: { ttftMs: 1, tokensPerSec: null, totalMs: 1 } })
+    state = chatReducer(state, { type: 'done', id: 'a4', usage: null, toolCalls: [], retries: 0, metrics: { ttftMs: 1, tokensPerSec: null, totalMs: 1 } })
 
     expect(turnsToHistory(state)).toEqual([
       { role: 'user', content: 'first' },

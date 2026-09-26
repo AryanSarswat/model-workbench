@@ -20,9 +20,9 @@ describe('useChatStream', () => {
   it('settles a turn on its error chunk and excludes it from the next turn\'s resend history', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(sseResponse([{ delta: '', done: false, error: 'boom', usage: null, tools_called: [], retries: 0 }]))
+      .mockResolvedValueOnce(sseResponse([{ delta: '', done: false, error: 'boom', usage: null, tools_called: [], tool_calls: [], retries: 0 }]))
       .mockResolvedValueOnce(
-        sseResponse([{ delta: 'ok', done: true, error: null, usage: { prompt_tokens: 1, completion_tokens: 1 }, tools_called: [], retries: 0 }]),
+        sseResponse([{ delta: 'ok', done: true, error: null, usage: { prompt_tokens: 1, completion_tokens: 1 }, tools_called: [], tool_calls: [], retries: 0 }]),
       )
     vi.stubGlobal('fetch', fetchMock)
 
@@ -47,7 +47,7 @@ describe('useChatStream', () => {
   })
 
   it('settles a turn with an error when the stream ends without a done or error chunk', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(sseResponse([{ delta: 'partial', done: false, error: null, usage: null, tools_called: [], retries: 0 }])))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(sseResponse([{ delta: 'partial', done: false, error: null, usage: null, tools_called: [], tool_calls: [], retries: 0 }])))
 
     const { result } = renderHook(() => useChatStream())
 
