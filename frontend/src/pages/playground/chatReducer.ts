@@ -1,4 +1,4 @@
-import type { BackendName, ChatMessage, TokenUsage, ToolCallRecord } from '../../api/types'
+import type { BackendName, ChatMessage, TokenUsage, ToolCallRecord, ToolCallStart } from '../../api/types'
 
 export interface TurnMetrics {
   ttftMs: number | null // request start -> first non-empty delta
@@ -13,7 +13,8 @@ export interface ChatTurn {
   streaming: boolean
   stopped: boolean // settled by an aborted Stop, not by done/error
   error: unknown // rendered via <ErrorNotice>; null when the turn has no error
-  toolCalls: ToolCallRecord[]
+  toolCalls: ToolCallRecord[] // finished calls, in order
+  runningTool: ToolCallStart | null // the call executing right now, if any
   retries: number
   usage: TokenUsage | null
   metrics: TurnMetrics | null
@@ -25,6 +26,8 @@ export interface ChatTurn {
 export type ChatAction =
   | { type: 'send'; userId: string; assistantId: string; content: string; hadSchema: boolean; modelId: string; backend: BackendName }
   | { type: 'delta'; id: string; text: string }
+  | { type: 'toolStarted'; id: string; call: ToolCallStart }
+  | { type: 'toolFinished'; id: string; call: ToolCallRecord }
   | { type: 'done'; id: string; usage: TokenUsage | null; toolCalls: ToolCallRecord[]; retries: number; metrics: TurnMetrics }
   | { type: 'error'; id: string; error: unknown }
   | { type: 'stop'; id: string }
@@ -47,6 +50,7 @@ function newTurn(
     stopped: false,
     error: null,
     toolCalls: [],
+    runningTool: null,
     retries: 0,
     usage: null,
     metrics: null,
@@ -68,16 +72,31 @@ export function chatReducer(state: ChatTurn[], action: ChatAction): ChatTurn[] {
       ]
     case 'delta':
       return state.map((turn) => (turn.id === action.id ? { ...turn, content: turn.content + action.text } : turn))
+    case 'toolStarted':
+      return state.map((turn) => (turn.id === action.id ? { ...turn, runningTool: action.call } : turn))
+    case 'toolFinished':
+      return state.map((turn) =>
+        turn.id === action.id ? { ...turn, runningTool: null, toolCalls: [...turn.toolCalls, action.call] } : turn,
+      )
     case 'done':
+      // The terminal chunk's list is authoritative over what the live events built.
       return state.map((turn) =>
         turn.id === action.id
-          ? { ...turn, streaming: false, usage: action.usage, toolCalls: action.toolCalls, retries: action.retries, metrics: action.metrics }
+          ? {
+              ...turn,
+              streaming: false,
+              runningTool: null,
+              usage: action.usage,
+              toolCalls: action.toolCalls,
+              retries: action.retries,
+              metrics: action.metrics,
+            }
           : turn,
       )
     case 'error':
-      return state.map((turn) => (turn.id === action.id ? { ...turn, streaming: false, error: action.error } : turn))
+      return state.map((turn) => (turn.id === action.id ? { ...turn, streaming: false, runningTool: null, error: action.error } : turn))
     case 'stop':
-      return state.map((turn) => (turn.id === action.id ? { ...turn, streaming: false, stopped: true } : turn))
+      return state.map((turn) => (turn.id === action.id ? { ...turn, streaming: false, runningTool: null, stopped: true } : turn))
     case 'reset':
       return []
     default:

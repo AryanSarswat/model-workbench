@@ -58,6 +58,8 @@ export function useChatStream() {
 
       try {
         for await (const chunk of streamChat(request, controller.signal)) {
+          if (chunk.tool_call_started) dispatch({ type: 'toolStarted', id: assistantId, call: chunk.tool_call_started })
+          if (chunk.tool_call_finished) dispatch({ type: 'toolFinished', id: assistantId, call: chunk.tool_call_finished })
           if (chunk.delta) {
             firstDeltaAt ??= performance.now()
             dispatch({ type: 'delta', id: assistantId, text: chunk.delta })

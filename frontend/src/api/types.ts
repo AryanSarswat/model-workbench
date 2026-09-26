@@ -127,12 +127,22 @@ export interface ToolCallRecord {
   duration_ms: number
 }
 
+// A tool call that has started running; its ToolCallRecord follows when it ends.
+export interface ToolCallStart {
+  name: string
+  arguments: Record<string, unknown>
+}
+
 // One SSE event of POST /chat/stream. usage/tools_called/tool_calls/retries are set
-// on the terminal (done) chunk only.
+// on the terminal (done) chunk only. While a tool turn runs, a chunk announces each
+// call as it starts and another carries its record as it finishes (calls run one at
+// a time, so a finished record closes the latest start).
 export interface ChatChunk {
   delta: string
   done: boolean
   error: string | null
+  tool_call_started: ToolCallStart | null
+  tool_call_finished: ToolCallRecord | null
   usage: TokenUsage | null
   tools_called: string[]
   tool_calls: ToolCallRecord[]
