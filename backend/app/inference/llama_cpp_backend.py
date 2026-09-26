@@ -13,9 +13,11 @@ import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import llama_cpp
 from llama_cpp import Llama, LlamaGrammar
 
 from app.errors import WorkbenchError
+from app.inference.gguf_header import find_unsupported_tensor
 from app.inference.schemas import (
     BackendCapabilities,
     ChatChunk,
@@ -74,6 +76,24 @@ async def _run_tool(name: str, args: dict, executed: list[ToolCallRecord]) -> st
     call = await run_tool(tool, args)
     executed.append(call)
     return call.result
+
+
+def _describe_load_failure(model_path: str, error: Exception) -> str:
+    """The load error, naming the cause when it is a tensor type this llama.cpp
+    build can't read -- llama.cpp itself only says "Failed to load model"."""
+    try:
+        unsupported = find_unsupported_tensor(model_path, llama_cpp.GGML_TYPE_COUNT)
+    except (OSError, ValueError):
+        unsupported = None  # unreadable header: keep llama.cpp's own error
+    if unsupported is None:
+        return f"failed to load {model_path}: {error}"
+    tensor, ggml_type = unsupported
+    return (
+        f"unsupported quantization: tensor '{tensor}' in {Path(model_path).name} uses "
+        f"ggml type {ggml_type}, but this llama.cpp build reads types "
+        f"0-{llama_cpp.GGML_TYPE_COUNT - 1}. The file likely needs its publisher's "
+        "llama.cpp fork; choose another quantization."
+    )
 
 
 def _build_grammar(output_schema: dict) -> LlamaGrammar:
@@ -204,7 +224,7 @@ class LlamaCppBackend:
         try:
             llama = await asyncio.to_thread(self._get_llama)
         except Exception as e:  # noqa: BLE001 -- a load failure is a terminal chunk
-            yield ChatChunk(done=True, error=f"failed to load {self._model_path}: {e}")
+            yield ChatChunk(done=True, error=_describe_load_failure(self._model_path, e))
             return
         if tools:
             # Tool turns are non-streamed; the final reply yields as one delta + done.

@@ -9,6 +9,7 @@ from app.inference import llama_cpp_backend
 from app.inference.llama_cpp_backend import LlamaCppBackend
 from app.inference.schemas import ChatChunk, ChatMessage
 from app.tools import get_tool
+from tests.gguf_fixtures import write_gguf
 
 pytestmark = pytest.mark.ml
 
@@ -424,3 +425,30 @@ def test_stream_chat_reports_approximate_usage_from_tokenize(monkeypatch):
     assert chunks[-1].usage is not None
     assert chunks[-1].usage.prompt_tokens == 1  # "hi" -> one whitespace-split token
     assert chunks[-1].usage.completion_tokens == 1  # "Hello" -> one whitespace-split token
+
+
+class _FailingLlama:
+    def __init__(self, model_path: str, verbose: bool = False) -> None:
+        raise ValueError(f"Failed to load model from file: {model_path}")
+
+
+def test_load_failure_names_an_unsupported_quantization(monkeypatch, tmp_path):
+    # The raw llama.cpp error only says "Failed to load model"; the real cause (a
+    # tensor type this build can't read) is only in its suppressed log.
+    path = write_gguf(tmp_path / "m.gguf", {"output.weight": 142})
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FailingLlama)
+
+    [chunk] = _run_stream_chat(LlamaCppBackend(path))
+
+    assert chunk.done is True
+    assert "unsupported quantization" in chunk.error
+    assert "output.weight" in chunk.error and "142" in chunk.error
+
+
+def test_load_failure_of_a_readable_file_keeps_the_original_error(monkeypatch, tmp_path):
+    path = write_gguf(tmp_path / "m.gguf", {"output.weight": 14})
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FailingLlama)
+
+    [chunk] = _run_stream_chat(LlamaCppBackend(path))
+
+    assert chunk.error == f"failed to load {path}: Failed to load model from file: {path}"
