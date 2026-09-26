@@ -42,7 +42,7 @@ from app.inference.structured_output import (
     is_conforming_json,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult, run_tool_loop
+from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool_loop
 from app.tools import ToolSpec
 
 _CACHE: dict[str, tuple[AutoModelForCausalLM, AutoTokenizer]] = {}
@@ -170,6 +170,7 @@ class TransformersBackend:
         messages: list[ChatMessage],
         tools: list[ToolSpec],
         output_schema: dict | None = None,
+        on_event: ToolEventSink | None = None,
     ) -> tuple[LoopResult, TokenUsage | None]:
         """Drive the shared prompt-and-retry tool loop with non-streamed generation.
 
@@ -202,7 +203,7 @@ class TransformersBackend:
             usages.append(usage)
             return text
 
-        loop_result = await run_tool_loop(_generate, prompt_messages, tools)
+        loop_result = await run_tool_loop(_generate, prompt_messages, tools, on_event=on_event)
         # The schema instruction rides every loop turn, so a conforming draft
         # skips the guided redraft.
         if output_schema is not None and not is_conforming_json(
@@ -236,11 +237,18 @@ class TransformersBackend:
             yield ChatChunk(done=True, error=f"failed to load {self._snapshot_dir}: {e}")
             return
         if tools:
-            # Tool turns are non-streamed; the final reply yields as one delta + done.
+            # Tool turns are non-streamed apart from each call's start/finish event;
+            # the final reply yields as one delta + done.
+            events = ToolEvents()
             try:
-                loop_result, usage = await self._run_fallback_tool_loop(
-                    model, tokenizer, messages, tools, output_schema
+                loop = asyncio.create_task(
+                    self._run_fallback_tool_loop(
+                        model, tokenizer, messages, tools, output_schema, events.emit
+                    )
                 )
+                async for event in events.stream(loop):
+                    yield event
+                loop_result, usage = loop.result()
             except WorkbenchError:
                 # Guided setup failures (bad schema, missing outlines) raise
                 # pre-stream; everything else is a terminal chunk, never raised.

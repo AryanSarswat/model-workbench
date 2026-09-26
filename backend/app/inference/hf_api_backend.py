@@ -5,6 +5,7 @@ provider that serves it; an unsupported model_id is a normal BadRequestError, no
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -24,7 +25,7 @@ from app.inference.structured_output import (
     matches_schema,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult, run_tool_loop
+from app.inference.tool_loop import LoopResult, ToolEvents, run_tool_loop
 from app.tools import ToolSpec
 
 _SCHEMA_RETRY_MESSAGE = (
@@ -107,7 +108,8 @@ class HFInferenceAPIBackend:
             validate_output_schema(output_schema)
         if tools or output_schema is not None:
             # Tool and schema turns are non-streamed (retries can't stream partial
-            # output honestly); the final reply yields as one delta + done.
+            # output honestly) apart from each tool call's start/finish event; the
+            # final reply yields as one delta + done.
             usages: list[TokenUsage] = []
             loop_result = LoopResult(text="")
             retries = 0
@@ -127,7 +129,13 @@ class HFInferenceAPIBackend:
                     prompt_messages = PromptJsonRetrier().build_tool_messages(
                         messages, tools, output_schema
                     )
-                    loop_result = await run_tool_loop(_generate, prompt_messages, tools)
+                    events = ToolEvents()
+                    loop = asyncio.create_task(
+                        run_tool_loop(_generate, prompt_messages, tools, on_event=events.emit)
+                    )
+                    async for event in events.stream(loop):
+                        yield event
+                    loop_result = loop.result()
                     final = loop_result.text
                     history = [*messages, ChatMessage(role="assistant", content=final)]
                 # Without tools final is "", which never conforms.
