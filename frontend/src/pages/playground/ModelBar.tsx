@@ -16,6 +16,7 @@ export function ModelBar({
   modelId,
   onModelIdChange,
   options,
+  unloadable,
   recordsLoading,
   recordsError,
   structuredOutputLabel,
@@ -29,6 +30,7 @@ export function ModelBar({
   modelId: string
   onModelIdChange: (modelId: string) => void
   options: ModelOption[]
+  unloadable: ModelOption['unloadable']
   recordsLoading: boolean
   recordsError: unknown
   structuredOutputLabel: string
@@ -62,7 +64,13 @@ export function ModelBar({
         </ModelHint>
       ) : (
         <Field label="Model" htmlFor="playground-model">
-          <select id="playground-model" className={`field ${styles.control}`} value={modelId} onChange={(event) => onModelIdChange(event.target.value)}>
+          <select
+            id="playground-model"
+            className={[`field ${styles.control}`, unloadable && styles.unloadable].filter(Boolean).join(' ')}
+            aria-invalid={unloadable !== null}
+            value={modelId}
+            onChange={(event) => onModelIdChange(event.target.value)}
+          >
             {options.map((option) => (
               <option key={option.modelId} value={option.modelId}>
                 {option.label}
@@ -86,8 +94,14 @@ export function ModelBar({
       </div>
 
       <div className={styles.chips}>
-        <Chip tone={structuredOutputTone}>JSON · {structuredOutputLabel}</Chip>
-        <Chip tone={toolsTone}>tools · {toolsLabel}</Chip>
+        {unloadable ? (
+          <Chip tone="nofit">quant {unloadable.quant} · not loadable</Chip>
+        ) : (
+          <>
+            <Chip tone={structuredOutputTone}>JSON · {structuredOutputLabel}</Chip>
+            <Chip tone={toolsTone}>tools · {toolsLabel}</Chip>
+          </>
+        )}
         <Button variant="outline" onClick={onNewChat}>
           New chat
         </Button>

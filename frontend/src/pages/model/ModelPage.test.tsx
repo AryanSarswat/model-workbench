@@ -51,6 +51,7 @@ const downloadedRecord: DownloadedModelRecord = {
   size_bytes: 9_000_000_000,
   downloaded_at: '2026-09-21T00:00:00Z',
   last_used_at: null,
+  unsupported_reason: null,
 }
 
 const activeJob: DownloadJob = {

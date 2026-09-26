@@ -31,6 +31,7 @@ function downloaded(overrides: Partial<DownloadedModelRecord> & Pick<DownloadedM
     size_bytes: 0,
     downloaded_at: '2026-01-01T00:00:00Z',
     last_used_at: null,
+    unsupported_reason: null,
     ...overrides,
   }
 }

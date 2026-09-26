@@ -12,6 +12,10 @@
   font-family: var(--mono);
 }
 
+.control.unloadable {
+  border-color: var(--nofit);
+}
+
 .backendField {
   display: flex;
   flex-direction: column;

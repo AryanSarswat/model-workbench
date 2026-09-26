@@ -12,6 +12,7 @@ function ggufRecord(overrides: Partial<DownloadedModelRecord>): DownloadedModelR
     size_bytes: 1,
     downloaded_at: '2024-01-01T00:00:00Z',
     last_used_at: null,
+    unsupported_reason: null,
     ...overrides,
   }
 }
@@ -41,8 +42,8 @@ describe('ggufModelOptions', () => {
 
 describe('pickPrefilledModelId', () => {
   const options = [
-    { modelId: 'Qwen/Qwen3-14B:Q4_K_M.gguf', label: 'Qwen/Qwen3-14B (Q4_K_M.gguf)' },
-    { modelId: 'other/repo', label: 'other/repo' },
+    { modelId: 'Qwen/Qwen3-14B:Q4_K_M.gguf', label: 'Qwen/Qwen3-14B (Q4_K_M.gguf)', unloadable: null },
+    { modelId: 'other/repo', label: 'other/repo', unloadable: null },
   ]
 
   it('matches an exact model+quant combination', () => {
