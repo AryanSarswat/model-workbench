@@ -1,0 +1,33 @@
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 18px 40px 24px;
+  border-top: 1px solid var(--rule);
+  flex-shrink: 0;
+}
+
+.field {
+  flex-grow: 1;
+}
+
+.textarea {
+  height: 64px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-2);
+  border-radius: 3px;
+  background: var(--sheet);
+  font-size: 14px;
+  resize: none;
+}
+
+.action {
+  height: 64px;
+  width: 96px;
+  flex-shrink: 0;
+}
+
+.stop {
+  border-color: var(--live);
+  color: var(--live);
+}

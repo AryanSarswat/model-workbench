@@ -1,0 +1,117 @@
+.aside {
+  display: flex;
+  flex-direction: column;
+  background: var(--sheet);
+  border-left: 1px solid var(--rule);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.systemTextarea {
+  height: 76px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-2);
+  border-radius: 3px;
+  background: var(--paper);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.checkboxLabel input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ink);
+}
+
+.schemaTextarea {
+  padding: 12px 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--paper);
+  resize: vertical;
+}
+
+.schemaError {
+  margin: 0;
+  font-size: 12px;
+  color: var(--nofit);
+}
+
+.explanation {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.toolsHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.manageLink {
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.toolRow {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.toolRow input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+}
+
+.toolInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toolName {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.toolDescription {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-2);
+}
