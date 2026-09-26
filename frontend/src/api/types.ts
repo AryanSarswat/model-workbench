@@ -95,6 +95,7 @@ export interface DownloadedModelRecord {
   size_bytes: number
   downloaded_at: string
   last_used_at: string | null
+  unsupported_reason: string | null // why the local llama.cpp build can't load this GGUF
 }
 
 // --- chat ---

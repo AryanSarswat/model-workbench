@@ -22,6 +22,7 @@ const downloaded: DownloadedModelRecord = {
   size_bytes: 9 * 1024 ** 3,
   downloaded_at: '2026-09-20T00:00:00Z',
   last_used_at: null,
+  unsupported_reason: null,
 }
 
 function renderLibrary(fetchMock: ReturnType<typeof vi.fn>) {
