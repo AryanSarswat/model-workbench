@@ -2,6 +2,7 @@
 // Mirrors the backend's verdict thresholds (backend/app/discovery/feasibility.py
 // _COMFORTABLE_THRESHOLD / _TIGHT_THRESHOLD) so the bar's bands line up with the verdicts
 // the API already computed.
+import { getFeasibility } from '../../api/endpoints'
 import type { FeasibilityVerdict } from '../../api/types'
 import type { ChipTone } from '../../components/Chip'
 
@@ -36,12 +37,6 @@ export function gaugeScale(usableMemoryGb: number): GaugeScale {
     comfortableGb: usableMemoryGb * COMFORTABLE_THRESHOLD,
     tightGb: usableMemoryGb * TIGHT_THRESHOLD,
   }
-}
-
-export function verdictFor(estimatedGb: number, usableMemoryGb: number): FeasibilityVerdict {
-  if (estimatedGb < usableMemoryGb * COMFORTABLE_THRESHOLD) return 'comfortable'
-  if (estimatedGb < usableMemoryGb * TIGHT_THRESHOLD) return 'tight'
-  return 'wont_fit'
 }
 
 // Colored segments for the part of [lo, hi] inside each band, clipped to the scale's max.
@@ -93,4 +88,18 @@ export function formatGbValue(gb: number): string {
 export function formatMemoryRange(lo: number, hi: number, optionCount: number): string {
   const span = lo === hi ? `${formatGbValue(lo)} GB` : `${formatGbValue(lo)} – ${formatGbValue(hi)} GB`
   return `${span} · ${optionCount} option${optionCount === 1 ? '' : 's'}`
+}
+
+const FEASIBILITY_STALE_TIME = 10 * 60 * 1000
+
+// Shared query options for a model's feasibility report -- used both by the Radar table
+// (one per row, via useQueries) and the Model detail page (one, via useQuery), so the two
+// pages hit the same cache entry with the same staleTime/retry instead of racing configs.
+export function feasibilityQueryOptions(modelId: string) {
+  return {
+    queryKey: ['models', modelId, 'feasibility'] as const,
+    queryFn: () => getFeasibility(modelId),
+    staleTime: FEASIBILITY_STALE_TIME,
+    retry: false,
+  }
 }

@@ -1,15 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bestVerdict, formatMemoryRange, gaugeSegments, verdictFor } from './gauge'
-
-describe('verdictFor', () => {
-  // Mirrors backend/app/discovery/feasibility.py's _COMFORTABLE_THRESHOLD/_TIGHT_THRESHOLD
-  // (0.7 / 0.95 of usable memory) -- these bands are what the whole gauge is built on.
-  it('bands against usable memory the same way the backend does', () => {
-    expect(verdictFor(10, 20)).toBe('comfortable') // < 70% of 20
-    expect(verdictFor(15, 20)).toBe('tight') // between 70% and 95%
-    expect(verdictFor(19, 20)).toBe('wont_fit') // >= 95%
-  })
-})
+import { bestVerdict, formatMemoryRange, gaugeSegments } from './gauge'
 
 describe('gaugeSegments', () => {
   it('splits a range across bands and clips at the scale max', () => {
@@ -19,6 +9,16 @@ describe('gaugeSegments', () => {
     // Clipped to max=30, so the hatch band should end at 100%.
     const hatch = segs.find((s) => s.cls === 'hatch')!
     expect(hatch.left + hatch.width).toBeCloseTo(100, 5)
+  })
+
+  // Mirrors backend/app/discovery/feasibility.py's _COMFORTABLE_THRESHOLD (0.7 of usable
+  // memory) -- the comfortable/tight boundary the whole gauge is built on.
+  it('ends the comfortable (fit) band exactly at 70% of usable memory', () => {
+    // usable=20 -> max=30, so 70% of usable (14) sits at 14/30 = 46.666...% of the bar.
+    const segs = gaugeSegments(0, 30, 20)
+    const fit = segs.find((s) => s.cls === 'seg-fit')!
+    expect(fit.left).toBe(0)
+    expect(fit.left + fit.width).toBeCloseTo((14 / 30) * 100, 5)
   })
 
   it('keeps a same-value range visible instead of a zero-width sliver', () => {
