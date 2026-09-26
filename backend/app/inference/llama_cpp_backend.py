@@ -21,6 +21,7 @@ from app.inference.schemas import (
     ChatChunk,
     ChatMessage,
     TokenUsage,
+    ToolCallRecord,
     combine_usage,
 )
 from app.inference.structured_output import (
@@ -28,7 +29,7 @@ from app.inference.structured_output import (
     ToolCall,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult
+from app.inference.tool_loop import LoopResult, run_tool
 from app.tools import ToolSpec, get_tool
 
 _CACHE: dict[str, Llama] = {}
@@ -63,19 +64,16 @@ def _estimate_streaming_usage(
     return TokenUsage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
 
 
-async def _run_tool(name: str, args: dict, tools_called: list[str]) -> str:
+async def _run_tool(name: str, args: dict, executed: list[ToolCallRecord]) -> str:
     """Execute one tool call; an unknown or failing tool becomes an "Error: ..."
     result for the model, never a loop crash. Only resolved tools are recorded."""
     try:
         tool = get_tool(name)
     except WorkbenchError as e:
         return f"Error: {e.message}"
-    try:
-        result = await tool.run(args)
-    except Exception as e:  # noqa: BLE001 -- a failing tool is loop feedback, not fatal
-        result = f"Error: {e}"
-    tools_called.append(name)
-    return result
+    call = await run_tool(tool, args)
+    executed.append(call)
+    return call.result
 
 
 def _build_grammar(output_schema: dict) -> LlamaGrammar:
@@ -136,7 +134,7 @@ class LlamaCppBackend:
         # spec dict would KeyError (or be silently filtered) inside the library.
         tool_schemas = [{"type": "function", "function": spec.model_dump()} for spec in tools]
         last_content = ""
-        tools_called: list[str] = []
+        executed: list[ToolCallRecord] = []
         usages: list[TokenUsage] = []
         retrier = PromptJsonRetrier()
         for _ in range(5):
@@ -163,11 +161,11 @@ class LlamaCppBackend:
                 content = message.get("content") or ""
                 parsed = retrier.parse_tool_call_or_reply(content) if content else None
                 if not isinstance(parsed, ToolCall):
-                    return LoopResult(text=content, tools_called=tools_called), combine_usage(
+                    return LoopResult(text=content, tool_calls=executed), combine_usage(
                         usages
                     )
                 history.append(dict(message))
-                result = await _run_tool(parsed.tool_name, parsed.arguments, tools_called)
+                result = await _run_tool(parsed.tool_name, parsed.arguments, executed)
                 history.append({"role": "tool", "tool_call_id": "", "content": result})
                 continue
             history.append(dict(message))
@@ -181,13 +179,13 @@ class LlamaCppBackend:
                     except json.JSONDecodeError:
                         args = None
                 if isinstance(args, dict):
-                    result = await _run_tool(name, args, tools_called)
+                    result = await _run_tool(name, args, executed)
                 else:
                     result = f"Error: invalid arguments for tool '{name}': expected a JSON object"
                 history.append(
                     {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
                 )
-        return LoopResult(text=last_content, tools_called=tools_called), combine_usage(usages)
+        return LoopResult(text=last_content, tool_calls=executed), combine_usage(usages)
 
     async def aclose(self) -> None:
         """No-op: the cached Llama stays loaded for the next turn."""
@@ -219,7 +217,12 @@ class LlamaCppBackend:
                 yield ChatChunk(done=True, error=str(e))
                 return
             yield ChatChunk(delta=loop_result.text)
-            yield ChatChunk(done=True, usage=usage, tools_called=loop_result.tools_called)
+            yield ChatChunk(
+                done=True,
+                usage=usage,
+                tools_called=loop_result.tools_called,
+                tool_calls=loop_result.tool_calls,
+            )
             return
         try:
             if grammar is not None:
