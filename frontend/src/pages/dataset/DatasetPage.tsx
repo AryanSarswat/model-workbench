@@ -1,32 +1,31 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router'
+import { useLocation, useSearchParams } from 'react-router'
 import { listCases, listTools } from '../../api/endpoints'
+import type { TestCase } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import styles from './DatasetPage.module.css'
 import { CaseEditor } from './CaseEditor'
-import {
-  caseBadges,
-  caseToForm,
-  emptyForm,
-  firstUserMessage,
-  matchesSearch,
-  type CaseFormState,
-} from './testCaseForm'
+import { caseBadges, caseToForm, emptyForm, firstUserMessage, matchesSearch, type CaseFormState } from './testCaseForm'
 
 const NEW_CASE = 'new'
 
+// Draft form data attached to a navigation entry (see handleDuplicated/handleSaved below),
+// read back out via useLocation(). Using router state -- rather than component state kept
+// in sync with the URL -- sidesteps the data router applying URL changes asynchronously
+// (inside startTransition): state always arrives together with the location it belongs to,
+// so there's no window where caseParam and the draft disagree.
+interface DatasetLocationState {
+  draft?: CaseFormState
+}
+
 export default function DatasetPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const location = useLocation()
   const [search, setSearch] = useState('')
   const [newCategoryDraft, setNewCategoryDraft] = useState('')
-  const [form, setForm] = useState<CaseFormState | null>(null)
-  // Which case (or NEW_CASE, or none) `form` was loaded for. Compared against the URL's
-  // `case` param during render (see below) so a route change re-derives the draft, without
-  // clobbering an in-progress edit or a just-duplicated draft on every re-render.
-  const [loadedCaseKey, setLoadedCaseKey] = useState<string | null>(null)
 
   const casesQuery = useQuery({ queryKey: ['dataset', 'cases'], queryFn: () => listCases() })
   const toolsQuery = useQuery({ queryKey: ['dataset', 'tools'], queryFn: () => listTools() })
@@ -47,32 +46,28 @@ export default function DatasetPage() {
     [cases, selectedCategory, search],
   )
 
-  // Adjust the draft during render when the URL's case param no longer matches what's
-  // loaded (React's documented alternative to a sync-on-prop-change effect: calling
-  // setState directly in the render body is safe here since it converges in one extra
-  // render once loadedCaseKey catches up to caseParam).
-  if (caseParam !== loadedCaseKey) {
-    if (!caseParam) {
-      setLoadedCaseKey(null)
-      setForm(null)
-    } else if (caseParam === NEW_CASE) {
-      setLoadedCaseKey(NEW_CASE)
-      setForm(emptyForm(selectedCategory))
-    } else {
-      const match = cases.find((c) => c.id === caseParam)
-      if (match) {
-        setLoadedCaseKey(caseParam)
-        setForm(caseToForm(match))
-      } // else: cases still loading -- retried next render once they arrive
-    }
+  // Pure derivation of the editor's initial draft from the current, already-committed
+  // location -- no effect, no local "which case is loaded" bookkeeping to fall out of sync.
+  const draftFromNavigation = (location.state as DatasetLocationState | null)?.draft
+  let initialFormForEditor: CaseFormState | null = null
+  if (caseParam === NEW_CASE) {
+    initialFormForEditor = draftFromNavigation ?? emptyForm(selectedCategory)
+  } else if (caseParam) {
+    const match = cases.find((c) => c.id === caseParam)
+    // Falls back to the just-saved draft (see handleSaved) while the cases list is still
+    // refetching after a create, so the editor doesn't flash empty in the meantime.
+    initialFormForEditor = match ? caseToForm(match) : (draftFromNavigation ?? null)
   }
 
-  function updateParams(mutate: (params: URLSearchParams) => void) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      mutate(next)
-      return next
-    })
+  function updateParams(mutate: (params: URLSearchParams) => void, state?: DatasetLocationState) {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        mutate(next)
+        return next
+      },
+      state ? { state } : undefined,
+    )
   }
 
   function selectCategory(name: string) {
@@ -84,7 +79,6 @@ export default function DatasetPage() {
   }
 
   function openNewCase() {
-    setLoadedCaseKey(null) // force a blank draft even if one is already open
     updateParams((params) => {
       params.set('category', selectedCategory)
       params.set('case', NEW_CASE)
@@ -95,22 +89,21 @@ export default function DatasetPage() {
     updateParams((params) => params.set('case', id))
   }
 
-  function handleSaved(id: string, category: string) {
-    setLoadedCaseKey(id)
-    updateParams((params) => {
-      params.set('category', category)
-      params.set('case', id)
-    })
+  function handleSaved(saved: TestCase) {
+    updateParams(
+      (params) => {
+        params.set('category', saved.category)
+        params.set('case', saved.id)
+      },
+      { draft: caseToForm(saved) },
+    )
   }
 
   function handleDuplicated(draft: CaseFormState) {
-    setForm(draft)
-    setLoadedCaseKey(NEW_CASE)
-    updateParams((params) => params.set('case', NEW_CASE))
+    updateParams((params) => params.set('case', NEW_CASE), { draft })
   }
 
   function handleDeleted() {
-    setLoadedCaseKey(null)
     updateParams((params) => params.delete('case'))
   }
 
@@ -216,17 +209,18 @@ export default function DatasetPage() {
             </div>
           </section>
 
-          {form ? (
+          {initialFormForEditor ? (
             <CaseEditor
               key={caseParam}
-              form={form}
-              setForm={setForm}
+              initialForm={initialFormForEditor}
               isNew={caseParam === NEW_CASE}
               tools={tools}
               onSaved={handleSaved}
               onDuplicated={handleDuplicated}
               onDeleted={handleDeleted}
             />
+          ) : caseParam ? (
+            <div className={styles.editorEmpty}>Loading…</div>
           ) : (
             <div className={styles.editorEmpty}>Select a case, or click &ldquo;New case&rdquo;.</div>
           )}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createCase, updateCase, deleteCase } from '../../api/endpoints'
-import type { ToolSpec } from '../../api/types'
+import type { TestCase, ToolSpec } from '../../api/types'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
 import styles from './DatasetPage.module.css'
@@ -17,36 +17,31 @@ import {
 const ROLE_OPTIONS: CaseFormState['messages'][number]['role'][] = ['user', 'assistant', 'system']
 
 export function CaseEditor({
-  form,
-  setForm,
+  initialForm,
   isNew,
   tools,
   onSaved,
   onDuplicated,
   onDeleted,
 }: {
-  form: CaseFormState
-  setForm: (form: CaseFormState) => void
+  initialForm: CaseFormState
   isNew: boolean
   tools: ToolSpec[]
-  onSaved: (id: string, category: string) => void
-  onDuplicated: (form: CaseFormState) => void
+  onSaved: (saved: TestCase) => void
+  onDuplicated: (draft: CaseFormState) => void
   onDeleted: () => void
 }) {
   const queryClient = useQueryClient()
-  // DatasetPage remounts this component (via `key`) whenever the case being edited
-  // changes, so this never needs to be reset explicitly.
+  // The parent remounts this component (via `key={caseParam}`) whenever the case being
+  // edited changes, so this only ever initializes once per case -- no sync effect needed.
+  const [form, setForm] = useState<CaseFormState>(initialForm)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
 
   const saveMutation = useMutation({
-    mutationFn: (payload: typeof form) => {
-      const { testCase } = formToCase(payload)
-      if (!testCase) throw new Error('Invalid form state')
-      return isNew ? createCase(testCase) : updateCase(testCase)
-    },
+    mutationFn: (testCase: TestCase) => (isNew ? createCase(testCase) : updateCase(testCase)),
     onSuccess: (saved) => {
       void queryClient.invalidateQueries({ queryKey: ['dataset', 'cases'] })
-      onSaved(saved.id, saved.category)
+      onSaved(saved)
     },
   })
 
@@ -62,7 +57,7 @@ export function CaseEditor({
     const { testCase, errors } = formToCase(form)
     setValidationErrors(errors)
     if (!testCase) return
-    saveMutation.mutate(form)
+    saveMutation.mutate(testCase)
   }
 
   function updateMessage(index: number, patch: Partial<CaseFormState['messages'][number]>) {
@@ -153,7 +148,7 @@ export function CaseEditor({
             {form.messages.map((message, index) => (
               <div key={index} className={form.messages.length > 1 ? styles.messageRowWithRemove : styles.messageRow}>
                 <label htmlFor={`msg-role-${index}`} className={styles.srOnly}>
-                  Role
+                  Message {index + 1} role
                 </label>
                 <select
                   id={`msg-role-${index}`}
@@ -168,7 +163,7 @@ export function CaseEditor({
                   ))}
                 </select>
                 <label htmlFor={`msg-content-${index}`} className={styles.srOnly}>
-                  Content
+                  Message {index + 1} content
                 </label>
                 <textarea
                   id={`msg-content-${index}`}
@@ -253,7 +248,7 @@ export function CaseEditor({
           <div key={index} className={styles.assertionRow}>
             <select
               className={[styles.mono, 'field'].filter(Boolean).join(' ')}
-              aria-label="Assertion type"
+              aria-label={`Assertion ${index + 1} type`}
               value={assertion.type}
               onChange={(e) => updateAssertion(index, { type: e.target.value as CaseFormState['assertions'][number]['type'] })}
             >
@@ -265,7 +260,7 @@ export function CaseEditor({
             </select>
             <input
               className={[styles.mono, 'field'].filter(Boolean).join(' ')}
-              aria-label="Assertion value"
+              aria-label={`Assertion ${index + 1} value`}
               value={assertion.argument}
               placeholder={assertionArgPlaceholder(assertion.type)}
               disabled={!assertionNeedsArgument(assertion.type)}
@@ -273,7 +268,7 @@ export function CaseEditor({
             />
             <button
               type="button"
-              aria-label="Remove assertion"
+              aria-label={`Remove assertion ${index + 1}`}
               className={styles.iconButton}
               onClick={() => removeAssertion(index)}
             >
