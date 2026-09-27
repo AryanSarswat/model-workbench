@@ -4,13 +4,25 @@ import { API_BASE, ApiError, toApiError } from './client'
 // can't POST, so this reads the fetch body stream and does the SSE framing itself.
 // A non-2xx response throws ApiError before anything is yielded; aborting `signal`
 // makes the iteration throw the abort reason (an AbortError).
-export async function* postSse<T>(path: string, body: unknown, signal?: AbortSignal): AsyncGenerator<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify(body),
+export function postSse<T>(path: string, body: unknown, signal?: AbortSignal): AsyncGenerator<T> {
+  return readSse<T>(
+    fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify(body),
+      signal,
+    }),
     signal,
-  })
+  )
+}
+
+// GET counterpart of postSse, with the same framing, errors and abort behaviour.
+export function getSse<T>(path: string, signal?: AbortSignal): AsyncGenerator<T> {
+  return readSse<T>(fetch(`${API_BASE}${path}`, { headers: { Accept: 'text/event-stream' }, signal }), signal)
+}
+
+async function* readSse<T>(request: Promise<Response>, signal?: AbortSignal): AsyncGenerator<T> {
+  const response = await request
   if (!response.ok) throw await toApiError(response)
   if (!response.body) throw new ApiError(response.status, 'empty_stream', 'The server sent no stream body.')
 

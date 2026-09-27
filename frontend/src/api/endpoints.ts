@@ -46,12 +46,6 @@ export const getFeasibility = (modelId: string, quant?: string) =>
 export const startDownload = (modelId: string, request: DownloadRequest) =>
   apiSend<DownloadJob>('POST', `/models/${modelPath(modelId)}/download`, request)
 
-export const getDownloadJob = (jobId: number) => apiGet<DownloadJob>(`/models/downloads/${jobId}`)
-
-// Newest first; active=true narrows to pending|downloading jobs.
-export const listDownloadJobs = (active?: boolean) =>
-  apiGet<DownloadJob[]>(`/models/downloads${active === undefined ? '' : `?active=${active}`}`)
-
 export const listDownloaded = () => apiGet<DownloadedModelRecord[]>('/models/downloaded')
 
 export const deleteDownloaded = (recordId: number) =>

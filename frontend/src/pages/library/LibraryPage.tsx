@@ -1,17 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import {
   deleteDownloaded,
-  getDownloadJob,
-  listDownloadJobs,
   listDownloaded,
   listTools,
   reloadTools,
   setHfKey,
 } from '../../api/endpoints'
-import { queryKeys, useHardware, useHfKeyStatus } from '../../api/hooks'
-import type { DownloadedModelRecord, DownloadJob } from '../../api/types'
+import { isActiveJob, queryKeys, useDownloadJobs, useHardware, useHfKeyStatus } from '../../api/hooks'
+import type { DownloadedModelRecord } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
@@ -22,43 +20,22 @@ import styles from './LibraryPage.module.css'
 import { chatPath, formatChip, gpuLabel, summarizeParams } from './libraryFormat'
 
 const DOWNLOADED_KEY = ['library', 'downloaded']
-const DOWNLOAD_JOBS_KEY = ['library', 'downloadJobs']
 const TOOLS_KEY = ['library', 'tools']
 
 export default function LibraryPage() {
   const queryClient = useQueryClient()
 
   const downloadedQuery = useQuery({ queryKey: DOWNLOADED_KEY, queryFn: listDownloaded })
-  const jobsQuery = useQuery({
-    queryKey: DOWNLOAD_JOBS_KEY,
-    queryFn: () => listDownloadJobs(true),
-    refetchInterval: (query) => ((query.state.data?.length ?? 0) > 0 ? 1000 : false),
+  // A completed job changed the downloaded-models table underneath this page.
+  const allJobs = useDownloadJobs((job) => {
+    if (job.status === 'completed') void queryClient.invalidateQueries({ queryKey: DOWNLOADED_KEY })
   })
   const toolsQuery = useQuery({ queryKey: TOOLS_KEY, queryFn: listTools })
 
-  // A job disappearing from the active list (poll above, which only returns
-  // pending|downloading) means it finished or failed. Either way it's gone from this list
-  // for good, so fetch its final state once: on success the downloaded-models table
-  // changed underneath it, and on failure there's no other place in the UI that would ever
-  // show the error -- it would otherwise vanish silently.
-  const [failedJobs, setFailedJobs] = useState<DownloadJob[]>([])
-  const previousJobIdsRef = useRef<Set<number>>(new Set())
-  useEffect(() => {
-    const currentIds = new Set((jobsQuery.data ?? []).map((job) => job.id))
-    const vanished = [...previousJobIdsRef.current].filter((id) => !currentIds.has(id))
-    previousJobIdsRef.current = currentIds
-    if (vanished.length === 0) return
-    void Promise.all(vanished.map((id) => getDownloadJob(id))).then((finished) => {
-      const failed = finished.filter((job) => job.status === 'failed')
-      if (failed.length > 0) setFailedJobs((prev) => [...prev, ...failed])
-      if (finished.some((job) => job.status === 'completed')) {
-        void queryClient.invalidateQueries({ queryKey: DOWNLOADED_KEY })
-      }
-    })
-  }, [jobsQuery.data, queryClient])
-
   const downloaded = downloadedQuery.data ?? []
-  const jobs = jobsQuery.data ?? []
+  const jobs = allJobs.filter(isActiveJob)
+  // Failures stay listed: nowhere else in the UI would show the error.
+  const failedJobs = allJobs.filter((job) => job.status === 'failed')
   const tools = toolsQuery.data ?? []
   const totalGb = downloaded.reduce((sum, d) => sum + d.size_bytes, 0) / 1024 ** 3
 
@@ -112,7 +89,7 @@ export default function LibraryPage() {
           {failedJobs.map((job) => (
             <ErrorNotice key={job.id} error={new Error(`${job.repo_id}: ${job.error ?? 'Download failed.'}`)} />
           ))}
-          {downloadedQuery.isSuccess && jobsQuery.isSuccess && downloaded.length === 0 && jobs.length === 0 && (
+          {downloadedQuery.isSuccess && downloaded.length === 0 && jobs.length === 0 && (
             <p className={styles.empty}>Nothing downloaded yet. Find a model on the Radar tab.</p>
           )}
           {downloaded.map((record) => (

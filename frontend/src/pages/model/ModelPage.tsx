@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '../../api/client'
-import { getDownloadJob, getEvalReport, getModel, listDownloadJobs, listDownloaded, startDownload } from '../../api/endpoints'
+import { getEvalReport, getModel, listDownloaded, startDownload } from '../../api/endpoints'
+import { isActiveJob, useDownloadJobs } from '../../api/hooks'
 import type {
   DownloadJob,
   DownloadRequest,
@@ -62,56 +63,24 @@ function ModelPageBody({ modelId }: { modelId: string }) {
   const modelQuery = useQuery({ queryKey: ['models', modelId], queryFn: () => getModel(modelId) })
   const feasibilityQuery = useQuery(feasibilityQueryOptions(modelId))
   const downloadedQuery = useQuery({ queryKey: ['models', 'downloaded'], queryFn: listDownloaded })
-  const activeJobsQuery = useQuery({
-    queryKey: ['models', 'downloads', 'active'],
-    queryFn: () => listDownloadJobs(true),
-    refetchInterval: (query) => {
-      const jobs = query.state.data ?? []
-      return jobs.some((job) => job.repo_id === modelId) ? 1000 : false
-    },
-  })
   const evalReportQuery = useQuery({ queryKey: ['evals', 'report'], queryFn: getEvalReport })
 
-  const modelActiveJobs = useMemo(
-    () => (activeJobsQuery.data ?? []).filter((job) => job.repo_id === modelId),
-    [activeJobsQuery.data, modelId],
+  // A completed job flips its row to "on disk"; a failed one stays listed with its error.
+  const allJobs = useDownloadJobs((job) => {
+    if (job.status === 'completed') void queryClient.invalidateQueries({ queryKey: ['models', 'downloaded'] })
+  })
+  const modelJobs = useMemo(() => allJobs.filter((job) => job.repo_id === modelId), [allJobs, modelId])
+  const modelActiveJobs = useMemo(() => modelJobs.filter(isActiveJob), [modelJobs])
+  const failedDownloads = useMemo<FailedDownload[]>(
+    () =>
+      modelJobs
+        .filter((job) => job.status === 'failed')
+        .map((job) => ({ id: job.id, message: `${job.filename ?? 'snapshot'}: ${job.error ?? 'Download failed.'}` })),
+    [modelJobs],
   )
-
-  // listDownloadJobs(true) only returns pending/downloading jobs, so a finished download
-  // (whether it completed or failed) simply disappears from it on the next poll. Track
-  // every job id we've seen active for this model -- starting with the id the download
-  // mutation returns, so a job that finishes before the very next poll (racing the 202)
-  // is still caught -- and once a tracked id drops out of the active list, ask the backend
-  // for its final status: completed invalidates the downloaded-models list so the row
-  // flips to "on disk"; failed surfaces its error.
-  const trackedJobIds = useRef<Set<number>>(new Set())
-  const [failedDownloads, setFailedDownloads] = useState<FailedDownload[]>([])
-
-  useEffect(() => {
-    for (const job of modelActiveJobs) trackedJobIds.current.add(job.id)
-    const currentIds = new Set(modelActiveJobs.map((job) => job.id))
-    const finishedIds = [...trackedJobIds.current].filter((id) => !currentIds.has(id))
-    if (finishedIds.length === 0) return
-    finishedIds.forEach((id) => trackedJobIds.current.delete(id))
-    void Promise.all(
-      finishedIds.map(async (id) => {
-        const job = await getDownloadJob(id)
-        if (job.status === 'completed') {
-          queryClient.invalidateQueries({ queryKey: ['models', 'downloaded'] })
-        } else if (job.status === 'failed') {
-          const label = job.filename ?? 'snapshot'
-          setFailedDownloads((prev) => [...prev, { id, message: `${label}: ${job.error ?? 'Download failed.'}` }])
-        }
-      }),
-    )
-  }, [modelActiveJobs, queryClient])
 
   const downloadMutation = useMutation({
     mutationFn: (request: DownloadRequest) => startDownload(modelId, request),
-    onSuccess: (job) => {
-      trackedJobIds.current.add(job.id)
-      queryClient.invalidateQueries({ queryKey: ['models', 'downloads', 'active'] })
-    },
   })
 
   if (modelQuery.isPending) {
