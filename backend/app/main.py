@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from app.api_config.router import router as config_router
 from app.chat.router import router as chat_router
 from app.dataset.router import router as dataset_router
-from app.db import init_db
+from app.db import fail_interrupted_jobs, init_db
 from app.discovery.router import router as discovery_router
 from app.downloads.router import router as downloads_router
 from app.errors import WorkbenchError
@@ -20,6 +20,7 @@ from app.tools.router import router as tools_router
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_db()
+    fail_interrupted_jobs()
     yield
 
 
