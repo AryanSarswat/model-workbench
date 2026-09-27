@@ -10,8 +10,8 @@ off: a snapshot is an arbitrary user-chosen repo, and loading it must never exec
 repo-shipped code; models that need custom code surface a terminal load error instead.
 
 Constrained (output_schema) turns never stream: outlines guided decoding biases the
-whole turn's logits, so those turns run to completion (max_new_tokens=512, the same
-cap as tool-loop turns) and yield the final JSON as one delta + done.
+whole turn's logits, so those turns run to completion (capped at _MAX_NEW_TOKENS, the
+same cap as tool-loop turns) and yield the final JSON as one delta + done.
 """
 
 from __future__ import annotations
@@ -67,6 +67,9 @@ _CACHE: LoadedModelCache[tuple[AutoModelForCausalLM, AutoTokenizer]] = LoadedMod
     on_evict=_release_accelerator_memory
 )
 _SENTINEL = object()
+# Cap for non-streamed turns: generate() defaults to input + 20 tokens, which
+# truncates tool-call JSON.
+_MAX_NEW_TOKENS = 512
 
 
 def _detect_device() -> str:
@@ -161,8 +164,7 @@ class TransformersBackend:
         inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
         inputs = inputs.to(self._device)
         input_len = len(inputs["input_ids"][0])
-        # generate() defaults to input + 20 tokens, which truncates tool-call JSON.
-        generate_kwargs = {**inputs, "max_new_tokens": 512}
+        generate_kwargs = {**inputs, "max_new_tokens": _MAX_NEW_TOKENS}
         if output_schema is not None:
             processor = await asyncio.to_thread(
                 _build_guided_processor, model, tokenizer, output_schema
@@ -273,7 +275,7 @@ class TransformersBackend:
                 outputs = await asyncio.to_thread(
                     model.generate,
                     **inputs,
-                    max_new_tokens=512,
+                    max_new_tokens=_MAX_NEW_TOKENS,
                     logits_processor=LogitsProcessorList([processor]),
                 )
                 completion_ids = outputs[0][input_len:]

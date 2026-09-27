@@ -31,6 +31,9 @@ from app.inference.structured_output import (
 )
 from app.tools import Tool, ToolSpec, get_enabled_tool
 
+# Turns a tool (or HF schema) loop may take before giving up with the last text.
+MAX_TOOL_TURNS = 5
+
 _RETRY_MESSAGE = (
     "That was not valid JSON. Reply with exactly one JSON object: "
     '\'{"tool": "<name>", "arguments": {...}}\' to call a tool or '
@@ -137,7 +140,7 @@ async def run_tool_loop(
     generate: Callable[[list[ChatMessage]], Awaitable[str]],
     messages: list[ChatMessage],
     tools: list[ToolSpec],
-    max_iterations: int = 5,
+    max_iterations: int = MAX_TOOL_TURNS,
     on_event: ToolEventSink | None = None,
     output_schema: dict | None = None,
 ) -> LoopResult:

@@ -33,6 +33,7 @@ from app.inference.structured_output import (
     validate_output_schema,
 )
 from app.inference.tool_loop import (
+    MAX_TOOL_TURNS,
     LoopResult,
     ToolEventSink,
     ToolTurn,
@@ -155,7 +156,7 @@ class LlamaCppBackend:
         executed: list[ToolCallRecord] = []
         usages: list[TokenUsage] = []
         retrier = PromptJsonRetrier()
-        for _ in range(5):
+        for _ in range(MAX_TOOL_TURNS):
             extra_kwargs: dict = {"grammar": grammar} if grammar is not None else {}
             response = await asyncio.to_thread(
                 llama.create_chat_completion,

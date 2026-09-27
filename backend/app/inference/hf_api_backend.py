@@ -26,6 +26,7 @@ from app.inference.structured_output import (
     validate_output_schema,
 )
 from app.inference.tool_loop import (
+    MAX_TOOL_TURNS,
     LoopResult,
     ToolEventSink,
     ToolTurn,
@@ -80,7 +81,7 @@ class HFInferenceAPIBackend:
         generate: Callable[[list[ChatMessage]], Awaitable[str]],
         messages: list[ChatMessage],
         schema: dict,
-        max_iterations: int = 5,
+        max_iterations: int = MAX_TOOL_TURNS,
     ) -> tuple[str, int]:
         """Best-effort schema turns: at most max_iterations, each failure fed back
         as a user-role message.
