@@ -15,21 +15,6 @@
   min-width: 0;
 }
 
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.title {
-  margin: 0;
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 54px;
-  line-height: 1;
-  letter-spacing: -0.015em;
-}
-
 .section {
   display: flex;
   flex-direction: column;

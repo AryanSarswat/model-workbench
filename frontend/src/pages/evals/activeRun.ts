@@ -6,12 +6,8 @@
 // re-subscribes to the same cache entry via useActiveEvalRun().
 import type { QueryClient } from '@tanstack/react-query'
 import { runEval } from '../../api/endpoints'
+import { queryKeys } from '../../api/hooks'
 import type { EvalProgressEvent, EvalRunRequest } from '../../api/types'
-
-export const activeRunKey = ['evals', 'active-run'] as const
-// Must match the query key EvalsPage's useEvalReport uses, so a run's completion
-// invalidates the data the matrix reads.
-export const reportKey = ['evals', 'report'] as const
 
 export type ActiveRunStatus = 'streaming' | 'done' | 'error'
 
@@ -30,7 +26,7 @@ export interface ActiveEvalRun {
 // is handled identically to one that streams for a while first. Returns whether the
 // run is done.
 async function applyEvent(queryClient: QueryClient, request: EvalRunRequest, event: EvalProgressEvent): Promise<boolean> {
-  queryClient.setQueryData<ActiveEvalRun>(activeRunKey, {
+  queryClient.setQueryData<ActiveEvalRun>(queryKeys.activeEvalRun, {
     request,
     runId: event.run_id,
     event,
@@ -38,7 +34,7 @@ async function applyEvent(queryClient: QueryClient, request: EvalRunRequest, eve
     error: event.error ?? null,
   })
   if (event.done) {
-    await queryClient.invalidateQueries({ queryKey: reportKey })
+    await queryClient.invalidateQueries({ queryKey: queryKeys.evalReport })
   }
   return event.done
 }
@@ -52,7 +48,7 @@ export async function startEvalRun(queryClient: QueryClient, request: EvalRunReq
   if (first.done) {
     // Defensive: the backend always yields a terminal event, even for zero cases, so
     // this means the connection dropped before any bytes arrived.
-    queryClient.setQueryData<ActiveEvalRun>(activeRunKey, {
+    queryClient.setQueryData<ActiveEvalRun>(queryKeys.activeEvalRun, {
       request,
       runId: null,
       event: null,
@@ -76,7 +72,7 @@ async function consume(
       if (done) {
         // The stream closed without ever sending a done:true event -- a dropped
         // connection. Merge into whatever's already cached rather than clobbering it.
-        queryClient.setQueryData<ActiveEvalRun | undefined>(activeRunKey, (prev) =>
+        queryClient.setQueryData<ActiveEvalRun | undefined>(queryKeys.activeEvalRun, (prev) =>
           prev ? { ...prev, status: 'error', error: 'stream ended before the run finished' } : prev,
         )
         return
@@ -85,7 +81,7 @@ async function consume(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    queryClient.setQueryData<ActiveEvalRun | undefined>(activeRunKey, (prev) =>
+    queryClient.setQueryData<ActiveEvalRun | undefined>(queryKeys.activeEvalRun, (prev) =>
       prev ? { ...prev, status: 'error', error: message } : prev,
     )
   }

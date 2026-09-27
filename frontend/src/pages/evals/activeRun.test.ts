@@ -1,7 +1,8 @@
 import { QueryClient } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EvalProgressEvent, EvalRunRequest } from '../../api/types'
-import { activeRunKey, reportKey, startEvalRun, type ActiveEvalRun } from './activeRun'
+import { queryKeys } from '../../api/hooks'
+import { startEvalRun, type ActiveEvalRun } from './activeRun'
 
 const { runEval } = vi.hoisted(() => ({ runEval: vi.fn() }))
 
@@ -31,9 +32,9 @@ describe('startEvalRun', () => {
 
     await startEvalRun(queryClient, request)
 
-    const active = queryClient.getQueryData<ActiveEvalRun>(activeRunKey)
+    const active = queryClient.getQueryData<ActiveEvalRun>(queryKeys.activeEvalRun)
     expect(active?.status).toBe('done')
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: reportKey })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: queryKeys.evalReport })
   })
 
   it('streams progress and finishes normally once every case completes', async () => {
@@ -47,11 +48,11 @@ describe('startEvalRun', () => {
     const queryClient = new QueryClient()
 
     await startEvalRun(queryClient, request)
-    expect(queryClient.getQueryData<ActiveEvalRun>(activeRunKey)?.status).toBe('streaming')
+    expect(queryClient.getQueryData<ActiveEvalRun>(queryKeys.activeEvalRun)?.status).toBe('streaming')
 
     await flushMicrotasks()
 
-    const active = queryClient.getQueryData<ActiveEvalRun>(activeRunKey)
+    const active = queryClient.getQueryData<ActiveEvalRun>(queryKeys.activeEvalRun)
     expect(active?.status).toBe('done')
     expect(active?.event?.completed).toBe(2)
     expect(active?.runId).toBe(7)
@@ -64,7 +65,7 @@ describe('startEvalRun', () => {
     await startEvalRun(queryClient, request)
     await flushMicrotasks()
 
-    const active = queryClient.getQueryData<ActiveEvalRun>(activeRunKey)
+    const active = queryClient.getQueryData<ActiveEvalRun>(queryKeys.activeEvalRun)
     expect(active?.status).toBe('error')
     expect(active?.error).toBe('stream ended before the run finished')
   })

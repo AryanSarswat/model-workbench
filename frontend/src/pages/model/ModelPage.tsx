@@ -2,11 +2,12 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { useParams } from 'react-router'
 import { ApiError } from '../../api/client'
-import { getEvalReport, getModel, startDownload } from '../../api/endpoints'
-import { isActiveJob, useDownloadedModels, useDownloadJobs } from '../../api/hooks'
+import { getModel, startDownload } from '../../api/endpoints'
+import { isActiveJob, queryKeys, useDownloadedModels, useDownloadJobs } from '../../api/hooks'
 import type { DownloadRequest } from '../../api/types'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { PageHeader } from '../../components/PageHeader'
+import { useEvalReport } from '../evals/queries'
 import { feasibilityQueryOptions } from '../radar/gauge'
 import styles from './ModelPage.module.css'
 import { DownloadingCard } from './DownloadingCard'
@@ -30,10 +31,10 @@ export default function ModelPage() {
 
 function ModelPageBody({ modelId }: { modelId: string }) {
 
-  const modelQuery = useQuery({ queryKey: ['models', modelId], queryFn: () => getModel(modelId) })
+  const modelQuery = useQuery({ queryKey: queryKeys.model(modelId), queryFn: () => getModel(modelId) })
   const feasibilityQuery = useQuery(feasibilityQueryOptions(modelId))
   const downloadedQuery = useDownloadedModels()
-  const evalReportQuery = useQuery({ queryKey: ['evals', 'report'], queryFn: getEvalReport })
+  const evalReportQuery = useEvalReport()
 
   // useDownloadJobs refreshes the downloaded list when a job completes, flipping its row
   // to "on disk"; a failed one stays listed with its error.

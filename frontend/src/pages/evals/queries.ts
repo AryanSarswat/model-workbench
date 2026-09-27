@@ -1,18 +1,21 @@
 // Queries and the run-starting mutation used by EvalsPage.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { getEvalReport, listCases } from '../../api/endpoints'
+import { queryKeys } from '../../api/hooks'
 import type { EvalRunRequest } from '../../api/types'
-import { activeRunKey, reportKey, startEvalRun, type ActiveEvalRun } from './activeRun'
+import { startEvalRun, type ActiveEvalRun } from './activeRun'
 
 export function useEvalReport() {
-  return useQuery({ queryKey: reportKey, queryFn: getEvalReport })
+  return useQuery({ queryKey: queryKeys.evalReport, queryFn: getEvalReport })
 }
 
-// Every category in the dataset, for the run form's Category <select>.
+// Every category in the dataset, for the run form's Category <select>. Reads the Dataset
+// page's cases query, so saving or deleting a case there refreshes this too.
 export function useDatasetCategories() {
   return useQuery({
-    queryKey: ['evals', 'dataset-categories'] as const,
-    queryFn: async () => (await listCases()).map((testCase) => testCase.category),
+    queryKey: queryKeys.datasetCases,
+    queryFn: () => listCases(),
+    select: (cases) => cases.map((testCase) => testCase.category),
   })
 }
 
@@ -22,7 +25,7 @@ export function useDatasetCategories() {
 // run in progress survives the user browsing away for a while.
 export function useActiveEvalRun() {
   return useQuery<ActiveEvalRun | null>({
-    queryKey: activeRunKey,
+    queryKey: queryKeys.activeEvalRun,
     queryFn: () => null,
     staleTime: Infinity,
     gcTime: Infinity,

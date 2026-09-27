@@ -20,6 +20,7 @@ import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
+import { PageHeader } from '../../components/PageHeader'
 import { ProgressBar } from '../../components/ProgressBar'
 import { formatGb, formatRelative } from '../../lib/format'
 import styles from './LibraryPage.module.css'
@@ -62,10 +63,7 @@ export default function LibraryPage() {
   return (
     <main className={styles.page}>
       <div className={styles.main}>
-        <header className={styles.header}>
-          <div className="eyebrow">Everything local to this machine</div>
-          <h1 className={styles.title}>Library</h1>
-        </header>
+        <PageHeader eyebrow="Everything local to this machine" title="Library" />
 
         <section aria-labelledby="disk" className={styles.section}>
           <div className={styles.sectionHead}>

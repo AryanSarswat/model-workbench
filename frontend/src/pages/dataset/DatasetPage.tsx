@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useLocation, useSearchParams } from 'react-router'
 import { listCases } from '../../api/endpoints'
-import { useTools } from '../../api/hooks'
+import { queryKeys, useTools } from '../../api/hooks'
 import type { TestCase } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
@@ -28,7 +28,7 @@ export default function DatasetPage() {
   const [search, setSearch] = useState('')
   const [newCategoryDraft, setNewCategoryDraft] = useState('')
 
-  const casesQuery = useQuery({ queryKey: ['dataset', 'cases'], queryFn: () => listCases() })
+  const casesQuery = useQuery({ queryKey: queryKeys.datasetCases, queryFn: () => listCases() })
   const toolsQuery = useTools()
   const cases = useMemo(() => casesQuery.data ?? [], [casesQuery.data])
   const tools = toolsQuery.data ?? []

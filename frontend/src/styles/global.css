@@ -28,6 +28,11 @@ textarea {
   color: inherit;
 }
 
+/* Standalone message pages: RouteError and NotFoundPage. */
+.message-page {
+  padding: 40px 40px 0;
+}
+
 .eyebrow {
   font-family: var(--mono);
   font-size: 11px;
