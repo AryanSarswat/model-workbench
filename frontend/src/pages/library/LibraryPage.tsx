@@ -101,8 +101,10 @@ export default function LibraryPage() {
               <Link to={`/models/${modelPath(record.repo_id)}`} className={styles.repoLink}>
                 {record.repo_id}
               </Link>
-              <span>
-                <Chip tone="idle">{formatChip(record)}</Chip>
+              <span title={formatChip(record)}>
+                <Chip tone="idle" className={styles.formatChip}>
+                  {formatChip(record)}
+                </Chip>
               </span>
               <span className={styles.size}>{formatGb(record.size_bytes)}</span>
               <span className={styles.lastUsed}>{formatRelative(record.last_used_at ?? record.downloaded_at)}</span>
