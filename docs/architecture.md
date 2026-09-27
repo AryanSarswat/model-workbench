@@ -110,14 +110,15 @@ doesn't block the event loop; which `model_id`s actually work depends on HF rout
 enabled provider, surfaced as a normal 4xx rather than a crash). `LlamaCppBackend` (GGUF via
 llama-cpp-python, runs on any hardware) resolves its file from the downloaded-models table
 in the registry (`repo_id`, or `repo_id:filename` when several quants are on disk) and
-keeps the loaded model in a process-wide cache — no eviction, a deliberate single-user
-simplicity trade-off. A GGUF whose tensor types the installed llama.cpp can't read (e.g. a
+keeps the loaded model in a `LoadedModelCache` (`model_cache.py`) that holds one model
+per local backend: loading another path drops the previous one, and
+`DELETE /models/downloaded/{id}` unloads the deleted model. A GGUF whose tensor types the installed llama.cpp can't read (e.g. a
 fork-only quantization) is caught by a header scan (`gguf_header.py`): the load error
 names it, and `GET /models/downloaded` reports it up front as `unsupported_reason`
 (cached per file mtime). `TransformersBackend` (fallback for models
 without a GGUF build; MPS/CUDA/CPU auto-detected) resolves its snapshot dir from the
-downloaded-models table by plain `repo_id` and keeps the loaded model in a process-wide
-cache like the llama.cpp backend. Unconstrained generation streams via
+downloaded-models table by plain `repo_id` and keeps its loaded model in the same kind of
+one-model cache (also releasing CUDA/MPS memory on eviction). Unconstrained generation streams via
 `TextIteratorStreamer` and runs to EOS with no token cap; schema-guided/tool
 turns are non-streamed (one delta + done, 512-token cap on transformers
 guided turns).

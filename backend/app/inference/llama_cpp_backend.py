@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from llama_cpp import Llama, LlamaGrammar
 
 from app.errors import WorkbenchError
 from app.inference.gguf_header import describe_unsupported
+from app.inference.model_cache import LoadedModelCache
 from app.inference.schemas import (
     BackendCapabilities,
     ChatChunk,
@@ -34,8 +34,7 @@ from app.inference.structured_output import (
 from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool
 from app.tools import ToolSpec, get_tool
 
-_CACHE: dict[str, Llama] = {}
-_CACHE_LOCK = threading.Lock()
+_CACHE: LoadedModelCache[Llama] = LoadedModelCache()
 _SENTINEL = object()
 
 
@@ -120,12 +119,9 @@ class LlamaCppBackend:
         _build_grammar(schema)
 
     def _get_llama(self) -> Llama:
-        with _CACHE_LOCK:
-            llama = _CACHE.get(self._model_path)
-            if llama is None:
-                llama = Llama(model_path=self._model_path, verbose=False)
-                _CACHE[self._model_path] = llama
-            return llama
+        return _CACHE.get_or_load(
+            self._model_path, lambda: Llama(model_path=self._model_path, verbose=False)
+        )
 
     async def _run_native_tool_loop(
         self,

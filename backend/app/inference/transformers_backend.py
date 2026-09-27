@@ -30,6 +30,7 @@ from transformers import (
 )
 
 from app.errors import WorkbenchError
+from app.inference.model_cache import LoadedModelCache
 from app.inference.schemas import (
     BackendCapabilities,
     ChatChunk,
@@ -45,8 +46,18 @@ from app.inference.structured_output import (
 from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool_loop
 from app.tools import ToolSpec
 
-_CACHE: dict[str, tuple[AutoModelForCausalLM, AutoTokenizer]] = {}
-_CACHE_LOCK = threading.Lock()
+
+def _release_accelerator_memory(_model: object) -> None:
+    # The dropped model's tensors are unreferenced by now; hand their blocks back.
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    if torch.backends.mps.is_available():
+        torch.mps.empty_cache()
+
+
+_CACHE: LoadedModelCache[tuple[AutoModelForCausalLM, AutoTokenizer]] = LoadedModelCache(
+    on_evict=_release_accelerator_memory
+)
 _SENTINEL = object()
 
 
@@ -122,19 +133,17 @@ class TransformersBackend:
             ) from e
 
     def _get_model(self) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
-        with _CACHE_LOCK:
-            cached = _CACHE.get(self._snapshot_dir)
-            if cached is None:
-                tokenizer = AutoTokenizer.from_pretrained(self._snapshot_dir)
-                model = AutoModelForCausalLM.from_pretrained(
-                    self._snapshot_dir,
-                    torch_dtype=torch.float16 if self._device != "cpu" else torch.float32,
-                    trust_remote_code=False,
-                ).to(self._device)
-                model.eval()
-                cached = (model, tokenizer)
-                _CACHE[self._snapshot_dir] = cached
-            return cached
+        return _CACHE.get_or_load(self._snapshot_dir, self._load)
+
+    def _load(self) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
+        tokenizer = AutoTokenizer.from_pretrained(self._snapshot_dir)
+        model = AutoModelForCausalLM.from_pretrained(
+            self._snapshot_dir,
+            torch_dtype=torch.float16 if self._device != "cpu" else torch.float32,
+            trust_remote_code=False,
+        ).to(self._device)
+        model.eval()
+        return model, tokenizer
 
     async def aclose(self) -> None:
         """No-op: the cached model stays loaded for the next turn."""

@@ -16,9 +16,9 @@ pytestmark = pytest.mark.ml
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    llama_cpp_backend._CACHE.clear()
+    llama_cpp_backend._CACHE.evict()
     yield
-    llama_cpp_backend._CACHE.clear()
+    llama_cpp_backend._CACHE.evict()
 
 
 class _FakeLlama:
@@ -167,7 +167,7 @@ def test_stream_chat_with_tools_executes_the_call_and_streams_the_final_text(mon
     assert (call.name, call.arguments, call.result) == ("calculator", {"expression": "2 + 3"}, "5")
     assert finished.tool_call_finished == call
     # The real calculator ran: its result rode back as a tool-role message.
-    llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
+    llama = llama_cpp_backend._CACHE.get("/tmp/fake.gguf")
     tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
     assert tool_messages == [{"role": "tool", "tool_call_id": "call_1", "content": "5"}]
 
@@ -276,7 +276,7 @@ def test_stream_chat_with_tools_executes_plain_text_tool_call(monkeypatch):
     assert [c.delta for c in chunks[-2:]] == ["42", ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
-    llama = llama_cpp_backend._CACHE["/tmp/fake.gguf"]
+    llama = llama_cpp_backend._CACHE.get("/tmp/fake.gguf")
     tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
     assert tool_messages == [{"role": "tool", "tool_call_id": "", "content": "42"}]
 
