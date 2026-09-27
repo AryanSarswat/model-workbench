@@ -24,10 +24,16 @@ TOOL_SPEC = ToolSpec(
 
 TIMEOUT_SECONDS = 10
 MAX_CHARS = 8000
+# Many sites reject urllib's default "Python-urllib/3.x" outright.
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/140.0 Safari/537.36"
+)
 
 
 def _fetch(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=TIMEOUT_SECONDS) as response:
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
         raw = response.read(MAX_CHARS * 4)
     return raw.decode(errors="ignore")[:MAX_CHARS]
 

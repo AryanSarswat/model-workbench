@@ -1,4 +1,6 @@
 import asyncio
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -37,6 +39,31 @@ def test_web_fetch_reads_file_url(tmp_path):
     target.write_text("hello from disk")
     result = asyncio.run(_run("web_fetch", {"url": target.as_uri()}))
     assert result == "hello from disk"
+
+
+def test_web_fetch_identifies_as_a_browser_not_python_urllib():
+    # Many sites 403 urllib's default "Python-urllib/3.x" User-Agent outright.
+    seen: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            seen.append(self.headers["User-Agent"])
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.handle_request, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_port}/"
+        assert asyncio.run(_run("web_fetch", {"url": url})) == "ok"
+    finally:
+        server.server_close()
+
+    assert seen[0].startswith("Mozilla/5.0")
 
 
 def test_web_fetch_rejects_unsupported_scheme():
