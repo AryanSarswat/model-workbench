@@ -10,8 +10,8 @@ off: a snapshot is an arbitrary user-chosen repo, and loading it must never exec
 repo-shipped code; models that need custom code surface a terminal load error instead.
 
 Constrained (output_schema) turns never stream: outlines guided decoding biases the
-whole turn's logits, so those turns run to completion (max_new_tokens=512, the same
-cap as tool-loop turns) and yield the final JSON as one delta + done.
+whole turn's logits, so those turns run to completion (capped at _MAX_NEW_TOKENS, the
+same cap as tool-loop turns) and yield the final JSON as one delta + done.
 """
 
 from __future__ import annotations
@@ -45,7 +45,13 @@ from app.inference.structured_output import (
     is_conforming_json,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool_loop
+from app.inference.tool_loop import (
+    LoopResult,
+    ToolEventSink,
+    ToolTurn,
+    run_tool_loop,
+    stream_tool_turn,
+)
 from app.tools import ToolSpec
 
 
@@ -61,6 +67,9 @@ _CACHE: LoadedModelCache[tuple[AutoModelForCausalLM, AutoTokenizer]] = LoadedMod
     on_evict=_release_accelerator_memory
 )
 _SENTINEL = object()
+# Cap for non-streamed turns: generate() defaults to input + 20 tokens, which
+# truncates tool-call JSON.
+_MAX_NEW_TOKENS = 512
 
 
 def _detect_device() -> str:
@@ -155,8 +164,7 @@ class TransformersBackend:
         inputs = await asyncio.to_thread(tokenizer, conversation, return_tensors="pt")
         inputs = inputs.to(self._device)
         input_len = len(inputs["input_ids"][0])
-        # generate() defaults to input + 20 tokens, which truncates tool-call JSON.
-        generate_kwargs = {**inputs, "max_new_tokens": 512}
+        generate_kwargs = {**inputs, "max_new_tokens": _MAX_NEW_TOKENS}
         if output_schema is not None:
             processor = await asyncio.to_thread(
                 _build_guided_processor, model, tokenizer, output_schema
@@ -176,7 +184,7 @@ class TransformersBackend:
         tools: list[ToolSpec],
         output_schema: dict | None = None,
         on_event: ToolEventSink | None = None,
-    ) -> tuple[LoopResult, TokenUsage | None]:
+    ) -> ToolTurn:
         """Drive the shared prompt-and-retry tool loop with non-streamed generation.
 
         The chat template renders the prompt ONCE; later turns and tool results
@@ -216,11 +224,11 @@ class TransformersBackend:
                 model, tokenizer, conversation, output_schema
             )
             usages.append(final_usage)
-            return (
+            return ToolTurn(
                 LoopResult(text=final_text, tool_calls=loop_result.tool_calls),
                 combine_usage(usages),
             )
-        return loop_result, combine_usage(usages)
+        return ToolTurn(loop_result, combine_usage(usages))
 
     async def stream_chat(
         self,
@@ -240,32 +248,16 @@ class TransformersBackend:
             yield ChatChunk(done=True, error=f"failed to load {self._snapshot_dir}: {e}")
             return
         if tools:
-            # Tool turns are non-streamed apart from each call's start/finish event;
-            # the final reply yields as one delta + done.
-            events = ToolEvents()
-            try:
-                loop = asyncio.create_task(
-                    self._run_fallback_tool_loop(
-                        model, tokenizer, messages, tools, output_schema, events.emit
-                    )
-                )
-                async for event in events.stream(loop):
-                    yield event
-                loop_result, usage = loop.result()
-            except WorkbenchError:
-                # Guided setup failures (bad schema, missing outlines) raise
-                # pre-stream; everything else is a terminal chunk, never raised.
-                raise
-            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
-                yield ChatChunk(done=True, error=str(e))
-                return
-            yield ChatChunk(delta=loop_result.text)
-            yield ChatChunk(
-                done=True,
-                usage=usage,
-                tools_called=loop_result.tools_called,
-                tool_calls=loop_result.tool_calls,
-            )
+            # Guided setup failures (bad schema, missing outlines) raise as a
+            # WorkbenchError -- the router's prevalidation normally catches a bad
+            # schema first; everything else is a terminal chunk, never raised.
+            async for chunk in stream_tool_turn(
+                lambda on_event: self._run_fallback_tool_loop(
+                    model, tokenizer, messages, tools, output_schema, on_event
+                ),
+                reraise=(WorkbenchError,),
+            ):
+                yield chunk
             return
         if output_schema is not None:
             # Guided turns never stream. The processor builds before the try so
@@ -284,7 +276,7 @@ class TransformersBackend:
                 outputs = await asyncio.to_thread(
                     model.generate,
                     **inputs,
-                    max_new_tokens=512,
+                    max_new_tokens=_MAX_NEW_TOKENS,
                     logits_processor=LogitsProcessorList([processor]),
                 )
                 completion_ids = outputs[0][input_len:]

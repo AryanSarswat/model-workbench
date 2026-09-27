@@ -11,11 +11,18 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import NamedTuple
 
 from pydantic import BaseModel
 
 from app.errors import WorkbenchError
-from app.inference.schemas import ChatChunk, ChatMessage, ToolCallRecord, ToolCallStart
+from app.inference.schemas import (
+    ChatChunk,
+    ChatMessage,
+    TokenUsage,
+    ToolCallRecord,
+    ToolCallStart,
+)
 from app.inference.structured_output import (
     PromptJsonRetrier,
     TextReply,
@@ -24,10 +31,19 @@ from app.inference.structured_output import (
 )
 from app.tools import Tool, ToolSpec, get_enabled_tool
 
+# Turns a tool (or HF schema) loop may take before giving up with the last text.
+MAX_TOOL_TURNS = 5
+
 _RETRY_MESSAGE = (
     "That was not valid JSON. Reply with exactly one JSON object: "
     '\'{"tool": "<name>", "arguments": {...}}\' to call a tool or '
     '\'{"reply": "<final answer>"}\' for the final answer.'
+)
+_SCHEMA_RETRY_MESSAGE = (
+    "That was neither a tool call nor a final answer matching the required JSON "
+    "Schema. Reply with exactly one JSON object: "
+    '\'{"tool": "<name>", "arguments": {...}}\' to call a tool or the final answer '
+    "as a JSON object conforming to the schema."
 )
 
 
@@ -66,6 +82,45 @@ class ToolEvents:
             task.cancel()  # a no-op once done; stops the loop if the client went away
 
 
+class ToolTurn(NamedTuple):
+    """A finished non-streamed turn: the final reply plus what its done chunk reports."""
+
+    result: LoopResult
+    usage: TokenUsage | None
+    retries: int = 0
+
+
+async def stream_tool_turn(
+    run: Callable[[ToolEventSink], Awaitable[ToolTurn]],
+    *,
+    reraise: tuple[type[Exception], ...] = (),
+) -> AsyncIterator[ChatChunk]:
+    """Stream a non-streamed tool/schema turn: each tool call's start/finish event
+    live (`run` gets the sink), then the final reply as one delta + done.
+
+    A failure is a terminal error chunk, never raised -- except `reraise` types.
+    """
+    events = ToolEvents()
+    try:
+        loop = asyncio.create_task(run(events.emit))
+        async for event in events.stream(loop):
+            yield event
+        result, usage, retries = loop.result()
+    except reraise:
+        raise
+    except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
+        yield ChatChunk(done=True, error=str(e))
+        return
+    yield ChatChunk(delta=result.text)
+    yield ChatChunk(
+        done=True,
+        usage=usage,
+        tools_called=result.tools_called,
+        tool_calls=result.tool_calls,
+        retries=retries,
+    )
+
+
 async def run_tool(tool: Tool, args: dict, on_event: ToolEventSink | None = None) -> ToolCallRecord:
     """Execute one resolved tool call; a raising tool becomes an "Error: ..." result
     for the model, never a loop crash. `on_event` hears the start and the record."""
@@ -91,7 +146,7 @@ async def run_tool_loop(
     generate: Callable[[list[ChatMessage]], Awaitable[str]],
     messages: list[ChatMessage],
     tools: list[ToolSpec],
-    max_iterations: int = 5,
+    max_iterations: int = MAX_TOOL_TURNS,
     on_event: ToolEventSink | None = None,
     output_schema: dict | None = None,
 ) -> LoopResult:
@@ -107,6 +162,12 @@ async def run_tool_loop(
     prompt from the same list, so building it here would duplicate it).
     """
     retrier = PromptJsonRetrier()
+    retry_message = _RETRY_MESSAGE if output_schema is None else _SCHEMA_RETRY_MESSAGE
+    final_answer = (
+        'a {"reply": ...} object'
+        if output_schema is None
+        else "the final answer as a JSON object conforming to the schema"
+    )
     history = list(messages)
     last_text = ""
     tool_calls: list[ToolCallRecord] = []
@@ -120,7 +181,7 @@ async def run_tool_loop(
             obj = extract_json_object(last_text) if output_schema is not None else None
             if obj is not None and matches_schema(obj, output_schema):
                 return LoopResult(text=json.dumps(obj), tool_calls=tool_calls)
-            history.append(ChatMessage(role="user", content=_RETRY_MESSAGE))
+            history.append(ChatMessage(role="user", content=retry_message))
             continue
         try:
             tool = get_enabled_tool(parsed.tool_name, tools)
@@ -130,8 +191,7 @@ async def run_tool_loop(
                     role="user",
                     content=(
                         f"Tool '{parsed.tool_name}' is not available. Reply with "
-                        "exactly one JSON object using an available tool or a "
-                        '{"reply": ...} object.'
+                        f"exactly one JSON object using an available tool or {final_answer}."
                     ),
                 )
             )

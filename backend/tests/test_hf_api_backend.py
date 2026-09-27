@@ -1,4 +1,5 @@
 import asyncio
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -101,6 +102,28 @@ def test_stream_chat_converts_hf_error_to_a_terminal_error_chunk(monkeypatch):
     assert len(chunks) == 1
     assert chunks[0].done is True
     assert "not supported" in chunks[0].error
+
+
+def test_stream_chat_ends_a_non_http_error_mid_stream_in_an_error_chunk(monkeypatch):
+    # The client json.loads each streamed line, so a malformed chunk raises a
+    # JSONDecodeError -- not an HTTPError -- mid-stream. It must still end the turn
+    # as a terminal chunk, like every other backend path.
+    backend = HFInferenceAPIBackend(api_key="fake-key")
+
+    async def _malformed_stream():
+        yield _completion_chunk("Hel")
+        json.loads("{truncated")
+
+    async def fake_chat_completion(**kwargs):
+        return _malformed_stream()
+
+    monkeypatch.setattr(backend._client, "chat_completion", fake_chat_completion)
+
+    chunks = _run_stream_chat(backend)
+
+    assert [c.delta for c in chunks] == ["Hel", ""]
+    assert chunks[-1].done is True
+    assert chunks[-1].error
 
 
 def _non_streamed_completion(content: str, usage=None) -> SimpleNamespace:

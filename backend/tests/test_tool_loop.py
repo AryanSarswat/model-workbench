@@ -2,8 +2,17 @@
 
 import asyncio
 
+import pytest
+
+from app.errors import WorkbenchError
 from app.inference.schemas import ChatChunk, ChatMessage, ToolCallStart
-from app.inference.tool_loop import ToolEvents, run_tool_loop
+from app.inference.tool_loop import (
+    LoopResult,
+    ToolEvents,
+    ToolTurn,
+    run_tool_loop,
+    stream_tool_turn,
+)
 from app.tools import ToolSpec, get_tool
 
 
@@ -106,7 +115,26 @@ def test_schema_conforming_turn_is_the_final_reply():
     assert result.text == '{"answer": 5}'
     assert result.tools_called == ["calculator"]
     assert len(seen) == 3
-    assert any("That was not valid JSON." in m.content for m in seen[-1])
+    # The retry asks for the schema-shaped final answer, not a {"reply": ...} one.
+    (retry,) = [m.content for m in seen[-1] if m.role == "user" and "JSON Schema" in m.content]
+    assert "conforming to the schema" in retry
+    assert '"reply"' not in retry
+
+
+def test_unavailable_tool_feedback_asks_for_the_schema_answer():
+    schema = {"type": "object", "required": ["answer"]}
+    seen: list[list[ChatMessage]] = []
+    turns = ['{"tool": "nope", "arguments": {}}', '{"answer": 5}']
+
+    async def generate(history: list[ChatMessage]) -> str:
+        seen.append(list(history))
+        return turns.pop(0)
+
+    asyncio.run(run_tool_loop(generate, _messages(), _specs(), output_schema=schema))
+
+    (feedback,) = [m.content for m in seen[-1] if "is not available" in m.content]
+    assert "conforming to the schema" in feedback
+    assert '"reply"' not in feedback
 
 
 def test_always_tool_calls_stops_after_max_iterations():
@@ -214,3 +242,35 @@ def test_tool_events_yields_a_chunk_while_the_loop_is_still_running():
         assert task.result() == "final"
 
     asyncio.run(scenario())
+
+
+def _collect_turn(run, **kwargs) -> list[ChatChunk]:
+    async def _collect() -> list[ChatChunk]:
+        return [chunk async for chunk in stream_tool_turn(run, **kwargs)]
+
+    return asyncio.run(_collect())
+
+
+def test_stream_tool_turn_yields_events_then_reply_and_done():
+    async def run(emit) -> ToolTurn:
+        emit(ChatChunk(tool_call_started=ToolCallStart(name="calculator", arguments={})))
+        return ToolTurn(LoopResult(text="5"), usage=None, retries=2)
+
+    started, reply, done = _collect_turn(run)
+
+    assert started.tool_call_started.name == "calculator"
+    assert reply.delta == "5"
+    assert (done.done, done.error, done.retries) == (True, None, 2)
+
+
+def test_stream_tool_turn_ends_a_failure_in_an_error_chunk_unless_reraised():
+    async def run(emit) -> ToolTurn:
+        raise WorkbenchError(400, "invalid_output_schema", "bad schema")
+
+    (failed,) = _collect_turn(run)
+    assert failed.done is True
+    assert "bad schema" in failed.error
+
+    # A backend whose setup errors must surface as a 400 opts out per type.
+    with pytest.raises(WorkbenchError):
+        _collect_turn(run, reraise=(WorkbenchError,))

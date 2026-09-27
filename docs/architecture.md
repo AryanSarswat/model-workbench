@@ -163,15 +163,17 @@ without importing torch/llama.cpp.
 over `PromptJsonRetrier`'s `{"tool": ..., "arguments": {...}} | {"reply": ...}` schema —
 the same retry/error-feedback loop as the structured-output fallback, not a separate
 code path. On a tool call, we execute the function, append the result, and continue, up
-to `max_iterations` (default 5) model turns. Fallback-loop traffic rides as user-role
+to `MAX_TOOL_TURNS` (5) model turns. Fallback-loop traffic rides as user-role
 messages so `ChatMessage` stays `system|user|assistant` (only llama.cpp's native loop
 uses `tool`-role dicts, internally). Tool-calling turns are non-streamed; the final
 reply yields as one delta + done. While the loop runs, each executed call yields a
 `tool_call_started` chunk (name + arguments) and then a `tool_call_finished` chunk
 (its `ToolCallRecord`): every loop reports through `run_tool`'s `on_event`, and
-`ToolEvents` relays those chunks out of the running loop task. The terminal chunk's
-`tool_calls` still lists every record. The eval engine records whether a result used
-native tool calling (`native_tool_calling` on each eval result).
+every backend streams the turn through `stream_tool_turn`, which relays those chunks out
+of the running loop task (`ToolEvents`) and ends with the final delta + done, or a
+terminal error chunk. The terminal chunk's `tool_calls` still lists every record. The
+eval engine records whether a result used native tool calling (`native_tool_calling` on
+each eval result).
 
 ## Shared tools directory
 

@@ -32,7 +32,14 @@ from app.inference.structured_output import (
     ToolCall,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool
+from app.inference.tool_loop import (
+    MAX_TOOL_TURNS,
+    LoopResult,
+    ToolEventSink,
+    ToolTurn,
+    run_tool,
+    stream_tool_turn,
+)
 from app.tools import ToolSpec, get_enabled_tool
 
 _CACHE: LoadedModelCache[Llama] = LoadedModelCache()
@@ -134,7 +141,7 @@ class LlamaCppBackend:
         tools: list[ToolSpec],
         grammar: LlamaGrammar | None = None,
         on_event: ToolEventSink | None = None,
-    ) -> tuple[LoopResult, TokenUsage | None]:
+    ) -> ToolTurn:
         """Drive non-streamed chat turns until the model answers without tool calls.
 
         History is plain dicts so "tool"-role result messages, which ChatMessage
@@ -149,7 +156,7 @@ class LlamaCppBackend:
         executed: list[ToolCallRecord] = []
         usages: list[TokenUsage] = []
         retrier = PromptJsonRetrier()
-        for _ in range(5):
+        for _ in range(MAX_TOOL_TURNS):
             extra_kwargs: dict = {"grammar": grammar} if grammar is not None else {}
             response = await asyncio.to_thread(
                 llama.create_chat_completion,
@@ -173,7 +180,9 @@ class LlamaCppBackend:
                 content = message.get("content") or ""
                 parsed = retrier.parse_tool_call_or_reply(content) if content else None
                 if not isinstance(parsed, ToolCall):
-                    return LoopResult(text=content, tool_calls=executed), combine_usage(usages)
+                    return ToolTurn(
+                        LoopResult(text=content, tool_calls=executed), combine_usage(usages)
+                    )
                 history.append(dict(message))
                 result = await _run_tool(
                     parsed.tool_name, parsed.arguments, tools, executed, on_event
@@ -197,7 +206,7 @@ class LlamaCppBackend:
                 history.append(
                     {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
                 )
-        return LoopResult(text=last_content, tool_calls=executed), combine_usage(usages)
+        return ToolTurn(LoopResult(text=last_content, tool_calls=executed), combine_usage(usages))
 
     async def aclose(self) -> None:
         """No-op: the cached Llama stays loaded for the next turn."""
@@ -219,27 +228,13 @@ class LlamaCppBackend:
             yield ChatChunk(done=True, error=_describe_load_failure(self._model_path, e))
             return
         if tools:
-            # Tool turns are non-streamed apart from each call's start/finish event;
-            # the final reply yields as one delta + done. With a schema every native
-            # turn is grammar-constrained as well.
-            events = ToolEvents()
-            try:
-                loop = asyncio.create_task(
-                    self._run_native_tool_loop(llama, messages, tools, grammar, events.emit)
+            # With a schema every native turn is grammar-constrained as well.
+            async for chunk in stream_tool_turn(
+                lambda on_event: self._run_native_tool_loop(
+                    llama, messages, tools, grammar, on_event
                 )
-                async for event in events.stream(loop):
-                    yield event
-                loop_result, usage = loop.result()
-            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
-                yield ChatChunk(done=True, error=str(e))
-                return
-            yield ChatChunk(delta=loop_result.text)
-            yield ChatChunk(
-                done=True,
-                usage=usage,
-                tools_called=loop_result.tools_called,
-                tool_calls=loop_result.tool_calls,
-            )
+            ):
+                yield chunk
             return
         try:
             if grammar is not None:
