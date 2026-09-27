@@ -22,6 +22,7 @@ import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
 import { PageHeader } from '../../components/PageHeader'
 import { ProgressBar } from '../../components/ProgressBar'
+import { cx } from '../../lib/cx'
 import { formatGb, formatRelative } from '../../lib/format'
 import styles from './LibraryPage.module.css'
 import { chatPath, formatChip, gpuLabel, summarizeParams } from './libraryFormat'
@@ -76,7 +77,7 @@ export default function LibraryPage() {
               </span>
             )}
           </div>
-          <div className={[styles.diskRow, styles.diskHeadRow].join(' ')}>
+          <div className={cx(styles.diskRow, styles.diskHeadRow)}>
             <div className="eyebrow">Model</div>
             <div className="eyebrow">Format</div>
             <div className="eyebrow">Size</div>
@@ -179,7 +180,7 @@ function HfKeyCard() {
 
   return (
     <section aria-labelledby="key" className={styles.card}>
-      <h2 id="key" className={[styles.h2, styles.cardTitle].join(' ')}>
+      <h2 id="key" className={cx(styles.h2, styles.cardTitle)}>
         Hugging Face API key
       </h2>
       <Field label="Token" htmlFor="hfkey">
@@ -187,7 +188,7 @@ function HfKeyCard() {
           <input
             id="hfkey"
             type="password"
-            className={['field', styles.keyInput].join(' ')}
+            className={cx('field', styles.keyInput)}
             placeholder="hf_…"
             value={key}
             onChange={(e) => setKey(e.target.value)}
@@ -209,7 +210,7 @@ function MachineCard() {
   const { data, isError } = useHardware()
   return (
     <section aria-labelledby="machine" className={styles.machine}>
-      <h2 id="machine" className={[styles.h2, styles.machineTitle].join(' ')}>
+      <h2 id="machine" className={cx(styles.h2, styles.machineTitle)}>
         This machine
       </h2>
       {isError && <ErrorNotice error={new Error('Hardware detection unavailable')} />}

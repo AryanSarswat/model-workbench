@@ -5,6 +5,7 @@ import { Chip, type ChipTone } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { LiveDot } from '../../components/LiveDot'
 import { toolCallingChip } from '../../lib/backends'
+import { cx } from '../../lib/cx'
 import { formatMs, formatSeconds, formatTokensPerSec } from '../../lib/format'
 import type { ChatTurn } from './chatReducer'
 import { backendDisplayLabel, shortModelName } from './modelOptions'
@@ -114,7 +115,7 @@ function ToolCallCard({ call, modeLabel, modeTone }: { call: ToolCallRecord; mod
   const shown = collapsible && !expanded ? `${call.result.slice(0, PREVIEW_CHARS)}…` : call.result
 
   return (
-    <div className={[styles.block, failed && styles.blockFailed].filter(Boolean).join(' ')}>
+    <div className={cx(styles.block, failed && styles.blockFailed)}>
       <div className={styles.blockHeader}>
         <span className={styles.blockTitle}>tool call · {call.name}</span>
         <span className={styles.chips}>
@@ -128,7 +129,7 @@ function ToolCallCard({ call, modeLabel, modeTone }: { call: ToolCallRecord; mod
           <span>result · sent to model</span>
           <span>{formatMs(call.duration_ms)}</span>
         </div>
-        <pre className={[styles.code, failed && styles.errorText].filter(Boolean).join(' ')}>{shown}</pre>
+        <pre className={cx(styles.code, failed && styles.errorText)}>{shown}</pre>
         {failed && <p className={styles.resultNote}>The model received this error as the tool's result.</p>}
         {collapsible && (
           <button type="button" className={styles.toggle} onClick={() => setExpanded(!expanded)}>
@@ -143,7 +144,7 @@ function ToolCallCard({ call, modeLabel, modeTone }: { call: ToolCallRecord; mod
 // The call executing right now: what it was asked, with no result yet.
 function RunningToolCard({ call, modeLabel, modeTone }: { call: ToolCallStart; modeLabel: string; modeTone: ChipTone }) {
   return (
-    <div className={[styles.block, styles.blockRunning].join(' ')}>
+    <div className={cx(styles.block, styles.blockRunning)}>
       <div className={styles.blockHeader}>
         <span className={styles.blockTitle}>tool call · {call.name}</span>
         <span className={styles.chips}>

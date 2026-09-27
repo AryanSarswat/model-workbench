@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { cx } from '../lib/cx'
 import styles from './SegmentedControl.module.css'
 
 export interface SegmentOption<T extends string> {
@@ -35,7 +36,7 @@ export function SegmentedControl<T extends string>({
           aria-pressed={option.value === value}
           disabled={option.disabled}
           title={option.title}
-          className={[styles.segment, mono && styles.mono].filter(Boolean).join(' ')}
+          className={cx(styles.segment, mono && styles.mono)}
           onClick={() => onChange(option.value)}
         >
           {option.label}

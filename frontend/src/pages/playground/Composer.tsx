@@ -1,6 +1,7 @@
 import type { KeyboardEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Field } from '../../components/Field'
+import { cx } from '../../lib/cx'
 import styles from './Composer.module.css'
 
 export function Composer({
@@ -48,7 +49,7 @@ export function Composer({
       )}
       <Button
         variant="outline"
-        className={[styles.action, isStreaming && styles.stop].filter(Boolean).join(' ')}
+        className={cx(styles.action, isStreaming && styles.stop)}
         onClick={isStreaming ? onStop : onSend}
         disabled={!isStreaming && sendDisabled}
         aria-describedby={sendBlockedReason ? 'composer-blocked-reason' : undefined}

@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { DownloadedModelRecord, ModelDetail } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
+import { cx } from '../../lib/cx'
 import { formatCount, formatRelative } from '../../lib/format'
 import styles from './ModelPage.module.css'
 import { playgroundLink, splitModelId } from './modelHelpers'
@@ -11,7 +12,7 @@ export function ModelHeader({ detail, downloaded }: { detail: ModelDetail; downl
   return (
     <header className={styles.header}>
       <div className={styles.heading}>
-        <nav aria-label="Breadcrumb" className={['eyebrow', styles.breadcrumb].join(' ')}>
+        <nav aria-label="Breadcrumb" className={cx('eyebrow', styles.breadcrumb)}>
           <Link to="/" className={styles.breadcrumbLink}>
             Radar
           </Link>

@@ -7,6 +7,7 @@ import type { TestCase } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
+import { cx } from '../../lib/cx'
 import styles from './DatasetPage.module.css'
 import { CaseEditor } from './CaseEditor'
 import { caseBadges, caseToForm, emptyForm, firstUserMessage, matchesSearch, type CaseFormState } from './testCaseForm'
@@ -135,14 +136,12 @@ export default function DatasetPage() {
       ) : (
         <div className={styles.body}>
           <nav aria-label="Categories" className={styles.nav}>
-            <div className={['eyebrow', styles.navHeading].join(' ')}>Categories</div>
+            <div className={cx('eyebrow', styles.navHeading)}>Categories</div>
             {categories.map((cat) => (
               <button
                 key={cat.name}
                 type="button"
-                className={[styles.category, cat.name === selectedCategory && styles.categoryActive]
-                  .filter(Boolean)
-                  .join(' ')}
+                className={cx(styles.category, cat.name === selectedCategory && styles.categoryActive)}
                 aria-current={cat.name === selectedCategory ? 'true' : undefined}
                 onClick={() => selectCategory(cat.name)}
               >
@@ -190,7 +189,7 @@ export default function DatasetPage() {
                 <button
                   key={c.id}
                   type="button"
-                  className={[styles.case, c.id === caseParam && styles.caseActive].filter(Boolean).join(' ')}
+                  className={cx(styles.case, c.id === caseParam && styles.caseActive)}
                   aria-current={c.id === caseParam ? 'true' : undefined}
                   onClick={() => openCase(c.id)}
                 >

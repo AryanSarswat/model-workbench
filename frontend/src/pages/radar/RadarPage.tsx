@@ -11,6 +11,7 @@ import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
 import { PageHeader } from '../../components/PageHeader'
 import { SegmentedControl } from '../../components/SegmentedControl'
+import { cx } from '../../lib/cx'
 import { formatCount, formatRelative } from '../../lib/format'
 import { GaugeAxisLabels, MemoryGauge } from './MemoryGauge'
 import { VERDICT_CHIP_TONE, VERDICT_LABEL, bestVerdict, feasibilityQueryOptions, formatMemoryRange, formatThreshold } from './gauge'
@@ -76,7 +77,7 @@ export default function RadarPage() {
             <Field label="Filter" htmlFor="filter">
               <input
                 id="filter"
-                className={['field', styles.filterInput].join(' ')}
+                className={cx('field', styles.filterInput)}
                 placeholder="Model or author"
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
@@ -128,15 +129,15 @@ function RadarTable({ usableMemoryGb, rows }: { usableMemoryGb: number; rows: Ro
 
       <footer className={styles.footer}>
         <span className={styles.legendItem}>
-          <span className={['seg-fit', styles.swatch].join(' ')} />
+          <span className={cx('seg-fit', styles.swatch)} />
           Comfortable{thresholds && `, under ${formatThreshold(thresholds.comfortable_fraction)} of memory`}
         </span>
         <span className={styles.legendItem}>
-          <span className={['seg-tight', styles.swatch].join(' ')} />
+          <span className={cx('seg-tight', styles.swatch)} />
           Tight{thresholds && `, under ${formatThreshold(thresholds.tight_fraction)}`}
         </span>
         <span className={styles.legendItem}>
-          <span className={['hatch', styles.swatch].join(' ')} />
+          <span className={cx('hatch', styles.swatch)} />
           Won’t fit
         </span>
         <span className={styles.legendNote}>
