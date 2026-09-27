@@ -93,6 +93,57 @@ describe('PlaygroundPage', () => {
     })
   })
 
+  it('shows how full the context window is and what the model was given', async () => {
+    const snapshot: DownloadedModelRecord = {
+      id: 1,
+      repo_id: 'org/model',
+      model_id: 'org/model',
+      backend: 'transformers',
+      quant: null,
+      local_path: '/models/org-model',
+      size_bytes: 1,
+      downloaded_at: '2024-01-01T00:00:00Z',
+      last_used_at: null,
+      unsupported_reason: null,
+    }
+    const chatEvents = [
+      { delta: '5', done: false, error: null, usage: null, tools_called: [], tool_calls: [], retries: 0 },
+      {
+        delta: '',
+        done: true,
+        error: null,
+        usage: { prompt_tokens: 400, completion_tokens: 3 },
+        tools_called: ['calculator'],
+        tool_calls: [],
+        retries: 0,
+        context: {
+          window: 1000,
+          messages: [
+            { kind: 'instructions', content: 'Reply with exactly one JSON object.', tokens: 90 },
+            { kind: 'user', content: 'What is 2 + 3?', tokens: 10 },
+            { kind: 'tool', content: "Tool 'calculator' returned: 5", tokens: 250 },
+          ],
+        },
+      },
+    ]
+    renderPlayground('/playground?model=org%2Fmodel&backend=transformers', chatEvents, [snapshot])
+    await screen.findByText('calculator')
+
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'What is 2 + 3?' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+
+    // How full the window is, and what fills it (the 50 unaccounted tokens are template).
+    expect(await screen.findByText('400 / 1,000 tokens · 40%')).toBeInTheDocument()
+    expect(screen.getByText('tool results')).toBeInTheDocument()
+    expect(screen.getByText('250')).toBeInTheDocument()
+    expect(screen.getByText('template')).toBeInTheDocument()
+
+    // The exact messages, including the hidden tool protocol, are one click away.
+    expect(screen.queryByText('Reply with exactly one JSON object.')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Show context' }))
+    expect(screen.getByText('Reply with exactly one JSON object.')).toBeInTheDocument()
+  })
+
   it('shows each tool call with its arguments and the result the model was sent back', async () => {
     const url = 'https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409'
     const page = 'x'.repeat(2000)

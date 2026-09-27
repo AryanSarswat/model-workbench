@@ -1,0 +1,135 @@
+/* One hue per context kind, stacked in contextSummary's SEGMENT_ORDER. Validated as a
+   categorical set on --paper (adjacent CVD ΔE >= 9.1); three sit below 3:1 contrast,
+   so every segment is also named, with its count, in the legend. Template markup is
+   overhead, not a kind of content, so it gets neutral gray. */
+.meter {
+  --ctx-system: #4a3aa7;
+  --ctx-instructions: #e87ba4;
+  --ctx-user: #eda100;
+  --ctx-assistant: #1baf7a;
+  --ctx-tool: #2a78d6;
+  --ctx-template: var(--rule-2);
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+.bar {
+  align-self: stretch;
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--track);
+}
+
+.segment {
+  flex-shrink: 0;
+  min-width: 2px; /* a few tokens of a 32k window would otherwise vanish */
+}
+
+.segment[data-kind='system'],
+.swatch[data-kind='system'] {
+  background: var(--ctx-system);
+}
+.segment[data-kind='instructions'],
+.swatch[data-kind='instructions'] {
+  background: var(--ctx-instructions);
+}
+.segment[data-kind='user'],
+.swatch[data-kind='user'] {
+  background: var(--ctx-user);
+}
+.segment[data-kind='assistant'],
+.swatch[data-kind='assistant'] {
+  background: var(--ctx-assistant);
+}
+.segment[data-kind='tool'],
+.swatch[data-kind='tool'] {
+  background: var(--ctx-tool);
+}
+.segment[data-kind='template'],
+.swatch[data-kind='template'] {
+  background: var(--ctx-template);
+}
+
+.caption {
+  color: var(--ink-2);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li,
+.messageHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.count {
+  color: var(--ink-2);
+}
+
+.toggle {
+  padding: 4px 12px;
+  border: 1px solid var(--rule-2);
+  background: var(--sheet);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: var(--hover);
+}
+
+.messages {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.content {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+  background: var(--inset);
+}
