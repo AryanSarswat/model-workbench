@@ -20,7 +20,7 @@ from app.db import SessionDep
 from app.errors import WorkbenchError
 from app.inference.base import InferenceBackend
 from app.inference.registry import get_backend
-from app.inference.schemas import ChatMessage
+from app.inference.schemas import BackendName, ChatMessage
 from app.metrics import TurnRecorder
 from app.models import ChatMessageRecord, ChatSession
 from app.tools import ToolSpec, resolve_tool_names
@@ -31,7 +31,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 class ChatRequest(BaseModel):
     model_id: str
     messages: list[ChatMessage]
-    backend: str = "api"
+    backend: BackendName = "api"
     tools: list[str] | None = None
     output_schema: dict | None = None
     session_id: int | None = None  # persist this turn into an existing session

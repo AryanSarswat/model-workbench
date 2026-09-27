@@ -54,8 +54,8 @@ def test_stream_chat_returns_400_when_api_key_missing():
 def test_stream_chat_rejects_unsupported_backend():
     response = client.post("/chat/stream", json={**_REQUEST, "backend": "nope"})
 
-    assert response.status_code == 400
-    assert response.json()["error"]["code"] == "backend_not_supported"
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "backend"]
 
 
 def test_stream_chat_gguf_without_download_returns_404(monkeypatch):

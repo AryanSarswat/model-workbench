@@ -11,6 +11,7 @@ import platform
 import subprocess
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 import psutil
 from pydantic import BaseModel, computed_field
@@ -36,7 +37,7 @@ def get_settings() -> Settings:
 
 
 class GPUInfo(BaseModel):
-    kind: str  # "apple_silicon" | "nvidia" | "none"
+    kind: Literal["apple_silicon", "nvidia", "none"]
     name: str | None = None
     vram_gb: float | None = None  # None for apple_silicon (unified memory, use total_ram_gb)
 

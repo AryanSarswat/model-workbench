@@ -4,6 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+# The inference backends a chat/eval request can name, and the two that run on-disk models.
+BackendName = Literal["api", "gguf", "transformers"]
+LocalBackendName = Literal["gguf", "transformers"]
+StructuredOutputMode = Literal["grammar", "guided", "prompt_retry"]
+
 
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant"]
@@ -62,14 +67,14 @@ class ChatChunk(BaseModel):
 class BackendCapabilities(BaseModel):
     model_config = ConfigDict(frozen=True)  # BACKEND_CAPABILITIES entries are shared
 
-    structured_output_mode: Literal["grammar", "guided", "prompt_retry"]
+    structured_output_mode: StructuredOutputMode
     native_tool_calling: bool
 
 
 # The single source of truth for what each backend can do. Lives here, not on the
 # backend classes, so GET /backends can report it without importing the optional
 # torch/llama.cpp modules; each class's capabilities() returns its entry.
-BACKEND_CAPABILITIES: dict[str, BackendCapabilities] = {
+BACKEND_CAPABILITIES: dict[BackendName, BackendCapabilities] = {
     # A remote provider offers no grammar/guided decoding control.
     "api": BackendCapabilities(structured_output_mode="prompt_retry", native_tool_calling=False),
     "gguf": BackendCapabilities(structured_output_mode="grammar", native_tool_calling=True),

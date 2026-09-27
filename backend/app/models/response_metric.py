@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import AutoString, Field, SQLModel
+
+from app.inference.schemas import BackendName
 
 
 class ResponseMetricRecord(SQLModel, table=True):
@@ -10,7 +12,7 @@ class ResponseMetricRecord(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     model_id: str
-    backend: str  # "api" | "gguf" | "transformers"
+    backend: BackendName = Field(sa_type=AutoString)
     prompt_tokens: int | None = None
     completion_tokens: int | None = None
     tokens_per_sec: float | None = None

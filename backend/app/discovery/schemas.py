@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.inference.schemas import LocalBackendName
+
 
 class DiscoveredModel(BaseModel):
     id: str
@@ -41,7 +43,7 @@ class ModelDetail(DiscoveredModel):
 
 class FeasibilityOption(BaseModel):
     label: str  # display text: a GGUF filename, or e.g. "transformers (BF16)"
-    backend: Literal["gguf", "transformers"]
+    backend: LocalBackendName
     filename: str | None = None  # the GGUF file to download/load; None for transformers
     verdict: Literal["comfortable", "tight", "wont_fit"]
     estimated_memory_gb: float
