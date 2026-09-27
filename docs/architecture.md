@@ -189,8 +189,9 @@ eval-specific inference logic. Automatically recorded per case: response, struct
 output/tool-calling modes and retry counts, and performance metrics. Assertions run
 automatically; if a case has `judge.criteria`, a second call to `judge_model_id` scores it.
 Every result also carries `manual_verdict`/`manual_notes` for hand review regardless of
-automated results. The backend is resolved once before the stream starts, so misconfiguration
-(missing key, undownloaded model) is a normal 4xx. A per-case failure (backend error,
+automated results. The backend (and the judge's, on the same backend type) is resolved once
+before the stream starts, so misconfiguration (missing key, undownloaded model or judge) is a
+normal 4xx. A per-case failure (backend error,
 invalid case schema) is recorded on that result's `error` and the run continues; a run
 always ends `completed` or `failed` with a final `done` event. `GET /evals/report`
 aggregates `eval_results` by `(model_id, backend, category)` into the model-comparison

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from app.dataset.store import TestCase
 from app.errors import WorkbenchError
-from app.inference.registry import get_backend
+from app.inference.base import InferenceBackend
 from app.inference.schemas import ChatMessage
 from app.inference.structured_output import extract_json_object
 
@@ -19,32 +19,29 @@ _JUDGE_PROMPT_TEMPLATE = (
 
 
 async def score_with_judge(
-    backend_name: str,
+    backend: InferenceBackend,
     judge_model_id: str,
-    hf_api_key: str | None,
     case: TestCase,
     response: str,
 ) -> tuple[float, str]:
-    """Returns (score, rationale). A judge reply that isn't parseable JSON with a
-    numeric score scores 0.0 with a rationale explaining why -- never raises,
-    since one bad judge turn shouldn't fail the whole eval run.
+    """Returns (score, rationale). `backend` is resolved, and closed, by the caller.
+    A judge reply that is a backend error, or isn't parseable JSON with a numeric
+    score, scores 0.0 with a rationale explaining why -- one bad judge turn shouldn't
+    fail the whole eval run. Raises WorkbenchError only if the case has no
+    judge.criteria.
     """
     if case.judge is None:
         raise WorkbenchError(
             400, "no_judge_criteria", f"Test case {case.id} has no judge.criteria."
         )
-    backend = get_backend(backend_name, judge_model_id, hf_api_key)
     prompt = _JUDGE_PROMPT_TEMPLATE.format(criteria=case.judge.criteria, response=response)
-    try:
-        parts: list[str] = []
-        async for chunk in backend.stream_chat(
-            judge_model_id, [ChatMessage(role="user", content=prompt)]
-        ):
-            if chunk.error is not None:
-                return 0.0, f"Judge call failed: {chunk.error}"
-            parts.append(chunk.delta)
-    finally:
-        await backend.aclose()
+    parts: list[str] = []
+    async for chunk in backend.stream_chat(
+        judge_model_id, [ChatMessage(role="user", content=prompt)]
+    ):
+        if chunk.error is not None:
+            return 0.0, f"Judge call failed: {chunk.error}"
+        parts.append(chunk.delta)
     text = "".join(parts)
     parsed = extract_json_object(text)
     score_value = parsed.get("score") if isinstance(parsed, dict) else None

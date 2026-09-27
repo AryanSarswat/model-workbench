@@ -75,7 +75,7 @@ def test_run_one_case_persists_response_metric_and_result(monkeypatch):
     with Session(engine) as session:
         run = _run(session)
 
-        result = asyncio.run(service.run_one_case(session, run, _case(), fake, "fake-key"))
+        result = asyncio.run(service.run_one_case(session, run, _case(), fake, None))
 
         assert result.response == "hi there"
         assert result.assertions_passed == 1
@@ -91,7 +91,7 @@ def test_run_one_case_records_tools_called_and_retries(monkeypatch):
         run = _run(session)
         case = _case(assertions=[Assertion(type="tool_called", name="calculator")])
 
-        result = asyncio.run(service.run_one_case(session, run, case, fake, "fake-key"))
+        result = asyncio.run(service.run_one_case(session, run, case, fake, None))
 
         assert result.tools_called == "calculator"
         assert result.retries == 1
@@ -101,7 +101,7 @@ def test_run_one_case_records_tools_called_and_retries(monkeypatch):
 def test_run_one_case_runs_judge_when_case_has_criteria_and_run_has_judge_model(monkeypatch):
     fake = _FakeBackend(reply="hi there")
 
-    async def fake_score(backend_name, judge_model_id, hf_api_key, case, response):
+    async def fake_score(backend, judge_model_id, case, response):
         return 0.9, "Very polite."
 
     monkeypatch.setattr(service, "score_with_judge", fake_score)
@@ -110,7 +110,7 @@ def test_run_one_case_runs_judge_when_case_has_criteria_and_run_has_judge_model(
         run = _run(session, judge_model_id="judge/model")
         case = _case(judge=TestCaseJudge(criteria="Must be polite."), assertions=[])
 
-        result = asyncio.run(service.run_one_case(session, run, case, fake, "fake-key"))
+        result = asyncio.run(service.run_one_case(session, run, case, fake, _FakeBackend()))
 
         assert result.judge_score == 0.9
         assert result.judge_rationale == "Very polite."
@@ -123,7 +123,7 @@ def test_run_one_case_skips_judge_when_run_has_no_judge_model_id(monkeypatch):
         run = _run(session)  # no judge_model_id
         case = _case(judge=TestCaseJudge(criteria="Must be polite."), assertions=[])
 
-        result = asyncio.run(service.run_one_case(session, run, case, fake, "fake-key"))
+        result = asyncio.run(service.run_one_case(session, run, case, fake, None))
 
         assert result.judge_score is None
         assert result.judge_rationale is None
@@ -135,7 +135,7 @@ def test_run_one_case_records_a_backend_error_instead_of_an_empty_answer():
     with Session(engine) as session:
         run = _run(session)
 
-        result = asyncio.run(service.run_one_case(session, run, _case(), fake, "fake-key"))
+        result = asyncio.run(service.run_one_case(session, run, _case(), fake, None))
 
         assert result.error == "model unavailable"
         assert result.assertions_passed == 0
@@ -148,7 +148,7 @@ def test_run_one_case_records_an_invalid_case_schema_without_calling_the_model()
         run = _run(session)
         case = _case(output_schema={"type": 42})
 
-        result = asyncio.run(service.run_one_case(session, run, case, fake, "fake-key"))
+        result = asyncio.run(service.run_one_case(session, run, case, fake, None))
 
         assert "bad schema" in result.error
         assert result.response == ""
