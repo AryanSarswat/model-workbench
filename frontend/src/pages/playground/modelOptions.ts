@@ -11,32 +11,27 @@ function quantName(filename: string): string {
   return filename.replace(/\.gguf$/i, '').split(/[-.]/).pop() || filename
 }
 
-// gguf model_id is the bare repo_id when only one quant of that repo is downloaded,
-// else "repo_id:quant" -- mirrors _resolve_gguf_path in
-// backend/app/inference/registry.py.
+// The backend returns a "repo_id:quant" model_id only when several quants of that repo
+// are downloaded -- then the label names the quant too.
 export function ggufModelOptions(records: DownloadedModelRecord[]): ModelOption[] {
-  const countByRepo = new Map<string, number>()
-  for (const record of records) countByRepo.set(record.repo_id, (countByRepo.get(record.repo_id) ?? 0) + 1)
   return records.map((record) => {
-    const ambiguous = (countByRepo.get(record.repo_id) ?? 0) > 1
-    const modelId = ambiguous ? `${record.repo_id}:${record.quant}` : record.repo_id
-    const label = ambiguous ? `${record.repo_id} (${record.quant})` : record.repo_id
+    const label = record.model_id.includes(':') ? `${record.repo_id} (${record.quant})` : record.repo_id
     const unloadable = record.unsupported_reason
       ? { quant: quantName(record.quant ?? ''), reason: record.unsupported_reason }
       : null
-    return { modelId, label, unloadable }
+    return { modelId: record.model_id, label, unloadable }
   })
 }
 
-// transformers model_id is always the bare repo_id -- dedupe repeated downloads of the
-// same repo (the registry resolves to the most recently downloaded row).
+// Repeated downloads of one transformers repo share a model_id (the registry resolves it
+// to the most recently downloaded row) -- dedupe them.
 export function transformersModelOptions(records: DownloadedModelRecord[]): ModelOption[] {
   const seen = new Set<string>()
   const options: ModelOption[] = []
   for (const record of records) {
-    if (seen.has(record.repo_id)) continue
-    seen.add(record.repo_id)
-    options.push({ modelId: record.repo_id, label: record.repo_id, unloadable: null })
+    if (seen.has(record.model_id)) continue
+    seen.add(record.model_id)
+    options.push({ modelId: record.model_id, label: record.model_id, unloadable: null })
   }
   return options
 }

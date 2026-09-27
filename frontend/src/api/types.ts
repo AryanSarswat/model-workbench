@@ -94,6 +94,7 @@ export interface DownloadedModelRecord {
   id: number
   repo_id: string
   backend: 'gguf' | 'transformers'
+  model_id: string // what to send as model_id to run this record (resolved by the backend's registry)
   quant: string | null // GGUF filename when backend is gguf
   local_path: string
   size_bytes: number

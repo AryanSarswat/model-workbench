@@ -26,6 +26,7 @@ describe('buildRunRequest', () => {
 
 function downloaded(overrides: Partial<DownloadedModelRecord> & Pick<DownloadedModelRecord, 'id' | 'repo_id' | 'backend'>): DownloadedModelRecord {
   return {
+    model_id: overrides.repo_id,
     quant: null,
     local_path: '/models/x',
     size_bytes: 0,
@@ -47,24 +48,14 @@ describe('modelIdSuggestions', () => {
     expect(modelIdSuggestions('api', records, reportRows)).toEqual(['google/gemma-3-12b-it'])
   })
 
-  it('transformers suggests downloaded repo ids for that backend only', () => {
+  it("local backends suggest each downloaded record's model_id for that backend only, once each", () => {
     const records = [
       downloaded({ id: 1, repo_id: 'microsoft/Phi-4-mini-instruct', backend: 'transformers' }),
-      downloaded({ id: 2, repo_id: 'Qwen/Qwen3-14B', backend: 'gguf' }),
+      downloaded({ id: 2, repo_id: 'microsoft/Phi-4-mini-instruct', backend: 'transformers' }),
+      downloaded({ id: 3, repo_id: 'Qwen/Qwen3-14B', backend: 'gguf', model_id: 'Qwen/Qwen3-14B:Q8_0.gguf' }),
+      downloaded({ id: 4, repo_id: 'Qwen/Qwen3-14B', backend: 'gguf', model_id: 'Qwen/Qwen3-14B:Q4_K_M.gguf' }),
     ]
     expect(modelIdSuggestions('transformers', records, [])).toEqual(['microsoft/Phi-4-mini-instruct'])
-  })
-
-  it('gguf suggests a bare repo id when only one quant is downloaded', () => {
-    const records = [downloaded({ id: 1, repo_id: 'Qwen/Qwen3-14B', backend: 'gguf', quant: 'Q4_K_M.gguf' })]
-    expect(modelIdSuggestions('gguf', records, [])).toEqual(['Qwen/Qwen3-14B'])
-  })
-
-  it('gguf suggests "repo_id:quant" for each quant when several are downloaded', () => {
-    const records = [
-      downloaded({ id: 1, repo_id: 'Qwen/Qwen3-14B', backend: 'gguf', quant: 'Q4_K_M.gguf' }),
-      downloaded({ id: 2, repo_id: 'Qwen/Qwen3-14B', backend: 'gguf', quant: 'Q8_0.gguf' }),
-    ]
     expect(modelIdSuggestions('gguf', records, [])).toEqual(['Qwen/Qwen3-14B:Q4_K_M.gguf', 'Qwen/Qwen3-14B:Q8_0.gguf'])
   })
 })
