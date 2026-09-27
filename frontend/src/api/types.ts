@@ -53,15 +53,19 @@ export interface ModelDetail extends DiscoveredModel {
 
 export type FeasibilityVerdict = 'comfortable' | 'tight' | 'wont_fit'
 
-export interface FeasibilityOption {
-  label: string // a GGUF filename, or e.g. "transformers (BF16)"
+// `filename` is the GGUF file to download/load, and is null exactly for transformers.
+export type FeasibilityOption = {
+  label: string // display text: a GGUF filename, or e.g. "transformers (BF16)"
   verdict: FeasibilityVerdict
   estimated_memory_gb: number
   reason: string
-}
+} & ({ backend: 'gguf'; filename: string } | { backend: 'transformers'; filename: null })
 
 export interface FeasibilityReport {
   available_memory_gb: number
+  // Verdict thresholds as fractions of available_memory_gb.
+  comfortable_fraction: number
+  tight_fraction: number
   options: FeasibilityOption[]
 }
 

@@ -28,9 +28,13 @@ const model: DiscoveredModel = {
 
 const feasibility: FeasibilityReport = {
   available_memory_gb: 18,
+  comfortable_fraction: 0.7,
+  tight_fraction: 0.95,
   options: [
     {
       label: 'Qwen3-14B-Q4_K_M.gguf',
+      backend: 'gguf',
+      filename: 'Qwen3-14B-Q4_K_M.gguf',
       verdict: 'comfortable',
       estimated_memory_gb: 10.8,
       reason: '~10.8GB needed, 18GB available -- should run comfortably.',
@@ -64,6 +68,20 @@ describe('RadarPage', () => {
     expect(await screen.findByText('Fits')).toBeInTheDocument()
     expect(screen.getByText('10.8 GB · 1 option')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Qwen\/Qwen3-14B/ })).toHaveAttribute('href', '/models/Qwen/Qwen3-14B')
+  })
+
+  it('takes format chips and legend thresholds from the feasibility report', async () => {
+    renderAt('/', {
+      '/api/config/hardware': Response.json(hardware),
+      '/api/config/hf-api-key': Response.json({ is_set: false }),
+      '/api/models/discover?sort=trending&limit=20': Response.json([model]),
+      '/api/models/Qwen/Qwen3-14B/feasibility': Response.json({ ...feasibility, comfortable_fraction: 0.65, tight_fraction: 0.9 }),
+    })
+
+    expect(await screen.findByText('GGUF')).toBeInTheDocument()
+    expect(screen.queryByText('transformers')).not.toBeInTheDocument()
+    expect(screen.getByText('Comfortable, under 65% of memory')).toBeInTheDocument()
+    expect(screen.getByText('Tight, under 90%')).toBeInTheDocument()
   })
 
   it('shows a short reason and an Unknown chip when feasibility fails', async () => {

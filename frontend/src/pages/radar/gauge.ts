@@ -1,13 +1,11 @@
-// Memory-fit gauge math, shared by the Radar table and the Model detail page.
-// Mirrors the backend's verdict thresholds (backend/app/discovery/feasibility.py
-// _COMFORTABLE_THRESHOLD / _TIGHT_THRESHOLD) so the bar's bands line up with the verdicts
-// the API already computed.
+// Memory-fit gauge math, shared by the Radar table and the Model detail page. The bands
+// use the verdict thresholds the feasibility report carries, so they line up with the
+// verdicts the API already computed.
 import { getFeasibility } from '../../api/endpoints'
-import type { FeasibilityVerdict } from '../../api/types'
+import type { FeasibilityReport, FeasibilityVerdict } from '../../api/types'
 import type { ChipTone } from '../../components/Chip'
 
-const COMFORTABLE_THRESHOLD = 0.7
-const TIGHT_THRESHOLD = 0.95
+export type VerdictThresholds = Pick<FeasibilityReport, 'comfortable_fraction' | 'tight_fraction'>
 
 // The scale runs to 1.5x usable memory, so the capacity line (== usable memory) sits at
 // exactly 2/3 (66.67%) of the bar.
@@ -25,23 +23,15 @@ export interface GaugeSegment {
   width: number // percent of the scale
 }
 
-export interface GaugeScale {
-  max: number
-  comfortableGb: number
-  tightGb: number
-}
-
-export function gaugeScale(usableMemoryGb: number): GaugeScale {
-  return {
-    max: usableMemoryGb * SCALE_FACTOR,
-    comfortableGb: usableMemoryGb * COMFORTABLE_THRESHOLD,
-    tightGb: usableMemoryGb * TIGHT_THRESHOLD,
-  }
+export function gaugeMax(usableMemoryGb: number): number {
+  return usableMemoryGb * SCALE_FACTOR
 }
 
 // Colored segments for the part of [lo, hi] inside each band, clipped to the scale's max.
-export function gaugeSegments(lo: number, hi: number, usableMemoryGb: number): GaugeSegment[] {
-  const { max, comfortableGb, tightGb } = gaugeScale(usableMemoryGb)
+export function gaugeSegments(lo: number, hi: number, usableMemoryGb: number, thresholds: VerdictThresholds): GaugeSegment[] {
+  const max = gaugeMax(usableMemoryGb)
+  const comfortableGb = usableMemoryGb * thresholds.comfortable_fraction
+  const tightGb = usableMemoryGb * thresholds.tight_fraction
   const minWidth = max * MIN_SEGMENT_FRACTION
   const bands: [number, number, SegmentClass][] = [
     [0, comfortableGb, 'seg-fit'],
@@ -78,6 +68,11 @@ const VERDICT_RANK: Record<FeasibilityVerdict, number> = { comfortable: 0, tight
 export function bestVerdict(verdicts: FeasibilityVerdict[]): FeasibilityVerdict | null {
   if (verdicts.length === 0) return null
   return verdicts.reduce((best, v) => (VERDICT_RANK[v] < VERDICT_RANK[best] ? v : best))
+}
+
+// 0.7 -> "70%"
+export function formatThreshold(fraction: number): string {
+  return `${Math.round(fraction * 100)}%`
 }
 
 export function formatGbValue(gb: number): string {

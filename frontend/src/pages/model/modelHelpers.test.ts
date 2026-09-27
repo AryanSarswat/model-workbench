@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { DownloadJob, DownloadedModelRecord, EvalReportRow } from '../../api/types'
+import type { DownloadJob, DownloadedModelRecord, EvalReportRow, FeasibilityOption, ModelDetail } from '../../api/types'
 import {
   bestEvalBackend,
   findActiveGgufJob,
   findActiveSnapshotJob,
   findDownloadedGguf,
   findDownloadedSnapshot,
-  optionBackend,
+  optionSizeLabel,
   playgroundLink,
 } from './modelHelpers'
 
@@ -41,10 +41,18 @@ const jobs: DownloadJob[] = [
   },
 ]
 
-describe('optionBackend', () => {
-  it('reads gguf from a .gguf filename and transformers otherwise', () => {
-    expect(optionBackend('Qwen3-14B-Q4_K_M.gguf')).toBe('gguf')
-    expect(optionBackend('transformers (BF16)')).toBe('transformers')
+describe('optionSizeLabel', () => {
+  const detail = {
+    gguf_files: [{ filename: 'Qwen3-14B-Q4_K_M.gguf', size_bytes: 9 * 1024 ** 3 }],
+    parameter_count: 14_800_000_000,
+  } as ModelDetail
+  const base = { verdict: 'comfortable', estimated_memory_gb: 10.8, reason: '' } as const
+
+  it("shows a GGUF option's file size and a transformers option's param count", () => {
+    const gguf: FeasibilityOption = { ...base, label: 'Qwen3-14B-Q4_K_M.gguf', backend: 'gguf', filename: 'Qwen3-14B-Q4_K_M.gguf' }
+    const transformers: FeasibilityOption = { ...base, label: 'transformers (BF16)', backend: 'transformers', filename: null }
+    expect(optionSizeLabel(gguf, detail)).toBe('9.0 GB file')
+    expect(optionSizeLabel(transformers, detail)).toBe('14.8B params')
   })
 })
 
