@@ -184,11 +184,7 @@ class PromptJsonRetrier:
         neither a tool call nor a reply yields None so the caller can retry with
         error feedback.
         """
-        try:
-            obj = extract_json_object(text)
-        except (TypeError, ValueError):
-            # Non-string input -- just means "retry".
-            return None
+        obj = extract_json_object(text)
         if obj is None:
             return None
         if isinstance(obj.get("tool"), str) and isinstance(obj.get("arguments"), dict):
@@ -205,14 +201,11 @@ class PromptJsonRetrier:
         """Extract the single JSON object of a schema-constrained turn.
 
         Dict on success; TextReply when the model sent prose with no JSON at all;
-        None when JSON was attempted but unparseable (or input is not a string).
+        None when JSON was attempted but unparseable.
         """
-        try:
-            obj = extract_json_object(text)
-        except (TypeError, ValueError):
-            return None
+        obj = extract_json_object(text)
         if obj is not None:
             return obj
-        if isinstance(text, str) and "{" not in text:
+        if "{" not in text:
             return TextReply(text=text)
         return None
