@@ -1,6 +1,8 @@
 import type { KeyboardEvent } from 'react'
 import { Button } from '../../components/Button'
 import { Field } from '../../components/Field'
+import { StopIcon } from '../../components/icons'
+import { cx } from '../../lib/cx'
 import styles from './Composer.module.css'
 
 export function Composer({
@@ -48,16 +50,14 @@ export function Composer({
       )}
       <Button
         variant="outline"
-        className={[styles.action, isStreaming && styles.stop].filter(Boolean).join(' ')}
+        className={cx(styles.action, isStreaming && styles.stop)}
         onClick={isStreaming ? onStop : onSend}
         disabled={!isStreaming && sendDisabled}
         aria-describedby={sendBlockedReason ? 'composer-blocked-reason' : undefined}
       >
         {isStreaming ? (
           <>
-            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true">
-              <rect x="3" y="3" width="10" height="10" fill="currentColor" />
-            </svg>
+            <StopIcon />
             Stop
           </>
         ) : (

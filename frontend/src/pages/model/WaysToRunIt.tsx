@@ -4,10 +4,12 @@ import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { ProgressBar } from '../../components/ProgressBar'
+import { CheckIcon } from '../../components/icons'
+import { playgroundPath } from '../../lib/links'
 import { GaugeAxisLabels, MemoryGauge } from '../radar/MemoryGauge'
 import { VERDICT_CHIP_TONE, VERDICT_LABEL, type VerdictThresholds } from '../radar/gauge'
 import styles from './ModelPage.module.css'
-import { findActiveGgufJob, findActiveSnapshotJob, findDownloadedGguf, findDownloadedSnapshot, optionPlaygroundLink, optionSizeLabel } from './modelHelpers'
+import { findActiveGgufJob, findActiveSnapshotJob, findDownloadedGguf, findDownloadedSnapshot, optionSizeLabel } from './modelHelpers'
 
 export interface FailedDownload {
   id: number
@@ -93,7 +95,7 @@ export function WaysToRunIt({
         <div className={styles.optionReason}>No local memory used</div>
         <div><Chip tone="idle">Remote</Chip></div>
         <div className={styles.actionCell}>
-          <Button to={optionPlaygroundLink(modelId, 'api')} className={styles.actionButton}>
+          <Button to={playgroundPath({ model: modelId, backend: 'api' })} className={styles.actionButton}>
             Chat via API
           </Button>
         </div>
@@ -145,10 +147,8 @@ function OptionRow({
       </div>
       <div className={styles.actionCell}>
         {onDisk ? (
-          <Button to={optionPlaygroundLink(modelId, backend, filename ?? undefined)} variant="solid" className={styles.actionButton}>
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M3 8.5l3 3 7-7" />
-            </svg>
+          <Button to={playgroundPath({ model: modelId, backend, quant: filename })} variant="solid" className={styles.actionButton}>
+            <CheckIcon />
             On disk · Chat
           </Button>
         ) : activeJob ? (

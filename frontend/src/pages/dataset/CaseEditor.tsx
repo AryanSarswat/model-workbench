@@ -6,9 +6,10 @@ import type { TestCase, ToolSpec } from '../../api/types'
 import { Button } from '../../components/Button'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
+import { CrossIcon } from '../../components/icons'
+import { cx } from '../../lib/cx'
 import styles from './DatasetPage.module.css'
 import { AssertionsEditor } from './AssertionsEditor'
-import { RemoveIcon } from './RemoveIcon'
 import {
   duplicateForm,
   formToCase,
@@ -116,7 +117,7 @@ export function CaseEditor({
         <Field label="ID" htmlFor="case-id">
           <input
             id="case-id"
-            className={[styles.mono, isNew ? '' : styles.readonlyField, 'field'].filter(Boolean).join(' ')}
+            className={cx(styles.mono, !isNew && styles.readonlyField, 'field')}
             value={form.id}
             readOnly={!isNew}
             onChange={(e) => setForm({ ...form, id: e.target.value })}
@@ -125,7 +126,7 @@ export function CaseEditor({
         <Field label="Category" htmlFor="case-category">
           <input
             id="case-category"
-            className={[styles.mono, 'field'].filter(Boolean).join(' ')}
+            className={cx(styles.mono, 'field')}
             list="dataset-categories"
             value={form.category}
             onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -153,7 +154,7 @@ export function CaseEditor({
                 </label>
                 <select
                   id={`msg-role-${index}`}
-                  className={[styles.mono, 'field'].filter(Boolean).join(' ')}
+                  className={cx(styles.mono, 'field')}
                   value={message.role}
                   onChange={(e) => updateMessage(index, { role: e.target.value as CaseFormState['messages'][number]['role'] })}
                 >
@@ -181,7 +182,7 @@ export function CaseEditor({
                     className={styles.iconButton}
                     onClick={() => removeMessage(index)}
                   >
-                    <RemoveIcon />
+                    <CrossIcon />
                   </button>
                 )}
               </div>
@@ -218,7 +219,7 @@ export function CaseEditor({
         <Field label="Output schema · optional" htmlFor="case-schema">
           <textarea
             id="case-schema"
-            className={[styles.area, styles.schemaArea].join(' ')}
+            className={cx(styles.area, styles.schemaArea)}
             rows={7}
             placeholder="{}"
             value={form.outputSchema}

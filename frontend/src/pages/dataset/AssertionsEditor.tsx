@@ -1,5 +1,6 @@
+import { CrossIcon } from '../../components/icons'
+import { cx } from '../../lib/cx'
 import styles from './DatasetPage.module.css'
-import { RemoveIcon } from './RemoveIcon'
 import { ASSERTION_TYPES, assertionArgPlaceholder, assertionNeedsArgument, type CaseFormState } from './testCaseForm'
 
 type Assertion = CaseFormState['assertions'][number]
@@ -18,11 +19,11 @@ export function AssertionsEditor({
 }) {
   return (
     <fieldset className={styles.assertions}>
-      <legend className={['eyebrow', styles.assertionLegend].join(' ')}>Assertions</legend>
+      <legend className={cx('eyebrow', styles.assertionLegend)}>Assertions</legend>
       {assertions.map((assertion, index) => (
         <div key={index} className={styles.assertionRow}>
           <select
-            className={[styles.mono, 'field'].filter(Boolean).join(' ')}
+            className={cx(styles.mono, 'field')}
             aria-label={`Assertion ${index + 1} type`}
             value={assertion.type}
             onChange={(e) => onUpdate(index, { type: e.target.value as Assertion['type'] })}
@@ -34,7 +35,7 @@ export function AssertionsEditor({
             ))}
           </select>
           <input
-            className={[styles.mono, 'field'].filter(Boolean).join(' ')}
+            className={cx(styles.mono, 'field')}
             aria-label={`Assertion ${index + 1} value`}
             value={assertion.argument}
             placeholder={assertionArgPlaceholder(assertion.type)}
@@ -47,7 +48,7 @@ export function AssertionsEditor({
             className={styles.iconButton}
             onClick={() => onRemove(index)}
           >
-            <RemoveIcon />
+            <CrossIcon />
           </button>
         </div>
       ))}

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { cx } from '../lib/cx'
 
 // Small mono uppercase label. Use `as="h2"` where it titles a section.
 export function Eyebrow({
@@ -13,7 +14,7 @@ export function Eyebrow({
   children: ReactNode
 }) {
   return (
-    <Tag id={id} className={['eyebrow', className].filter(Boolean).join(' ')} style={{ margin: 0 }}>
+    <Tag id={id} className={cx('eyebrow', className)} style={{ margin: 0 }}>
       {children}
     </Tag>
   )

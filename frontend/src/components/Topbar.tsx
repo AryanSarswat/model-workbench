@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router'
 import { useHardware, useHfKeyStatus } from '../api/hooks'
-import type { GpuInfo } from '../api/types'
+import { gpuLabel } from '../lib/hardware'
 import styles from './Topbar.module.css'
 
 // `match` decides the active tab: a model page belongs to Radar, a run review to Evals.
@@ -11,8 +11,6 @@ const TABS = [
   { label: 'Dataset', to: '/dataset', match: (path: string) => path === '/dataset' },
   { label: 'Library', to: '/library', match: (path: string) => path === '/library' },
 ]
-
-const GPU_LABELS: Record<GpuInfo['kind'], string> = { apple_silicon: 'Apple Silicon', nvidia: 'NVIDIA', none: 'CPU only' }
 
 export function Topbar() {
   const { pathname } = useLocation()
@@ -45,10 +43,9 @@ function HardwareSummary() {
   const { data, isPending, isError } = useHardware()
   if (isPending) return <span>Detecting hardware…</span>
   if (isError) return <span>Hardware unavailable</span>
-  const gpu = data.gpu.kind === 'nvidia' && data.gpu.name ? data.gpu.name : GPU_LABELS[data.gpu.kind]
   return (
     <>
-      <span>{[data.platform, data.arch, gpu].join(' · ')}</span>
+      <span>{[data.platform, data.arch, gpuLabel(data.gpu)].join(' · ')}</span>
       <span className={styles.strong}>{data.usable_memory_gb.toFixed(1)} GB usable</span>
     </>
   )

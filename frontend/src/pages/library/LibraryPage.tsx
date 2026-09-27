@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import {
   deleteDownloaded,
+  modelPath,
   reloadTools,
   setHfKey,
 } from '../../api/endpoints'
@@ -20,11 +21,15 @@ import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
+import { RefreshIcon, TrashIcon } from '../../components/icons'
 import { PageHeader } from '../../components/PageHeader'
 import { ProgressBar } from '../../components/ProgressBar'
+import { cx } from '../../lib/cx'
 import { formatGb, formatRelative } from '../../lib/format'
+import { gpuLabel } from '../../lib/hardware'
+import { playgroundPath } from '../../lib/links'
 import styles from './LibraryPage.module.css'
-import { chatPath, formatChip, gpuLabel, summarizeParams } from './libraryFormat'
+import { formatChip, summarizeParams } from './libraryFormat'
 
 
 export default function LibraryPage() {
@@ -76,7 +81,7 @@ export default function LibraryPage() {
               </span>
             )}
           </div>
-          <div className={[styles.diskRow, styles.diskHeadRow].join(' ')}>
+          <div className={cx(styles.diskRow, styles.diskHeadRow)}>
             <div className="eyebrow">Model</div>
             <div className="eyebrow">Format</div>
             <div className="eyebrow">Size</div>
@@ -93,7 +98,7 @@ export default function LibraryPage() {
           )}
           {downloaded.map((record) => (
             <div key={record.id} className={styles.diskRow}>
-              <Link to={`/models/${record.repo_id}`} className={styles.repoLink}>
+              <Link to={`/models/${modelPath(record.repo_id)}`} className={styles.repoLink}>
                 {record.repo_id}
               </Link>
               <span>
@@ -102,7 +107,7 @@ export default function LibraryPage() {
               <span className={styles.size}>{formatGb(record.size_bytes)}</span>
               <span className={styles.lastUsed}>{formatRelative(record.last_used_at ?? record.downloaded_at)}</span>
               <div className={styles.rowActions}>
-                <Button to={chatPath(record)}>Chat</Button>
+                <Button to={playgroundPath({ model: record.repo_id, backend: record.backend, quant: record.quant })}>Chat</Button>
                 <button
                   type="button"
                   aria-label={`Delete ${record.repo_id}`}
@@ -137,7 +142,7 @@ export default function LibraryPage() {
               {reloadStatus && <span className={styles.reloadStatus}>{reloadStatus}</span>}
             </div>
             <Button onClick={() => reloadMutation.mutate()} disabled={reloadMutation.isPending}>
-              <ReloadIcon /> Reload
+              <RefreshIcon /> Reload
             </Button>
           </div>
           {toolsQuery.isError && <ErrorNotice error={toolsQuery.error} />}
@@ -179,7 +184,7 @@ function HfKeyCard() {
 
   return (
     <section aria-labelledby="key" className={styles.card}>
-      <h2 id="key" className={[styles.h2, styles.cardTitle].join(' ')}>
+      <h2 id="key" className={cx(styles.h2, styles.cardTitle)}>
         Hugging Face API key
       </h2>
       <Field label="Token" htmlFor="hfkey">
@@ -187,7 +192,7 @@ function HfKeyCard() {
           <input
             id="hfkey"
             type="password"
-            className={['field', styles.keyInput].join(' ')}
+            className={cx('field', styles.keyInput)}
             placeholder="hf_…"
             value={key}
             onChange={(e) => setKey(e.target.value)}
@@ -209,7 +214,7 @@ function MachineCard() {
   const { data, isError } = useHardware()
   return (
     <section aria-labelledby="machine" className={styles.machine}>
-      <h2 id="machine" className={[styles.h2, styles.machineTitle].join(' ')}>
+      <h2 id="machine" className={cx(styles.h2, styles.machineTitle)}>
         This machine
       </h2>
       {isError && <ErrorNotice error={new Error('Hardware detection unavailable')} />}
@@ -235,21 +240,5 @@ function MachineCard() {
       )}
       <p className={styles.thresholdNote}>Fit verdicts: comfortable under 70% of usable memory, tight under 95%.</p>
     </section>
-  )
-}
-
-function TrashIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4" />
-    </svg>
-  )
-}
-
-function ReloadIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <path d="M13 2.5v4H9M3 13.5v-4h4M12.6 6.5A5 5 0 0 0 3.8 5M3.4 9.5A5 5 0 0 0 12.2 11" />
-    </svg>
   )
 }

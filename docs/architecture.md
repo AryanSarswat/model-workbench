@@ -262,9 +262,9 @@ Vite + React + TypeScript in `frontend/`, plain CSS (no component library).
 ```
 frontend/src/
 ├── api/          # client.ts (fetch + ApiError), sse.ts, types.ts, endpoints.ts, hooks.ts
-├── lib/          # formatting, per-backend labels/guarantees
+├── lib/          # formatting, cx(), Playground links, GPU label, per-backend labels/guarantees
 ├── styles/       # tokens.css (design tokens) + global.css (shared utility classes)
-├── components/   # primitives, Topbar, AppShell
+├── components/   # primitives, shared icons, Topbar, AppShell
 ├── pages/<screen>/  # one folder per route; page-specific hooks and CSS Modules live here
 └── routes.tsx    # route table under AppShell
 ```

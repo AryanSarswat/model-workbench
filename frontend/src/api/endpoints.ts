@@ -7,8 +7,6 @@ import type {
   BackendName,
   ChatChunk,
   ChatRequest,
-  ChatSession,
-  ChatSessionDetail,
   DiscoverSort,
   DiscoveredModel,
   DownloadJob,
@@ -58,16 +56,6 @@ export const deleteDownloaded = (recordId: number) =>
 export const streamChat = (request: ChatRequest, signal?: AbortSignal) =>
   postSse<ChatChunk>('/chat/stream', request, signal)
 
-export const createChatSession = () => apiSend<ChatSession>('POST', '/chat/sessions')
-
-export const listChatSessions = () => apiGet<ChatSession[]>('/chat/sessions')
-
-export const getChatSession = (sessionId: number) =>
-  apiGet<ChatSessionDetail>(`/chat/sessions/${sessionId}`)
-
-export const deleteChatSession = (sessionId: number) =>
-  apiSend<void>('DELETE', `/chat/sessions/${sessionId}`)
-
 // --- config ---
 
 export const getHardware = () => apiGet<HardwareInfo>('/config/hardware')
@@ -105,8 +93,6 @@ export const deleteCase = (caseId: string) =>
 
 export const runEval = (request: EvalRunRequest, signal?: AbortSignal) =>
   postSse<EvalProgressEvent>('/evals/run', request, signal)
-
-export const listEvalRuns = () => apiGet<EvalRun[]>('/evals/runs')
 
 export const getEvalRun = (runId: number) => apiGet<EvalRun>(`/evals/runs/${runId}`)
 

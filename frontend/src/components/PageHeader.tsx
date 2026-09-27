@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { cx } from '../lib/cx'
 import styles from './PageHeader.module.css'
 
 // Eyebrow (or breadcrumb) over a serif h1, with optional content below the title and
@@ -17,7 +18,7 @@ export function PageHeader({
   children?: ReactNode
 }) {
   return (
-    <header className={[styles.header, className].filter(Boolean).join(' ')}>
+    <header className={cx(styles.header, className)}>
       <div className={styles.heading}>
         {eyebrow && <div className="eyebrow">{eyebrow}</div>}
         <h1 className={styles.title}>{title}</h1>

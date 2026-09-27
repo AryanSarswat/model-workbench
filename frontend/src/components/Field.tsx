@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { cx } from '../lib/cx'
 import styles from './Field.module.css'
 
 // An eyebrow <label> stacked over its control. The child control must carry id={htmlFor};
@@ -15,7 +16,7 @@ export function Field({
   children: ReactNode
 }) {
   return (
-    <div className={[styles.field, className].filter(Boolean).join(' ')}>
+    <div className={cx(styles.field, className)}>
       <label htmlFor={htmlFor} className="eyebrow">
         {label}
       </label>

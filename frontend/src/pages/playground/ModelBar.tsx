@@ -7,6 +7,7 @@ import { Field } from '../../components/Field'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { BACKEND_NAMES, BACKENDS, structuredOutputChip, toolCallingChip } from '../../lib/backends'
 import type { BackendInfo, BackendName } from '../../api/types'
+import { cx } from '../../lib/cx'
 import type { ModelOption } from './modelOptions'
 import styles from './ModelBar.module.css'
 
@@ -64,7 +65,7 @@ export function ModelBar({
         <Field label="Model" htmlFor="playground-model">
           <select
             id="playground-model"
-            className={[`field ${styles.control}`, unloadable && styles.unloadable].filter(Boolean).join(' ')}
+            className={cx('field', styles.control, unloadable && styles.unloadable)}
             aria-invalid={unloadable !== null}
             value={modelId}
             onChange={(event) => onModelIdChange(event.target.value)}

@@ -9,8 +9,10 @@ import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
+import { ArrowRightIcon, RefreshIcon } from '../../components/icons'
 import { PageHeader } from '../../components/PageHeader'
 import { SegmentedControl } from '../../components/SegmentedControl'
+import { cx } from '../../lib/cx'
 import { formatCount, formatRelative } from '../../lib/format'
 import { GaugeAxisLabels, MemoryGauge } from './MemoryGauge'
 import { VERDICT_CHIP_TONE, VERDICT_LABEL, bestVerdict, feasibilityQueryOptions, formatMemoryRange, formatThreshold } from './gauge'
@@ -76,7 +78,7 @@ export default function RadarPage() {
             <Field label="Filter" htmlFor="filter">
               <input
                 id="filter"
-                className={['field', styles.filterInput].join(' ')}
+                className={cx('field', styles.filterInput)}
                 placeholder="Model or author"
                 value={filterText}
                 onChange={(e) => setFilterText(e.target.value)}
@@ -84,9 +86,7 @@ export default function RadarPage() {
             </Field>
             <SegmentedControl label="Sort order" options={SORT_OPTIONS} value={sort} onChange={setSort} />
             <Button aria-label="Refresh from the Hub" onClick={() => void modelsQuery.refetch()}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                <path d="M13 2.5v4H9M3 13.5v-4h4M12.6 6.5A5 5 0 0 0 3.8 5M3.4 9.5A5 5 0 0 0 12.2 11" />
-              </svg>
+              <RefreshIcon size={15} />
             </Button>
           </div>
         }
@@ -128,15 +128,15 @@ function RadarTable({ usableMemoryGb, rows }: { usableMemoryGb: number; rows: Ro
 
       <footer className={styles.footer}>
         <span className={styles.legendItem}>
-          <span className={['seg-fit', styles.swatch].join(' ')} />
+          <span className={cx('seg-fit', styles.swatch)} />
           Comfortable{thresholds && `, under ${formatThreshold(thresholds.comfortable_fraction)} of memory`}
         </span>
         <span className={styles.legendItem}>
-          <span className={['seg-tight', styles.swatch].join(' ')} />
+          <span className={cx('seg-tight', styles.swatch)} />
           Tight{thresholds && `, under ${formatThreshold(thresholds.tight_fraction)}`}
         </span>
         <span className={styles.legendItem}>
-          <span className={['hatch', styles.swatch].join(' ')} />
+          <span className={cx('hatch', styles.swatch)} />
           Won’t fit
         </span>
         <span className={styles.legendNote}>
@@ -189,9 +189,7 @@ function RadarRow({
       </div>
       <Button to={href} className={styles.openLink}>
         Open
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-          <path d="M3 8h10M9 4l4 4-4 4" />
-        </svg>
+        <ArrowRightIcon />
       </Button>
     </div>
   )
