@@ -126,10 +126,12 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
 
     class _ToolTokenizer(_FakeTokenizer):
         def apply_chat_template(self, messages, **kwargs):
+            # ChatML-style rendering, so the test sees the turn framing.
             assert kwargs["add_generation_prompt"] is True
             assert kwargs["tokenize"] is False
             self.applied_messages = messages
-            return "BASE PROMPT"
+            turns = "".join(f"<|{m['role']}|>{m['content']}<|end|>" for m in messages)
+            return turns + "<|assistant|>"
 
         def __call__(self, text, **kwargs):
             prompts.append(text)
@@ -166,9 +168,12 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     assert reply.delta == "the answer is 5"
     assert chunks[-1].done is True
     assert chunks[-1].error is None
-    # The prompt was templated once, and the calculator result fed the next turn.
+    # Every turn is rendered through the chat template: the tool result arrives as
+    # a framed user turn and the prompt ends on the assistant's generation prompt.
+    # Plain-text appends left the model continuing a raw transcript instead.
     assert _ToolTokenizer.instances[0].applied_messages[0]["role"] == "system"
-    assert any("Tool 'calculator' returned: 5" in prompt for prompt in prompts)
+    assert "<|user|>Tool 'calculator' returned: 5<|end|>" in prompts[1]
+    assert prompts[1].endswith("<|assistant|>")
     assert chunks[-1].tools_called == ["calculator"]
     assert chunks[-1].usage.prompt_tokens == 2  # every _FakeEncoding uses input_ids=[[1, 2]]
     assert chunks[-1].usage.completion_tokens == 4  # 2 generate() turns x 2 completion tokens each
@@ -268,7 +273,7 @@ class _GuidedTokenizer(_FakeTokenizer):
         assert kwargs["add_generation_prompt"] is True
         self.applied_messages = messages
         if kwargs.get("tokenize") is False:
-            return "BASE PROMPT"
+            return "".join(f"{m['role']}: {m['content']}\n" for m in messages)
         return _FakeEncoding(input_ids=[[1, 2]])
 
     def __call__(self, text, **kwargs):
@@ -409,7 +414,7 @@ def test_guided_tool_loop_constrains_only_the_final_turn(monkeypatch):
     assert list(model.generate_calls[2]["logits_processor"]) == [sentinel]
     assert built == [(model, tokenizer, schema)]
     # Tool results reached the guided turn's context.
-    assert any("Tool 'calculator' returned: 5" in prompt for prompt in tokenizer.prompts)
+    assert "Tool 'calculator' returned: 5" in tokenizer.prompts[2]
     assert chunks[-1].tools_called == ["calculator"]
     assert chunks[-1].usage.completion_tokens == 6  # 3 generate() turns x 2 completion tokens each
 

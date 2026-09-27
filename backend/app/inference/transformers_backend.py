@@ -187,29 +187,26 @@ class TransformersBackend:
     ) -> ToolTurn:
         """Drive the shared prompt-and-retry tool loop with non-streamed generation.
 
-        The chat template renders the prompt ONCE; later turns and tool results
-        are appended as plain text, since re-applying the template would re-render
-        generation prompts mid-conversation.
+        Every turn re-renders the whole history through the chat template, so tool
+        results arrive as framed user turns and the prompt ends on the assistant's
+        generation prompt -- otherwise the model continues a raw transcript.
 
         With output_schema the loop turns stay unconstrained (they must emit
         tool-call JSON the schema would forbid) and only a final redraft is
         schema-guided.
         """
         prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools, output_schema)
-        conversation = await asyncio.to_thread(
-            tokenizer.apply_chat_template,
-            [m.model_dump() for m in prompt_messages],
-            add_generation_prompt=True,
-            tokenize=False,
-        )
-        rendered = len(prompt_messages)
+        conversation = ""
         usages: list[TokenUsage] = []
 
         async def _generate(history: list[ChatMessage]) -> str:
-            nonlocal conversation, rendered
-            for message in history[rendered:]:
-                conversation += f"\n{message.role}: {message.content}\n"
-            rendered = len(history)
+            nonlocal conversation
+            conversation = await asyncio.to_thread(
+                tokenizer.apply_chat_template,
+                [m.model_dump() for m in history],
+                add_generation_prompt=True,
+                tokenize=False,
+            )
             text, usage = await self._generate_turn(model, tokenizer, conversation)
             usages.append(usage)
             return text
