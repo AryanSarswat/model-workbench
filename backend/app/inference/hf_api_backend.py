@@ -5,7 +5,6 @@ provider that serves it; an unsupported model_id is a normal BadRequestError, no
 
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -26,7 +25,13 @@ from app.inference.structured_output import (
     matches_schema,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult, ToolEvents, run_tool_loop
+from app.inference.tool_loop import (
+    LoopResult,
+    ToolEventSink,
+    ToolTurn,
+    run_tool_loop,
+    stream_tool_turn,
+)
 from app.tools import ToolSpec
 
 _SCHEMA_RETRY_MESSAGE = (
@@ -96,6 +101,46 @@ class HFInferenceAPIBackend:
             history.append(ChatMessage(role="user", content=_SCHEMA_RETRY_MESSAGE))
         return last_text, max_iterations - 1
 
+    async def _run_structured_turn(
+        self,
+        model_id: str,
+        messages: list[ChatMessage],
+        tools: list[ToolSpec] | None,
+        output_schema: dict | None,
+        on_event: ToolEventSink,
+    ) -> ToolTurn:
+        """The tool loop (with tools), then schema turns unless its reply already
+        conforms to output_schema."""
+        usages: list[TokenUsage] = []
+
+        async def _generate(history: list[ChatMessage]) -> str:
+            text, usage = await self._generate_text(model_id, history)
+            if usage is not None:
+                usages.append(usage)
+            return text
+
+        loop_result = LoopResult(text="")
+        history = messages
+        if tools:
+            # The tool loop runs first; its reply is assistant context for any
+            # schema turns that follow.
+            prompt_messages = PromptJsonRetrier().build_tool_messages(
+                messages, tools, output_schema
+            )
+            loop_result = await run_tool_loop(
+                _generate, prompt_messages, tools, on_event=on_event, output_schema=output_schema
+            )
+            history = [*messages, ChatMessage(role="assistant", content=loop_result.text)]
+        final, retries = loop_result.text, 0
+        # Without tools final is "", which never conforms.
+        if output_schema is not None and not is_conforming_json(final, output_schema):
+            final, retries = await self._run_schema_loop(_generate, history, output_schema)
+        return ToolTurn(
+            LoopResult(text=final, tool_calls=loop_result.tool_calls),
+            combine_usage(usages),
+            retries,
+        )
+
     async def stream_chat(
         self,
         model_id: str,
@@ -110,54 +155,12 @@ class HFInferenceAPIBackend:
             # Tool and schema turns are non-streamed (retries can't stream partial
             # output honestly) apart from each tool call's start/finish event; the
             # final reply yields as one delta + done.
-            usages: list[TokenUsage] = []
-            loop_result = LoopResult(text="")
-            retries = 0
-
-            async def _generate(history: list[ChatMessage]) -> str:
-                text, usage = await self._generate_text(model_id, history)
-                if usage is not None:
-                    usages.append(usage)
-                return text
-
-            try:
-                final = ""
-                history = messages
-                if tools:
-                    # The tool loop runs first; its reply is assistant context for
-                    # any schema turns that follow.
-                    prompt_messages = PromptJsonRetrier().build_tool_messages(
-                        messages, tools, output_schema
-                    )
-                    events = ToolEvents()
-                    loop = asyncio.create_task(
-                        run_tool_loop(
-                            _generate,
-                            prompt_messages,
-                            tools,
-                            on_event=events.emit,
-                            output_schema=output_schema,
-                        )
-                    )
-                    async for event in events.stream(loop):
-                        yield event
-                    loop_result = loop.result()
-                    final = loop_result.text
-                    history = [*messages, ChatMessage(role="assistant", content=final)]
-                # Without tools final is "", which never conforms.
-                if output_schema is not None and not is_conforming_json(final, output_schema):
-                    final, retries = await self._run_schema_loop(_generate, history, output_schema)
-            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
-                yield ChatChunk(done=True, error=str(e))
-                return
-            yield ChatChunk(delta=final)
-            yield ChatChunk(
-                done=True,
-                usage=combine_usage(usages),
-                tools_called=loop_result.tools_called,
-                tool_calls=loop_result.tool_calls,
-                retries=retries,
-            )
+            async for chunk in stream_tool_turn(
+                lambda on_event: self._run_structured_turn(
+                    model_id, messages, tools, output_schema, on_event
+                )
+            ):
+                yield chunk
             return
         try:
             stream = await self._client.chat_completion(

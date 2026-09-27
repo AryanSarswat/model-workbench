@@ -45,7 +45,13 @@ from app.inference.structured_output import (
     is_conforming_json,
     validate_output_schema,
 )
-from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool_loop
+from app.inference.tool_loop import (
+    LoopResult,
+    ToolEventSink,
+    ToolTurn,
+    run_tool_loop,
+    stream_tool_turn,
+)
 from app.tools import ToolSpec
 
 
@@ -176,7 +182,7 @@ class TransformersBackend:
         tools: list[ToolSpec],
         output_schema: dict | None = None,
         on_event: ToolEventSink | None = None,
-    ) -> tuple[LoopResult, TokenUsage | None]:
+    ) -> ToolTurn:
         """Drive the shared prompt-and-retry tool loop with non-streamed generation.
 
         The chat template renders the prompt ONCE; later turns and tool results
@@ -216,11 +222,11 @@ class TransformersBackend:
                 model, tokenizer, conversation, output_schema
             )
             usages.append(final_usage)
-            return (
+            return ToolTurn(
                 LoopResult(text=final_text, tool_calls=loop_result.tool_calls),
                 combine_usage(usages),
             )
-        return loop_result, combine_usage(usages)
+        return ToolTurn(loop_result, combine_usage(usages))
 
     async def stream_chat(
         self,
@@ -240,32 +246,15 @@ class TransformersBackend:
             yield ChatChunk(done=True, error=f"failed to load {self._snapshot_dir}: {e}")
             return
         if tools:
-            # Tool turns are non-streamed apart from each call's start/finish event;
-            # the final reply yields as one delta + done.
-            events = ToolEvents()
-            try:
-                loop = asyncio.create_task(
-                    self._run_fallback_tool_loop(
-                        model, tokenizer, messages, tools, output_schema, events.emit
-                    )
-                )
-                async for event in events.stream(loop):
-                    yield event
-                loop_result, usage = loop.result()
-            except WorkbenchError:
-                # Guided setup failures (bad schema, missing outlines) raise
-                # pre-stream; everything else is a terminal chunk, never raised.
-                raise
-            except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
-                yield ChatChunk(done=True, error=str(e))
-                return
-            yield ChatChunk(delta=loop_result.text)
-            yield ChatChunk(
-                done=True,
-                usage=usage,
-                tools_called=loop_result.tools_called,
-                tool_calls=loop_result.tool_calls,
-            )
+            # Guided setup failures (bad schema, missing outlines) raise
+            # pre-stream; everything else is a terminal chunk, never raised.
+            async for chunk in stream_tool_turn(
+                lambda on_event: self._run_fallback_tool_loop(
+                    model, tokenizer, messages, tools, output_schema, on_event
+                ),
+                reraise=(WorkbenchError,),
+            ):
+                yield chunk
             return
         if output_schema is not None:
             # Guided turns never stream. The processor builds before the try so

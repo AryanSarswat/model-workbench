@@ -2,8 +2,17 @@
 
 import asyncio
 
+import pytest
+
+from app.errors import WorkbenchError
 from app.inference.schemas import ChatChunk, ChatMessage, ToolCallStart
-from app.inference.tool_loop import ToolEvents, run_tool_loop
+from app.inference.tool_loop import (
+    LoopResult,
+    ToolEvents,
+    ToolTurn,
+    run_tool_loop,
+    stream_tool_turn,
+)
 from app.tools import ToolSpec, get_tool
 
 
@@ -214,3 +223,35 @@ def test_tool_events_yields_a_chunk_while_the_loop_is_still_running():
         assert task.result() == "final"
 
     asyncio.run(scenario())
+
+
+def _collect_turn(run, **kwargs) -> list[ChatChunk]:
+    async def _collect() -> list[ChatChunk]:
+        return [chunk async for chunk in stream_tool_turn(run, **kwargs)]
+
+    return asyncio.run(_collect())
+
+
+def test_stream_tool_turn_yields_events_then_reply_and_done():
+    async def run(emit) -> ToolTurn:
+        emit(ChatChunk(tool_call_started=ToolCallStart(name="calculator", arguments={})))
+        return ToolTurn(LoopResult(text="5"), usage=None, retries=2)
+
+    started, reply, done = _collect_turn(run)
+
+    assert started.tool_call_started.name == "calculator"
+    assert reply.delta == "5"
+    assert (done.done, done.error, done.retries) == (True, None, 2)
+
+
+def test_stream_tool_turn_ends_a_failure_in_an_error_chunk_unless_reraised():
+    async def run(emit) -> ToolTurn:
+        raise WorkbenchError(400, "invalid_output_schema", "bad schema")
+
+    (failed,) = _collect_turn(run)
+    assert failed.done is True
+    assert "bad schema" in failed.error
+
+    # A backend whose setup errors must surface as a 400 opts out per type.
+    with pytest.raises(WorkbenchError):
+        _collect_turn(run, reraise=(WorkbenchError,))

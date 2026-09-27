@@ -11,11 +11,18 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import NamedTuple
 
 from pydantic import BaseModel
 
 from app.errors import WorkbenchError
-from app.inference.schemas import ChatChunk, ChatMessage, ToolCallRecord, ToolCallStart
+from app.inference.schemas import (
+    ChatChunk,
+    ChatMessage,
+    TokenUsage,
+    ToolCallRecord,
+    ToolCallStart,
+)
 from app.inference.structured_output import (
     PromptJsonRetrier,
     TextReply,
@@ -64,6 +71,45 @@ class ToolEvents:
                 yield chunk
         finally:
             task.cancel()  # a no-op once done; stops the loop if the client went away
+
+
+class ToolTurn(NamedTuple):
+    """A finished non-streamed turn: the final reply plus what its done chunk reports."""
+
+    result: LoopResult
+    usage: TokenUsage | None
+    retries: int = 0
+
+
+async def stream_tool_turn(
+    run: Callable[[ToolEventSink], Awaitable[ToolTurn]],
+    *,
+    reraise: tuple[type[Exception], ...] = (),
+) -> AsyncIterator[ChatChunk]:
+    """Stream a non-streamed tool/schema turn: each tool call's start/finish event
+    live (`run` gets the sink), then the final reply as one delta + done.
+
+    A failure is a terminal error chunk, never raised -- except `reraise` types.
+    """
+    events = ToolEvents()
+    try:
+        loop = asyncio.create_task(run(events.emit))
+        async for event in events.stream(loop):
+            yield event
+        result, usage, retries = loop.result()
+    except reraise:
+        raise
+    except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
+        yield ChatChunk(done=True, error=str(e))
+        return
+    yield ChatChunk(delta=result.text)
+    yield ChatChunk(
+        done=True,
+        usage=usage,
+        tools_called=result.tools_called,
+        tool_calls=result.tool_calls,
+        retries=retries,
+    )
 
 
 async def run_tool(tool: Tool, args: dict, on_event: ToolEventSink | None = None) -> ToolCallRecord:
