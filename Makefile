@@ -1,4 +1,4 @@
-.PHONY: setup run test test-ml test-all lint ci lock docker-build docker-run docker-ci \
+.PHONY: setup run dev test test-ml test-all lint ci lock docker-build docker-run docker-ci \
 	fe-setup fe-dev fe-test fe-lint fe-build fe-ci
 
 # Local dev gets everything, including the heavy `local` extra (torch/llama.cpp)
@@ -8,6 +8,11 @@ setup:
 
 run:
 	uv run --project backend uvicorn app.main:app --reload --app-dir backend
+
+# API on :8000 and the Vite dev server on :5173 in one terminal (output interleaved);
+# Ctrl+C stops both.
+dev:
+	$(MAKE) -j2 run fe-dev
 
 # `test` is the application suite (what CI runs). ML backend tests live in
 # backend/tests/ml/ and run locally via `test-ml` or together with everything via
