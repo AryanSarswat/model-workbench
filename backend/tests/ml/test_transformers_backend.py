@@ -9,7 +9,7 @@ from transformers import LogitsProcessorList
 
 from app.errors import WorkbenchError
 from app.inference import transformers_backend
-from app.inference.schemas import ChatChunk, ChatMessage
+from app.inference.schemas import BACKEND_CAPABILITIES, ChatChunk, ChatMessage
 from app.inference.transformers_backend import TransformersBackend
 from app.tools import get_tool
 
@@ -174,13 +174,11 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     assert chunks[-1].usage.completion_tokens == 4  # 2 generate() turns x 2 completion tokens each
 
 
-def test_capabilities_report_guided_and_no_native_tool_calling():
+def test_capabilities_are_the_shared_transformers_entry():
+    """GET /backends reports BACKEND_CAPABILITIES; the class must agree with it."""
     backend = TransformersBackend("/tmp/snapshot")
 
-    capabilities = backend.capabilities()
-
-    assert capabilities.structured_output_mode == "guided"
-    assert capabilities.native_tool_calling is False
+    assert backend.capabilities() == BACKEND_CAPABILITIES["transformers"]
 
 
 def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):

@@ -33,6 +33,7 @@ from transformers import (
 from app.errors import WorkbenchError
 from app.inference.model_cache import LoadedModelCache
 from app.inference.schemas import (
+    BACKEND_CAPABILITIES,
     BackendCapabilities,
     ChatChunk,
     ChatMessage,
@@ -107,7 +108,7 @@ class TransformersBackend:
         self._device = _detect_device()
 
     def capabilities(self) -> BackendCapabilities:
-        return BackendCapabilities(structured_output_mode="guided", native_tool_calling=False)
+        return BACKEND_CAPABILITIES["transformers"]
 
     def prevalidate_output_schema(self, schema: dict) -> None:
         """Reject a bad schema pre-stream without loading the model.

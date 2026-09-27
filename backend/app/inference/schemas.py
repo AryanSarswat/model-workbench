@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ChatMessage(BaseModel):
@@ -60,5 +60,24 @@ class ChatChunk(BaseModel):
 
 
 class BackendCapabilities(BaseModel):
+    model_config = ConfigDict(frozen=True)  # BACKEND_CAPABILITIES entries are shared
+
     structured_output_mode: Literal["grammar", "guided", "prompt_retry"]
     native_tool_calling: bool
+
+
+# The single source of truth for what each backend can do. Lives here, not on the
+# backend classes, so GET /backends can report it without importing the optional
+# torch/llama.cpp modules; each class's capabilities() returns its entry.
+BACKEND_CAPABILITIES: dict[str, BackendCapabilities] = {
+    # A remote provider offers no grammar/guided decoding control.
+    "api": BackendCapabilities(structured_output_mode="prompt_retry", native_tool_calling=False),
+    "gguf": BackendCapabilities(structured_output_mode="grammar", native_tool_calling=True),
+    "transformers": BackendCapabilities(structured_output_mode="guided", native_tool_calling=False),
+}
+
+
+class BackendInfo(BackendCapabilities):
+    """GET /backends entry: a backend's capabilities, plus whether it can run here."""
+
+    available: bool
