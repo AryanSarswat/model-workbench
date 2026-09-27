@@ -1,5 +1,5 @@
 .PHONY: setup run dev test test-ml test-all lint format ci lock docker-build docker-run docker-ci \
-	fe-setup fe-dev fe-test fe-lint fe-build fe-ci
+	fe-setup fe-dev fe-test fe-lint fe-build fe-types fe-ci
 
 # Local dev gets everything, including the heavy `local` extra (torch/llama.cpp)
 # that CI deliberately skips -- without it tests/ml/ can't even be collected.
@@ -68,6 +68,13 @@ fe-lint:
 
 fe-build:
 	cd frontend && npm run build
+
+# Regenerate the frontend's API types after changing a backend model: snapshot the
+# backend's OpenAPI schema to frontend/openapi.json, then generate
+# frontend/src/api/schema.gen.ts from it. Commit both -- CI fails if either is stale.
+fe-types:
+	cd backend && uv run python -m scripts.export_openapi > ../frontend/openapi.json
+	cd frontend && npm run gen:types
 
 # Same sequence as the `frontend` CI job.
 fe-ci:

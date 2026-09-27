@@ -69,6 +69,7 @@ make fe-dev          # Vite dev server (proxies /api to `make run` on :8000)
 make fe-test         # vitest
 make fe-lint         # eslint + tsc
 make fe-build        # production build
+make fe-types        # regenerate the frontend's API types from the backend's OpenAPI schema
 make ci              # everything the CI jobs (`backend`, `frontend`, `docker`) run, end to end
 ```
 

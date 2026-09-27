@@ -1,0 +1,2780 @@
+{
+  "components": {
+    "schemas": {
+      "ApiKeyStatus": {
+        "properties": {
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "is_set"
+        ],
+        "title": "ApiKeyStatus",
+        "type": "object"
+      },
+      "Assertion": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "pattern": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pattern"
+          },
+          "type": {
+            "enum": [
+              "schema_valid",
+              "contains",
+              "regex",
+              "tool_called",
+              "structured_output_first_try",
+              "native_tool_calling",
+              "json_parse_success"
+            ],
+            "title": "Type",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Assertion",
+        "type": "object"
+      },
+      "AssertionResult": {
+        "properties": {
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "schema_valid",
+              "contains",
+              "regex",
+              "tool_called",
+              "structured_output_first_try",
+              "native_tool_calling",
+              "json_parse_success"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "passed"
+        ],
+        "title": "AssertionResult",
+        "type": "object"
+      },
+      "BackendInfo": {
+        "description": "GET /backends entry: a backend's capabilities, plus whether it can run here.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "native_tool_calling": {
+            "title": "Native Tool Calling",
+            "type": "boolean"
+          },
+          "structured_output_mode": {
+            "enum": [
+              "grammar",
+              "guided",
+              "prompt_retry"
+            ],
+            "title": "Structured Output Mode",
+            "type": "string"
+          }
+        },
+        "required": [
+          "structured_output_mode",
+          "native_tool_calling",
+          "available"
+        ],
+        "title": "BackendInfo",
+        "type": "object"
+      },
+      "ChatMessage": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "system",
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessage",
+        "type": "object"
+      },
+      "ChatMessageRecord": {
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "role",
+          "content",
+          "sequence"
+        ],
+        "title": "ChatMessageRecord",
+        "type": "object"
+      },
+      "ChatRequest": {
+        "properties": {
+          "backend": {
+            "default": "api",
+            "enum": [
+              "api",
+              "gguf",
+              "transformers"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tools"
+          }
+        },
+        "required": [
+          "model_id",
+          "messages"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "ChatSession": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          }
+        },
+        "title": "ChatSession",
+        "type": "object"
+      },
+      "ChatSessionDetail": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageRecord"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "messages"
+        ],
+        "title": "ChatSessionDetail",
+        "type": "object"
+      },
+      "DiscoveredModel": {
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "downloads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloads"
+          },
+          "gated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gated"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "library_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Name"
+          },
+          "likes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Likes"
+          },
+          "pipeline_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Tag"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "trending_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trending Score"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "DiscoveredModel",
+        "type": "object"
+      },
+      "DownloadJob": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current File"
+          },
+          "detail": {
+            "default": "queued",
+            "title": "Detail",
+            "type": "string"
+          },
+          "downloaded_model_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloaded Model Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "kind": {
+            "default": "gguf",
+            "enum": [
+              "gguf",
+              "snapshot"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "percent": {
+            "default": 0.0,
+            "title": "Percent",
+            "type": "number"
+          },
+          "repo_id": {
+            "title": "Repo Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "downloading",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo_id"
+        ],
+        "title": "DownloadJob",
+        "type": "object"
+      },
+      "DownloadRequest": {
+        "properties": {
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "snapshot": {
+            "default": false,
+            "title": "Snapshot",
+            "type": "boolean"
+          }
+        },
+        "title": "DownloadRequest",
+        "type": "object"
+      },
+      "DownloadedModel": {
+        "description": "A record as `GET /models/downloaded` returns it.",
+        "properties": {
+          "backend": {
+            "enum": [
+              "gguf",
+              "transformers"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "downloaded_at": {
+            "format": "date-time",
+            "title": "Downloaded At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "local_path": {
+            "title": "Local Path",
+            "type": "string"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "quant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quant"
+          },
+          "repo_id": {
+            "title": "Repo Id",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "unsupported_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unsupported Reason"
+          }
+        },
+        "required": [
+          "repo_id",
+          "backend",
+          "local_path",
+          "size_bytes",
+          "id",
+          "model_id"
+        ],
+        "title": "DownloadedModel",
+        "type": "object"
+      },
+      "EvalReportRow": {
+        "description": "One (model_id, backend, category) cell of the model-comparison report --\nsee app/evals/report.py for how it's built.",
+        "properties": {
+          "avg_tokens_per_sec": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Tokens Per Sec"
+          },
+          "avg_ttft_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Ttft Ms"
+          },
+          "backend": {
+            "enum": [
+              "api",
+              "gguf",
+              "transformers"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "cases": {
+            "title": "Cases",
+            "type": "integer"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "latest_run_id": {
+            "title": "Latest Run Id",
+            "type": "integer"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "pass_rate": {
+            "title": "Pass Rate",
+            "type": "number"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "integer"
+          },
+          "structured_output_reliability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Output Reliability"
+          },
+          "tool_calling_reliability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Calling Reliability"
+          }
+        },
+        "required": [
+          "model_id",
+          "backend",
+          "category",
+          "cases",
+          "passed",
+          "pass_rate",
+          "avg_tokens_per_sec",
+          "avg_ttft_ms",
+          "structured_output_reliability",
+          "tool_calling_reliability",
+          "latest_run_id"
+        ],
+        "title": "EvalReportRow",
+        "type": "object"
+      },
+      "EvalResultOut": {
+        "description": "An EvalResult as the API returns it: the report's pass rule applied, and the\nstorage-encoded columns (comma-joined tools, JSON-encoded assertions) decoded.",
+        "properties": {
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/AssertionResult"
+            },
+            "title": "Assertions",
+            "type": "array"
+          },
+          "assertions_passed": {
+            "title": "Assertions Passed",
+            "type": "integer"
+          },
+          "assertions_total": {
+            "title": "Assertions Total",
+            "type": "integer"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "judge_rationale": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Rationale"
+          },
+          "judge_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Score"
+          },
+          "manual_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Notes"
+          },
+          "manual_verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pass",
+                  "fail"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Verdict"
+          },
+          "native_tool_calling": {
+            "title": "Native Tool Calling",
+            "type": "boolean"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "response": {
+            "title": "Response",
+            "type": "string"
+          },
+          "response_metric_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Metric Id"
+          },
+          "retries": {
+            "title": "Retries",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "structured_output_mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "grammar",
+                  "guided",
+                  "prompt_retry"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Output Mode"
+          },
+          "tools_called": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools Called",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "run_id",
+          "case_id",
+          "category",
+          "response",
+          "error",
+          "structured_output_mode",
+          "native_tool_calling",
+          "retries",
+          "tools_called",
+          "assertions_passed",
+          "assertions_total",
+          "assertions",
+          "judge_score",
+          "judge_rationale",
+          "manual_verdict",
+          "manual_notes",
+          "response_metric_id",
+          "created_at",
+          "passed"
+        ],
+        "title": "EvalResultOut",
+        "type": "object"
+      },
+      "EvalRun": {
+        "properties": {
+          "backend": {
+            "enum": [
+              "api",
+              "gguf",
+              "transformers"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "completed_cases": {
+            "default": 0,
+            "title": "Completed Cases",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "judge_model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Model Id"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "running",
+            "enum": [
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total_cases": {
+            "default": 0,
+            "title": "Total Cases",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "model_id",
+          "backend"
+        ],
+        "title": "EvalRun",
+        "type": "object"
+      },
+      "EvalRunRequest": {
+        "properties": {
+          "backend": {
+            "default": "api",
+            "enum": [
+              "api",
+              "gguf",
+              "transformers"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "judge_model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Judge Model Id"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "EvalRunRequest",
+        "type": "object"
+      },
+      "FeasibilityOption": {
+        "properties": {
+          "backend": {
+            "enum": [
+              "gguf",
+              "transformers"
+            ],
+            "title": "Backend",
+            "type": "string"
+          },
+          "estimated_memory_gb": {
+            "title": "Estimated Memory Gb",
+            "type": "number"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "comfortable",
+              "tight",
+              "wont_fit"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "backend",
+          "verdict",
+          "estimated_memory_gb",
+          "reason"
+        ],
+        "title": "FeasibilityOption",
+        "type": "object"
+      },
+      "FeasibilityReport": {
+        "properties": {
+          "available_memory_gb": {
+            "title": "Available Memory Gb",
+            "type": "number"
+          },
+          "comfortable_fraction": {
+            "title": "Comfortable Fraction",
+            "type": "number"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/FeasibilityOption"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "tight_fraction": {
+            "title": "Tight Fraction",
+            "type": "number"
+          }
+        },
+        "required": [
+          "available_memory_gb",
+          "comfortable_fraction",
+          "tight_fraction",
+          "options"
+        ],
+        "title": "FeasibilityReport",
+        "type": "object"
+      },
+      "GPUInfo": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "apple_silicon",
+              "nvidia",
+              "none"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "vram_gb": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vram Gb"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "GPUInfo",
+        "type": "object"
+      },
+      "GgufFile": {
+        "properties": {
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "filename",
+          "size_bytes"
+        ],
+        "title": "GgufFile",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HardwareInfo": {
+        "properties": {
+          "arch": {
+            "title": "Arch",
+            "type": "string"
+          },
+          "gpu": {
+            "$ref": "#/components/schemas/GPUInfo"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "total_ram_gb": {
+            "title": "Total Ram Gb",
+            "type": "number"
+          },
+          "usable_memory_gb": {
+            "description": "Memory a model actually gets loaded into, for the feasibility check.\n\nNVIDIA with known VRAM: the GPU's dedicated memory. Everything else \u2014 Apple\nSilicon (unified memory), no GPU at all, or an NVIDIA card whose VRAM we\ncouldn't read \u2014 falls back to system RAM, since that's where the model has\nto be loaded regardless of whether a GPU is accelerating compute.",
+            "readOnly": true,
+            "title": "Usable Memory Gb",
+            "type": "number"
+          }
+        },
+        "required": [
+          "platform",
+          "arch",
+          "total_ram_gb",
+          "gpu",
+          "usable_memory_gb"
+        ],
+        "title": "HardwareInfo",
+        "type": "object"
+      },
+      "ManualVerdictUpdate": {
+        "properties": {
+          "manual_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Notes"
+          },
+          "manual_verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pass",
+                  "fail"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Verdict"
+          }
+        },
+        "title": "ManualVerdictUpdate",
+        "type": "object"
+      },
+      "ModelDetail": {
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "downloads": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloads"
+          },
+          "dtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dtype"
+          },
+          "gated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gated"
+          },
+          "gguf_files": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GgufFile"
+            },
+            "title": "Gguf Files",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "library_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Library Name"
+          },
+          "likes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Likes"
+          },
+          "parameter_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameter Count"
+          },
+          "pipeline_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pipeline Tag"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "trending_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trending Score"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "ModelDetail",
+        "type": "object"
+      },
+      "SetApiKeyRequest": {
+        "properties": {
+          "api_key": {
+            "title": "Api Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_key"
+        ],
+        "title": "SetApiKeyRequest",
+        "type": "object"
+      },
+      "TestCase": {
+        "description": "Mirrors data/test_cases.template.json. Only id/category/messages are required.",
+        "properties": {
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/Assertion"
+            },
+            "title": "Assertions",
+            "type": "array"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "expected_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Tools"
+          },
+          "id": {
+            "pattern": "^[A-Za-z0-9._-]+",
+            "title": "Id",
+            "type": "string"
+          },
+          "judge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TestCaseJudge"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "messages"
+        ],
+        "title": "TestCase",
+        "type": "object"
+      },
+      "TestCaseJudge": {
+        "properties": {
+          "criteria": {
+            "title": "Criteria",
+            "type": "string"
+          }
+        },
+        "required": [
+          "criteria"
+        ],
+        "title": "TestCaseJudge",
+        "type": "object"
+      },
+      "ToolSpec": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "title": "Parameters",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "title": "ToolSpec",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "model-workbench",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/backends": {
+      "get": {
+        "operationId": "list_backends_backends_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/BackendInfo"
+                  },
+                  "propertyNames": {
+                    "enum": [
+                      "api",
+                      "gguf",
+                      "transformers"
+                    ]
+                  },
+                  "title": "Response List Backends Backends Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Backends",
+        "tags": [
+          "backends"
+        ]
+      }
+    },
+    "/chat/sessions": {
+      "get": {
+        "operationId": "list_chat_sessions_chat_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ChatSession"
+                  },
+                  "title": "Response List Chat Sessions Chat Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Chat Sessions",
+        "tags": [
+          "chat"
+        ]
+      },
+      "post": {
+        "operationId": "create_chat_session_chat_sessions_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Create Chat Session",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/chat/sessions/{session_id}": {
+      "delete": {
+        "operationId": "delete_chat_session_chat_sessions__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Chat Session",
+        "tags": [
+          "chat"
+        ]
+      },
+      "get": {
+        "operationId": "get_chat_session_chat_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSessionDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Chat Session",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/chat/stream": {
+      "post": {
+        "operationId": "stream_chat_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Chat",
+        "tags": [
+          "chat"
+        ]
+      }
+    },
+    "/config/hardware": {
+      "get": {
+        "operationId": "get_hardware_config_hardware_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HardwareInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Hardware",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/config/hf-api-key": {
+      "get": {
+        "operationId": "get_hf_api_key_status_config_hf_api_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Hf Api Key Status",
+        "tags": [
+          "config"
+        ]
+      },
+      "post": {
+        "operationId": "set_hf_api_key_config_hf_api_key_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Hf Api Key",
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/dataset/cases": {
+      "get": {
+        "operationId": "list_cases_dataset_cases_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TestCase"
+                  },
+                  "title": "Response List Cases Dataset Cases Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Cases",
+        "tags": [
+          "dataset"
+        ]
+      },
+      "post": {
+        "operationId": "create_test_case_dataset_cases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestCase"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestCase"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Test Case",
+        "tags": [
+          "dataset"
+        ]
+      }
+    },
+    "/dataset/cases/{case_id}": {
+      "delete": {
+        "operationId": "delete_test_case_dataset_cases__case_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Test Case",
+        "tags": [
+          "dataset"
+        ]
+      },
+      "get": {
+        "operationId": "get_test_case_dataset_cases__case_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestCase"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Test Case",
+        "tags": [
+          "dataset"
+        ]
+      },
+      "put": {
+        "operationId": "update_test_case_dataset_cases__case_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestCase"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestCase"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Test Case",
+        "tags": [
+          "dataset"
+        ]
+      }
+    },
+    "/evals/report": {
+      "get": {
+        "operationId": "get_eval_report_evals_report_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvalReportRow"
+                  },
+                  "title": "Response Get Eval Report Evals Report Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Eval Report",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/evals/results/{result_id}": {
+      "patch": {
+        "operationId": "update_eval_result_evals_results__result_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "title": "Result Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualVerdictUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalResultOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Eval Result",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/evals/run": {
+      "post": {
+        "operationId": "start_eval_run_evals_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Eval Run",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/evals/runs": {
+      "get": {
+        "operationId": "list_eval_runs_evals_runs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvalRun"
+                  },
+                  "title": "Response List Eval Runs Evals Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Eval Runs",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/evals/runs/{run_id}": {
+      "get": {
+        "operationId": "get_eval_run_evals_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Eval Run",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/evals/runs/{run_id}/results": {
+      "get": {
+        "operationId": "get_eval_run_results_evals_runs__run_id__results_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvalResultOut"
+                  },
+                  "title": "Response Get Eval Run Results Evals Runs  Run Id  Results Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Eval Run Results",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/models/discover": {
+      "get": {
+        "operationId": "discover_models_models_discover_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "trending",
+              "enum": [
+                "trending",
+                "recent"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DiscoveredModel"
+                  },
+                  "title": "Response Discover Models Models Discover Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discover Models",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/models/downloaded": {
+      "get": {
+        "operationId": "list_downloaded_models_downloaded_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DownloadedModel"
+                  },
+                  "title": "Response List Downloaded Models Downloaded Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Downloaded",
+        "tags": [
+          "downloads"
+        ]
+      }
+    },
+    "/models/downloaded/{record_id}": {
+      "delete": {
+        "operationId": "delete_downloaded_models_downloaded__record_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "record_id",
+            "required": true,
+            "schema": {
+              "title": "Record Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Downloaded",
+        "tags": [
+          "downloads"
+        ]
+      }
+    },
+    "/models/downloads": {
+      "get": {
+        "description": "Every download job, newest first; `active=true` keeps only pending/downloading.",
+        "operationId": "list_download_jobs_models_downloads_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Active",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DownloadJob"
+                  },
+                  "title": "Response List Download Jobs Models Downloads Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Download Jobs",
+        "tags": [
+          "downloads"
+        ]
+      }
+    },
+    "/models/downloads/events": {
+      "get": {
+        "operationId": "stream_download_jobs_models_downloads_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Stream Download Jobs",
+        "tags": [
+          "downloads"
+        ]
+      }
+    },
+    "/models/downloads/{job_id}": {
+      "get": {
+        "operationId": "get_download_job_models_downloads__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Download Job",
+        "tags": [
+          "downloads"
+        ]
+      }
+    },
+    "/models/{model_id}": {
+      "get": {
+        "operationId": "model_detail_models__model_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Detail",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/models/{model_id}/download": {
+      "post": {
+        "operationId": "start_download_models__model_id__download_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DownloadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Download",
+        "tags": [
+          "downloads"
+        ]
+      }
+    },
+    "/models/{model_id}/feasibility": {
+      "get": {
+        "operationId": "model_feasibility_models__model_id__feasibility_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "quant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Quant"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeasibilityReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model Feasibility",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/tools": {
+      "get": {
+        "operationId": "list_tool_specs_tools_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ToolSpec"
+                  },
+                  "title": "Response List Tool Specs Tools Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tool Specs",
+        "tags": [
+          "tools"
+        ]
+      }
+    },
+    "/tools/reload": {
+      "post": {
+        "operationId": "reload_tool_modules_tools_reload_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Reload Tool Modules Tools Reload Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Reload Tool Modules",
+        "tags": [
+          "tools"
+        ]
+      }
+    }
+  }
+}

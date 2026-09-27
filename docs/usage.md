@@ -45,7 +45,12 @@ frontend talks to the backend same-origin and the backend needs no CORS setup.
 make fe-test    # vitest
 make fe-lint    # eslint + tsc
 make fe-build   # production build into frontend/dist/
+make fe-types   # regenerate the frontend's API types from the backend's OpenAPI schema
 ```
+
+The frontend's API types are generated, not hand-written: after changing a backend
+request/response model, run `make fe-types` and commit the two files it rewrites
+(`frontend/openapi.json`, `frontend/src/api/schema.gen.ts`). CI fails when either is stale.
 
 ## Run tests
 
