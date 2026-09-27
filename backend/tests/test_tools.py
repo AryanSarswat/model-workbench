@@ -41,6 +41,31 @@ def test_web_fetch_reads_file_url(tmp_path):
     assert result == "hello from disk"
 
 
+def test_web_fetch_returns_a_pages_readable_text_not_its_markup(tmp_path):
+    # Raw HTML spends the whole character budget on <head>, CSS, scripts and menus.
+    page = tmp_path / "page.html"
+    page.write_text(
+        "<html><head><title>T</title><style>body{color:red}</style>"
+        "<script>var tracking = 1;</script></head>"
+        "<body><nav>Home | About</nav><h1>Seattle forecast</h1>"
+        "<p>Rain,   then\n clearing.</p><p>High 61°F</p></body></html>"
+    )
+
+    result = asyncio.run(_run("web_fetch", {"url": page.as_uri()}))
+
+    assert result == "Seattle forecast\nRain, then clearing.\nHigh 61°F"
+
+
+def test_web_fetch_keeps_only_the_main_content_when_the_page_marks_it(tmp_path):
+    page = tmp_path / "wiki.html"
+    page.write_text(
+        "<body><div>Deutsch</div><div>Español</div>"
+        "<main><h1>Seattle</h1><p>A seaport city.</p></main><div>Privacy policy</div></body>"
+    )
+
+    assert asyncio.run(_run("web_fetch", {"url": page.as_uri()})) == "Seattle\nA seaport city."
+
+
 def test_web_fetch_identifies_as_a_browser_not_python_urllib():
     # Many sites 403 urllib's default "Python-urllib/3.x" User-Agent outright.
     seen: list[str] = []
