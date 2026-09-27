@@ -17,6 +17,8 @@ specific file (e.g. right before confirming a download).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from app.config import get_hardware_info
 from app.discovery.hf_client import get_model_detail
 from app.discovery.schemas import FeasibilityOption, FeasibilityReport, GgufFile, ModelDetail
@@ -48,7 +50,13 @@ def _bytes_per_param(dtype: str | None) -> int:
     return _BYTES_PER_DTYPE.get(dtype.upper(), _DEFAULT_BYTES_PER_PARAM)
 
 
-def _build_option(label: str, estimated_bytes: float, available_gb: float) -> FeasibilityOption:
+def _build_option(
+    label: str,
+    backend: Literal["gguf", "transformers"],
+    filename: str | None,
+    estimated_bytes: float,
+    available_gb: float,
+) -> FeasibilityOption:
     estimated_gb = round(estimated_bytes / (1024**3), 2)
     if estimated_gb < available_gb * _COMFORTABLE_THRESHOLD:
         verdict = "comfortable"
@@ -62,12 +70,18 @@ def _build_option(label: str, estimated_bytes: float, available_gb: float) -> Fe
 
     reason = f"~{estimated_gb}GB needed, {available_gb}GB available -- {reason_suffix}"
     return FeasibilityOption(
-        label=label, verdict=verdict, estimated_memory_gb=estimated_gb, reason=reason
+        label=label,
+        backend=backend,
+        filename=filename,
+        verdict=verdict,
+        estimated_memory_gb=estimated_gb,
+        reason=reason,
     )
 
 
 def _gguf_option(file: GgufFile, available_gb: float) -> FeasibilityOption:
-    return _build_option(file.filename, file.size_bytes * _OVERHEAD_FACTOR, available_gb)
+    estimated_bytes = file.size_bytes * _OVERHEAD_FACTOR
+    return _build_option(file.filename, "gguf", file.filename, estimated_bytes, available_gb)
 
 
 def _transformers_option(detail: ModelDetail, available_gb: float) -> FeasibilityOption | None:
@@ -75,7 +89,7 @@ def _transformers_option(detail: ModelDetail, available_gb: float) -> Feasibilit
         return None
     estimated_bytes = detail.parameter_count * _bytes_per_param(detail.dtype) * _OVERHEAD_FACTOR
     label = f"transformers ({detail.dtype or 'unknown dtype'})"
-    return _build_option(label, estimated_bytes, available_gb)
+    return _build_option(label, "transformers", None, estimated_bytes, available_gb)
 
 
 def estimate_feasibility(model_id: str, quant: str | None = None) -> FeasibilityReport:
@@ -108,4 +122,9 @@ def estimate_feasibility(model_id: str, quant: str | None = None) -> Feasibility
                 ),
             )
 
-    return FeasibilityReport(available_memory_gb=available_gb, options=options)
+    return FeasibilityReport(
+        available_memory_gb=available_gb,
+        comfortable_fraction=_COMFORTABLE_THRESHOLD,
+        tight_fraction=_TIGHT_THRESHOLD,
+        options=options,
+    )
