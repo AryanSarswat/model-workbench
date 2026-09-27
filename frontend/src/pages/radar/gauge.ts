@@ -76,7 +76,7 @@ export function formatThreshold(fraction: number): string {
   return `${Math.round(fraction * 100)}%`
 }
 
-export function formatGbValue(gb: number): string {
+function formatGbValue(gb: number): string {
   return gb.toFixed(1)
 }
 
