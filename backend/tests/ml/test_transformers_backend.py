@@ -194,9 +194,7 @@ def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     # The chat messages reach the template, and weights land on the detected device.
-    assert _FakeTokenizer.instances[0].applied_messages == [
-        {"role": "user", "content": "hi"}
-    ]
+    assert _FakeTokenizer.instances[0].applied_messages == [{"role": "user", "content": "hi"}]
     assert _FakeModel.instances[0].device == backend._device
     assert chunks[-1].usage.prompt_tokens == 2  # input_ids=[[1, 2]] from _FakeEncoding
     assert chunks[-1].usage.completion_tokens == 1  # "Hello".split() -> one token
@@ -248,12 +246,8 @@ def test_device_selection_prefers_mps_then_cuda_then_cpu(
     monkeypatch, mps, cuda, expected_device, expected_dtype
 ):
     _install_fakes(monkeypatch)
-    monkeypatch.setattr(
-        transformers_backend.torch.backends.mps, "is_available", lambda: mps
-    )
-    monkeypatch.setattr(
-        transformers_backend.torch.cuda, "is_available", lambda: cuda
-    )
+    monkeypatch.setattr(transformers_backend.torch.backends.mps, "is_available", lambda: mps)
+    monkeypatch.setattr(transformers_backend.torch.cuda, "is_available", lambda: cuda)
     backend = TransformersBackend("/tmp/snapshot")
 
     model, _ = backend._get_model()
@@ -324,9 +318,7 @@ def _real_tokenizer():
         )
     )
     tok.pre_tokenizer = Whitespace()
-    return PreTrainedTokenizerFast(
-        tokenizer_object=tok, unk_token="[UNK]", eos_token="[EOS]"
-    )
+    return PreTrainedTokenizerFast(tokenizer_object=tok, unk_token="[UNK]", eos_token="[EOS]")
 
 
 def _patch_guided_processor(monkeypatch, sentinel=None):
@@ -352,9 +344,7 @@ def test_guided_plain_path_yields_single_delta_with_processor(monkeypatch):
         messages = [ChatMessage(role="user", content="hi")]
         return [
             chunk
-            async for chunk in backend.stream_chat(
-                "org/model", messages, output_schema=schema
-            )
+            async for chunk in backend.stream_chat("org/model", messages, output_schema=schema)
         ]
 
     chunks = asyncio.run(_collect())
@@ -463,9 +453,7 @@ def test_prevalidate_output_schema_accepts_valid_schema():
     pytest.importorskip("outlines_core")
     backend = TransformersBackend("/tmp/snapshot")
 
-    backend.prevalidate_output_schema(
-        {"type": "object", "properties": {"a": {"type": "integer"}}}
-    )
+    backend.prevalidate_output_schema({"type": "object", "properties": {"a": {"type": "integer"}}})
 
 
 def test_missing_outlines_raises_backend_not_available(monkeypatch):
@@ -473,9 +461,7 @@ def test_missing_outlines_raises_backend_not_available(monkeypatch):
     monkeypatch.setitem(sys.modules, "outlines.backends", None)
 
     with pytest.raises(WorkbenchError) as exc_info:
-        transformers_backend._build_guided_processor(
-            object(), object(), {"type": "object"}
-        )
+        transformers_backend._build_guided_processor(object(), object(), {"type": "object"})
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.code == "backend_not_available"

@@ -21,4 +21,3 @@ def test_platform_info_returns_known_system():
     system, machine = _platform_info()
     assert system in {"darwin", "linux", "windows"}
     assert machine  # non-empty string, e.g. "arm64" or "x86_64"
-

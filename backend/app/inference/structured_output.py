@@ -154,8 +154,7 @@ class PromptJsonRetrier:
         ]
         for tool in tools:
             lines.append(
-                f"- {tool.name}: {tool.description} "
-                f"Parameters: {json.dumps(tool.parameters)}"
+                f"- {tool.name}: {tool.description} Parameters: {json.dumps(tool.parameters)}"
             )
         if output_schema is not None:
             lines.extend(
@@ -170,9 +169,7 @@ class PromptJsonRetrier:
             )
         return _with_instruction(messages, "\n".join(lines))
 
-    def build_schema_messages(
-        self, messages: list[ChatMessage], schema: dict
-    ) -> list[ChatMessage]:
+    def build_schema_messages(self, messages: list[ChatMessage], schema: dict) -> list[ChatMessage]:
         """Prefix messages with a system instruction describing the JSON schema."""
         return _with_instruction(
             messages,

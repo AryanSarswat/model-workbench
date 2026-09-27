@@ -68,9 +68,7 @@ def run_download(job_id: int, repo_id: str, filename: str) -> None:
                 dest_path, hf_hub_url(repo_id, filename), on_progress
             )
             if total_bytes and downloaded_bytes != total_bytes:
-                raise OSError(
-                    f"stream ended early: got {downloaded_bytes} of {total_bytes} bytes"
-                )
+                raise OSError(f"stream ended early: got {downloaded_bytes} of {total_bytes} bytes")
         except (httpx.HTTPError, OSError) as e:
             dest_path.unlink(missing_ok=True)
             _fail_job(session, job, str(e))
@@ -182,9 +180,7 @@ def _stream_to_file(
     chunks."""
     hf_api_key = get_settings().hf_api_key
     headers = {"Authorization": f"Bearer {hf_api_key}"} if hf_api_key else None
-    with httpx.stream(
-        "GET", url, headers=headers, follow_redirects=True, timeout=None
-    ) as response:
+    with httpx.stream("GET", url, headers=headers, follow_redirects=True, timeout=None) as response:
         response.raise_for_status()
         total_bytes = int(response.headers.get("content-length", 0))
         downloaded_bytes = 0

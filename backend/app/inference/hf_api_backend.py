@@ -140,9 +140,7 @@ class HFInferenceAPIBackend:
                     history = [*messages, ChatMessage(role="assistant", content=final)]
                 # Without tools final is "", which never conforms.
                 if output_schema is not None and not is_conforming_json(final, output_schema):
-                    final, retries = await self._run_schema_loop(
-                        _generate, history, output_schema
-                    )
+                    final, retries = await self._run_schema_loop(_generate, history, output_schema)
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return

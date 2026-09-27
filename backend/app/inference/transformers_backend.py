@@ -90,18 +90,14 @@ def _build_guided_processor(
         ) from e
     try:
         guided_model = outlines.from_transformers(model, tokenizer)
-        return get_json_schema_logits_processor(
-            None, guided_model, json.dumps(output_schema)
-        )
+        return get_json_schema_logits_processor(None, guided_model, json.dumps(output_schema))
     except WorkbenchError:
         raise
     except Exception as e:
         # The schema is the only caller-controlled input here, so any build
         # failure -- outlines' ValueError/TypeError schema rejections above all --
         # is reported as an invalid schema.
-        raise WorkbenchError(
-            400, "invalid_output_schema", f"invalid output_schema: {e}"
-        ) from e
+        raise WorkbenchError(400, "invalid_output_schema", f"invalid output_schema: {e}") from e
 
 
 class TransformersBackend:
@@ -128,9 +124,7 @@ class TransformersBackend:
         try:
             build_regex_from_schema(json.dumps(schema))
         except Exception as e:
-            raise WorkbenchError(
-                400, "invalid_output_schema", f"invalid output_schema: {e}"
-            ) from e
+            raise WorkbenchError(400, "invalid_output_schema", f"invalid output_schema: {e}") from e
 
     def _get_model(self) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
         return _CACHE.get_or_load(self._snapshot_dir, self._load)
@@ -191,9 +185,7 @@ class TransformersBackend:
         tool-call JSON the schema would forbid) and only a final redraft is
         schema-guided.
         """
-        prompt_messages = PromptJsonRetrier().build_tool_messages(
-            messages, tools, output_schema
-        )
+        prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools, output_schema)
         conversation = await asyncio.to_thread(
             tokenizer.apply_chat_template,
             [m.model_dump() for m in prompt_messages],
@@ -215,9 +207,7 @@ class TransformersBackend:
         loop_result = await run_tool_loop(_generate, prompt_messages, tools, on_event=on_event)
         # The schema instruction rides every loop turn, so a conforming draft
         # skips the guided redraft.
-        if output_schema is not None and not is_conforming_json(
-            loop_result.text, output_schema
-        ):
+        if output_schema is not None and not is_conforming_json(loop_result.text, output_schema):
             final_text, final_usage = await self._generate_turn(
                 model, tokenizer, conversation, output_schema
             )
@@ -295,9 +285,7 @@ class TransformersBackend:
                 )
                 completion_ids = outputs[0][input_len:]
                 final = tokenizer.decode(completion_ids, skip_special_tokens=True)
-                usage = TokenUsage(
-                    prompt_tokens=input_len, completion_tokens=len(completion_ids)
-                )
+                usage = TokenUsage(prompt_tokens=input_len, completion_tokens=len(completion_ids))
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return

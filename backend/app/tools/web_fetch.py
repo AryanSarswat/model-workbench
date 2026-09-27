@@ -97,7 +97,11 @@ def html_to_text(html: str) -> str:
     extractor = _TextExtractor()
     extractor.feed(html)
     text = next(
-        (joined for root in (*_CONTENT_ROOTS, None) if (joined := "".join(extractor.parts[root])).strip()),
+        (
+            joined
+            for root in (*_CONTENT_ROOTS, None)
+            if (joined := "".join(extractor.parts[root])).strip()
+        ),
         "",
     )
     lines = (" ".join(line.split()) for line in text.splitlines())

@@ -1,4 +1,4 @@
-.PHONY: setup run dev test test-ml test-all lint ci lock docker-build docker-run docker-ci \
+.PHONY: setup run dev test test-ml test-all lint format ci lock docker-build docker-run docker-ci \
 	fe-setup fe-dev fe-test fe-lint fe-build fe-ci
 
 # Local dev gets everything, including the heavy `local` extra (torch/llama.cpp)
@@ -31,6 +31,10 @@ test-all:
 
 lint:
 	cd backend && uv run ruff check .
+	cd backend && uv run ruff format --check .
+
+format:
+	cd backend && uv run ruff format .
 
 # Local pre-PR gate: everything the GitHub Actions jobs run (`backend`, `frontend`,
 # `docker`), PLUS the ML suite CI skips -- so a pass here means the PR checks will pass
@@ -39,6 +43,7 @@ lint:
 ci:
 	cd backend && uv sync --locked --extra dev --extra local
 	cd backend && uv run ruff check .
+	cd backend && uv run ruff format --check .
 	cd backend && uv run pytest --cov --cov-report=term-missing
 	$(MAKE) fe-ci
 	$(MAKE) docker-ci

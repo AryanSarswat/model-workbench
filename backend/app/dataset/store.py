@@ -74,8 +74,7 @@ def load_cases(category: str | None = None) -> list[TestCase]:
     if not cases_dir.is_dir():
         return []
     cases = [
-        TestCase.model_validate_json(path.read_text())
-        for path in sorted(cases_dir.glob("*.json"))
+        TestCase.model_validate_json(path.read_text()) for path in sorted(cases_dir.glob("*.json"))
     ]
     if category is not None:
         cases = [case for case in cases if case.category == category]

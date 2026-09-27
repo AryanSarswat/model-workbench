@@ -40,7 +40,6 @@ class _FakeBackend:
         )
 
 
-
 def _engine():
     engine = create_engine(
         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool

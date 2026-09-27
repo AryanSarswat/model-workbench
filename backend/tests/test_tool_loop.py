@@ -28,9 +28,7 @@ def test_tool_call_then_reply_returns_final_text_and_records_result():
 
     assert result.text == '{"reply": "5"}'
     assert result.tools_called == ["calculator"]
-    assert any(
-        "Tool 'calculator' returned: 5" in m.content for m in seen[-1] if m.role == "user"
-    )
+    assert any("Tool 'calculator' returned: 5" in m.content for m in seen[-1] if m.role == "user")
 
 
 def test_unknown_tool_name_appends_error_and_continues():

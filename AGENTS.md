@@ -20,7 +20,7 @@ A FastAPI backend (`backend/`) and a Vite + React frontend (`frontend/`). The ba
   Living reference docs belong in `docs/*.md` and should be kept up to date as the
   architecture evolves; specs/plans (if produced during a work session) are gitignored
   under `docs/superpowers/`.
-- **CI must stay green.** Every push runs lint (`ruff check`), `pytest --cov`, the
+- **CI must stay green.** Every push runs lint (`ruff check` + `ruff format --check`), `pytest --cov`, the
   frontend's lint/typecheck/test/build, and a Docker build-and-boot check via GitHub
   Actions (`.github/workflows/ci.yml`, jobs `backend`, `frontend`, `docker`). `backend` and
   `docker` are required status checks on `main` — a PR literally cannot merge until they pass.
@@ -58,7 +58,8 @@ time — shorter commands, and one less way for an agent's command to drift from
 ```bash
 make setup          # cd backend && uv sync --extra dev
 make test            # run tests
-make lint            # ruff check
+make lint            # ruff check + ruff format --check
+make format          # apply ruff format
 make run             # run the API (from repo root)
 make dev             # API + Vite dev server together (Ctrl+C stops both)
 make docker-build    # build the backend image

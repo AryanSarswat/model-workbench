@@ -31,7 +31,11 @@ def _run(args: dict) -> str:
 
 def test_parses_titles_real_urls_and_plain_snippets():
     assert parse_results(_PAGE) == [
-        ("10-Day Forecast for Seattle & Area", "https://weather.com/seattle", "Accurate 10-day forecast for Seattle."),
+        (
+            "10-Day Forecast for Seattle & Area",
+            "https://weather.com/seattle",
+            "Accurate 10-day forecast for Seattle.",
+        ),
         ("NWS Seattle", "https://www.weather.gov/sew/", "Official forecasts."),
     ]
 
