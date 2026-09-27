@@ -56,7 +56,7 @@ root `Makefile` targets below instead of retyping the full `uv`/`docker` invocat
 time — shorter commands, and one less way for an agent's command to drift from what CI runs.
 
 ```bash
-make setup          # cd backend && uv sync --extra dev
+make setup          # cd backend && uv sync --extra dev --extra local
 make test            # run tests
 make lint            # ruff check + ruff format --check
 make format          # apply ruff format
