@@ -1,9 +1,9 @@
 """File-backed test-case dataset, per docs/architecture.md's data model.
 
 One file per case (`{id}.json` under `data/test_cases/`) -- diffable, no merge
-conflicts, category filtering by scan. `TestCase` + `load_cases()` are the seam the
-eval engine will import; the HTTP layer in `router.py` is a thin wrapper over this
-module and adds nothing the eval PR needs to know about.
+conflicts, category filtering by scan. `TestCase` + `load_cases()` are what the eval
+engine imports; the HTTP layer in `router.py` is a thin wrapper over this module and
+adds nothing the eval engine depends on.
 """
 
 from __future__ import annotations

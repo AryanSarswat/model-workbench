@@ -1,8 +1,8 @@
 """App settings and hardware detection.
 
-Hardware detection feeds the model-feasibility check (design doc §8): before downloading a
-model, we compare its estimated memory footprint against what's actually available on this
-machine.
+Hardware detection feeds the model-feasibility check (docs/architecture.md, "Discovery,
+downloads, and feasibility"): before downloading a model, we compare its estimated memory
+footprint against what's actually available on this machine.
 """
 
 from __future__ import annotations
