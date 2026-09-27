@@ -8,7 +8,7 @@ import { PageHeader } from './PageHeader'
 export function RouteError() {
   const error = useRouteError()
   return (
-    <main style={{ padding: '40px 40px 0' }}>
+    <main className="message-page">
       <PageHeader
         eyebrow="Error"
         title="Something went wrong"
