@@ -1,13 +1,12 @@
 // Pure logic for the review screen: filtering/counting the case list, picking the next
 // unreviewed case, and building the PATCH body for a verdict save. Kept separate from
 // the page so the rules can be unit tested without rendering anything.
-import { resultPassed } from '../../lib/evalPass'
 import type { EvalResult, ManualVerdict, TestCase } from '../../api/types'
 
 export type CaseFilter = 'all' | 'failed' | 'unreviewed'
 
 export function filterResults(results: EvalResult[], filter: CaseFilter): EvalResult[] {
-  if (filter === 'failed') return results.filter((result) => !resultPassed(result))
+  if (filter === 'failed') return results.filter((result) => !result.passed)
   if (filter === 'unreviewed') return results.filter((result) => result.manual_verdict == null)
   return results
 }
@@ -23,7 +22,7 @@ export function countByStatus(results: EvalResult[]): ResultCounts {
   let passed = 0
   let unreviewed = 0
   for (const result of results) {
-    if (resultPassed(result)) passed++
+    if (result.passed) passed++
     if (result.manual_verdict == null) unreviewed++
   }
   return { total: results.length, passed, failed: results.length - passed, unreviewed }

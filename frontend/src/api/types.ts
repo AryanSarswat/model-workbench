@@ -227,6 +227,7 @@ export interface EvalRunRequest {
 // One SSE event of POST /evals/run. The final event has done=true, plus error if the
 // run failed as a whole.
 export interface EvalProgressEvent {
+  run_id: number
   completed: number
   total: number
   current_case: string | null
@@ -265,16 +266,17 @@ export interface EvalResult {
   structured_output_mode: 'grammar' | 'guided' | 'prompt_retry' | null
   native_tool_calling: boolean
   retries: number
-  tools_called: string // comma-joined tool names
+  tools_called: string[]
   assertions_passed: number
   assertions_total: number
-  assertions_detail: string // JSON-encoded AssertionResult[]
+  assertions: AssertionResult[]
   judge_score: number | null // 0..1
   judge_rationale: string | null
   manual_verdict: ManualVerdict | null
   manual_notes: string | null
   response_metric_id: number | null
   created_at: string
+  passed: boolean // the backend's pass rule, the same one GET /evals/report counts
 }
 
 export interface ManualVerdictUpdate {

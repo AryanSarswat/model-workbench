@@ -11,16 +11,17 @@ function result(overrides: Partial<EvalResult> & Pick<EvalResult, 'id' | 'case_i
     structured_output_mode: null,
     native_tool_calling: false,
     retries: 0,
-    tools_called: '',
+    tools_called: [],
     assertions_passed: 1,
     assertions_total: 1,
-    assertions_detail: '[]',
+    assertions: [],
     judge_score: null,
     judge_rationale: null,
     manual_verdict: null,
     manual_notes: null,
     response_metric_id: null,
     created_at: '2026-01-01T00:00:00Z',
+    passed: true,
     ...overrides,
   }
 }
@@ -28,16 +29,16 @@ function result(overrides: Partial<EvalResult> & Pick<EvalResult, 'id' | 'case_i
 describe('filterResults / countByStatus', () => {
   const results = [
     result({ id: 1, case_id: 'a', assertions_passed: 1, assertions_total: 1 }), // auto-pass, unreviewed
-    result({ id: 2, case_id: 'b', assertions_passed: 0, assertions_total: 1 }), // auto-fail, unreviewed
+    result({ id: 2, case_id: 'b', assertions_passed: 0, assertions_total: 1, passed: false }), // auto-fail, unreviewed
     result({ id: 3, case_id: 'c', assertions_passed: 0, assertions_total: 1, manual_verdict: 'pass' }), // manual override to pass
-    result({ id: 4, case_id: 'd', assertions_passed: 1, assertions_total: 1, manual_verdict: 'fail' }), // manual override to fail
+    result({ id: 4, case_id: 'd', assertions_passed: 1, assertions_total: 1, manual_verdict: 'fail', passed: false }), // manual override to fail
   ]
 
-  it('counts pass/fail via resultPassed (manual verdict wins) and unreviewed via manual_verdict', () => {
+  it('counts pass/fail by the backend-computed passed flag and unreviewed via manual_verdict', () => {
     expect(countByStatus(results)).toEqual({ total: 4, passed: 2, failed: 2, unreviewed: 2 })
   })
 
-  it('"failed" filters by the same resultPassed rule, not raw assertion counts', () => {
+  it('"failed" filters by the backend-computed passed flag, not raw assertion counts', () => {
     expect(filterResults(results, 'failed').map((r) => r.case_id)).toEqual(['b', 'd'])
   })
 

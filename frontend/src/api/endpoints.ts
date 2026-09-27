@@ -104,6 +104,8 @@ export const runEval = (request: EvalRunRequest, signal?: AbortSignal) =>
 
 export const listEvalRuns = () => apiGet<EvalRun[]>('/evals/runs')
 
+export const getEvalRun = (runId: number) => apiGet<EvalRun>(`/evals/runs/${runId}`)
+
 export const getEvalRunResults = (runId: number) => apiGet<EvalResult[]>(`/evals/runs/${runId}/results`)
 
 export const updateEvalResult = (resultId: number, update: ManualVerdictUpdate) =>

@@ -256,7 +256,7 @@ Vite + React + TypeScript in `frontend/`, plain CSS (no component library).
 ```
 frontend/src/
 ├── api/          # client.ts (fetch + ApiError), sse.ts, types.ts, endpoints.ts, hooks.ts
-├── lib/          # formatting, the eval pass rule, per-backend labels/guarantees
+├── lib/          # formatting, per-backend labels/guarantees
 ├── styles/       # tokens.css (design tokens) + global.css (shared utility classes)
 ├── components/   # primitives, Topbar, AppShell
 ├── pages/<screen>/  # one folder per route; page-specific hooks and CSS Modules live here
@@ -276,8 +276,8 @@ frontend/src/
 - **Routing**: React Router — `/` (Radar), `/models/:author/:name`, `/playground`
   (`?model=&backend=&quant=`), `/evals`, `/evals/runs/:runId`, `/dataset`, `/library`.
 - **Endpoints added for the UI**: `GET /models/downloads?active=` (download jobs, newest
-  first) and `GET /evals/report` (pass rate and reliability per model, backend and
-  category, latest result per case). `lib/evalPass.ts` mirrors the report's pass rule.
+  first), `GET /evals/report` (pass rate and reliability per model, backend and
+  category, latest result per case), and `GET /evals/runs/{id}`.
 
 ## Error handling
 
