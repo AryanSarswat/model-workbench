@@ -9,6 +9,7 @@ import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
+import { ArrowRightIcon, RefreshIcon } from '../../components/icons'
 import { PageHeader } from '../../components/PageHeader'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { cx } from '../../lib/cx'
@@ -85,9 +86,7 @@ export default function RadarPage() {
             </Field>
             <SegmentedControl label="Sort order" options={SORT_OPTIONS} value={sort} onChange={setSort} />
             <Button aria-label="Refresh from the Hub" onClick={() => void modelsQuery.refetch()}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                <path d="M13 2.5v4H9M3 13.5v-4h4M12.6 6.5A5 5 0 0 0 3.8 5M3.4 9.5A5 5 0 0 0 12.2 11" />
-              </svg>
+              <RefreshIcon size={15} />
             </Button>
           </div>
         }
@@ -190,9 +189,7 @@ function RadarRow({
       </div>
       <Button to={href} className={styles.openLink}>
         Open
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-          <path d="M3 8h10M9 4l4 4-4 4" />
-        </svg>
+        <ArrowRightIcon />
       </Button>
     </div>
   )

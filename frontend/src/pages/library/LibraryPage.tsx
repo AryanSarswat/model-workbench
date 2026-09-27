@@ -20,6 +20,7 @@ import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
+import { RefreshIcon, TrashIcon } from '../../components/icons'
 import { PageHeader } from '../../components/PageHeader'
 import { ProgressBar } from '../../components/ProgressBar'
 import { cx } from '../../lib/cx'
@@ -138,7 +139,7 @@ export default function LibraryPage() {
               {reloadStatus && <span className={styles.reloadStatus}>{reloadStatus}</span>}
             </div>
             <Button onClick={() => reloadMutation.mutate()} disabled={reloadMutation.isPending}>
-              <ReloadIcon /> Reload
+              <RefreshIcon /> Reload
             </Button>
           </div>
           {toolsQuery.isError && <ErrorNotice error={toolsQuery.error} />}
@@ -236,21 +237,5 @@ function MachineCard() {
       )}
       <p className={styles.thresholdNote}>Fit verdicts: comfortable under 70% of usable memory, tight under 95%.</p>
     </section>
-  )
-}
-
-function TrashIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4" />
-    </svg>
-  )
-}
-
-function ReloadIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-      <path d="M13 2.5v4H9M3 13.5v-4h4M12.6 6.5A5 5 0 0 0 3.8 5M3.4 9.5A5 5 0 0 0 12.2 11" />
-    </svg>
   )
 }

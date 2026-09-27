@@ -2,6 +2,7 @@ import { Link } from 'react-router'
 import type { DownloadedModelRecord, ModelDetail } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
+import { ExternalLinkIcon } from '../../components/icons'
 import { cx } from '../../lib/cx'
 import { formatCount, formatRelative } from '../../lib/format'
 import styles from './ModelPage.module.css'
@@ -38,9 +39,7 @@ export function ModelHeader({ detail, downloaded }: { detail: ModelDetail; downl
       <div className={styles.actions}>
         <a className="btn" href={`https://huggingface.co/${detail.id}`} target="_blank" rel="noreferrer">
           View on Hub
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-            <path d="M7 3H3v10h10V9M10 3h3v3M13 3L7.5 8.5" />
-          </svg>
+          <ExternalLinkIcon />
         </a>
         <Button to={`/evals?model=${encodeURIComponent(detail.id)}`}>Run eval</Button>
         <Button to={playgroundLink(detail.id, downloaded)} variant="solid">

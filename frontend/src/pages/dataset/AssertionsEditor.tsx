@@ -1,6 +1,6 @@
+import { CrossIcon } from '../../components/icons'
 import { cx } from '../../lib/cx'
 import styles from './DatasetPage.module.css'
-import { RemoveIcon } from './RemoveIcon'
 import { ASSERTION_TYPES, assertionArgPlaceholder, assertionNeedsArgument, type CaseFormState } from './testCaseForm'
 
 type Assertion = CaseFormState['assertions'][number]
@@ -48,7 +48,7 @@ export function AssertionsEditor({
             className={styles.iconButton}
             onClick={() => onRemove(index)}
           >
-            <RemoveIcon />
+            <CrossIcon />
           </button>
         </div>
       ))}

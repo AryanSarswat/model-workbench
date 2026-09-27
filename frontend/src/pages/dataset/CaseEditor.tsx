@@ -6,10 +6,10 @@ import type { TestCase, ToolSpec } from '../../api/types'
 import { Button } from '../../components/Button'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
+import { CrossIcon } from '../../components/icons'
 import { cx } from '../../lib/cx'
 import styles from './DatasetPage.module.css'
 import { AssertionsEditor } from './AssertionsEditor'
-import { RemoveIcon } from './RemoveIcon'
 import {
   duplicateForm,
   formToCase,
@@ -182,7 +182,7 @@ export function CaseEditor({
                     className={styles.iconButton}
                     onClick={() => removeMessage(index)}
                   >
-                    <RemoveIcon />
+                    <CrossIcon />
                   </button>
                 )}
               </div>

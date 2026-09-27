@@ -7,6 +7,7 @@ import type { TestCase } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
+import { PlusIcon } from '../../components/icons'
 import { cx } from '../../lib/cx'
 import styles from './DatasetPage.module.css'
 import { CaseEditor } from './CaseEditor'
@@ -233,13 +234,5 @@ export default function DatasetPage() {
         ))}
       </datalist>
     </main>
-  )
-}
-
-function PlusIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M8 3v10M3 8h10" />
-    </svg>
   )
 }

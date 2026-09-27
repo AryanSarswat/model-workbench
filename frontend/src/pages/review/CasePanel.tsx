@@ -4,6 +4,7 @@ import type { EvalResult, TestCase } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
+import { CheckIcon, CrossIcon } from '../../components/icons'
 import styles from './ReviewPage.module.css'
 import { useCase, useUpdateEvalResult } from './queries'
 import { lastUserMessage, verdictUpdatePayload, type VerdictChoice } from './reviewLogic'
@@ -86,7 +87,11 @@ export function AssertionsSection({ result }: { result: EvalResult }) {
       </h2>
       {result.assertions.map((assertion, i) => (
         <div key={i} className={styles.assertion}>
-          {assertion.passed ? <PassIcon /> : <FailIcon />}
+          {assertion.passed ? (
+            <CheckIcon size={16} stroke="var(--fit)" strokeWidth={2.2} aria-label="passed" role="img" style={{ marginTop: 1 }} />
+          ) : (
+            <CrossIcon size={16} stroke="var(--nofit)" strokeWidth={2.2} aria-label="failed" role="img" style={{ marginTop: 1 }} />
+          )}
           <div className={styles.assertionText}>
             <span className={styles.assertionType}>{assertion.type}</span>
             <span className={styles.assertionDetail}>{assertion.detail}</span>
@@ -94,42 +99,6 @@ export function AssertionsSection({ result }: { result: EvalResult }) {
         </div>
       ))}
     </section>
-  )
-}
-
-function PassIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="var(--fit)"
-      strokeWidth="2.2"
-      aria-label="passed"
-      role="img"
-      style={{ marginTop: 1 }}
-    >
-      <path d="M3 8.5l3 3 7-7" />
-    </svg>
-  )
-}
-
-function FailIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="var(--nofit)"
-      strokeWidth="2.2"
-      aria-label="failed"
-      role="img"
-      style={{ marginTop: 1 }}
-    >
-      <path d="M4 4l8 8M12 4l-8 8" />
-    </svg>
   )
 }
 

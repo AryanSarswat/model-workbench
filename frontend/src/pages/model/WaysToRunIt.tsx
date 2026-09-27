@@ -4,6 +4,7 @@ import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { ProgressBar } from '../../components/ProgressBar'
+import { CheckIcon } from '../../components/icons'
 import { GaugeAxisLabels, MemoryGauge } from '../radar/MemoryGauge'
 import { VERDICT_CHIP_TONE, VERDICT_LABEL, type VerdictThresholds } from '../radar/gauge'
 import styles from './ModelPage.module.css'
@@ -146,9 +147,7 @@ function OptionRow({
       <div className={styles.actionCell}>
         {onDisk ? (
           <Button to={optionPlaygroundLink(modelId, backend, filename ?? undefined)} variant="solid" className={styles.actionButton}>
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M3 8.5l3 3 7-7" />
-            </svg>
+            <CheckIcon />
             On disk · Chat
           </Button>
         ) : activeJob ? (
