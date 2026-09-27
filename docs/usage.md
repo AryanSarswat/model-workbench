@@ -19,7 +19,6 @@ The `local` extra (torch, transformers, llama-cpp-python) powers the `gguf` /
 CI runs the application suite only (see `make test` below), which must pass without it.
 A local request for a backend whose extra is missing fails as a 400
 (`backend_not_available`) naming the missing packages, not an import traceback.
-```
 
 ## Run the API
 
@@ -74,8 +73,8 @@ make ci   # backend lint+test+coverage, frontend lint/typecheck/test/build, then
 ```
 
 Note: the container's `data/` directory is ephemeral (lost when the container is removed).
-Persisting it across restarts, and an `.env`/HF API key, will be addressed alongside the
-docker-compose setup once the frontend exists.
+Persisting it across restarts, and passing an `.env`/HF API key into the container, are
+not set up yet.
 
 ## Your private test-case dataset
 

@@ -25,7 +25,12 @@ model-workbench/
 │   ├── app/
 │   │   ├── main.py                # FastAPI app, router registration
 │   │   ├── config.py              # settings, hf-api-key, hardware detection
+│   │   ├── db.py                  # SQLite engine/session
+│   │   ├── errors.py              # WorkbenchError, uniform error shape
+│   │   ├── metrics.py             # per-turn response_metrics (TTFT, tokens/sec)
 │   │   ├── models/                # SQLModel table definitions
+│   │   ├── api_config/            # /config router: HF API key, hardware
+│   │   ├── chat/                  # /chat router: streaming chat, sessions
 │   │   ├── discovery/             # HF Hub trending/recent + model detail + feasibility
 │   │   ├── downloads/             # download manager, job tracking, progress
 │   │   ├── inference/
@@ -35,18 +40,22 @@ model-workbench/
 │   │   │   ├── hf_api_backend.py
 │   │   │   ├── llama_cpp_backend.py
 │   │   │   ├── transformers_backend.py
-│   │   │   ├── structured_output.py  # grammar builders + PromptJsonRetrier
+│   │   │   ├── model_cache.py     # one-model LoadedModelCache per local backend
+│   │   │   ├── gguf_header.py     # unsupported-tensor-type scan
+│   │   │   ├── structured_output.py  # schema validation + PromptJsonRetrier
 │   │   │   └── tool_loop.py        # tool-call orchestration
 │   │   ├── tools/                  # shared tool directory, edits hot-reloadable (see below)
 │   │   ├── dataset/                 # test-case CRUD, category filtering
-│   │   ├── evals/                   # eval run engine, assertions, judge
-│   │   └── api/                     # FastAPI routers
+│   │   └── evals/                   # eval run engine, assertions, judge, report
 │   └── tests/
 ├── frontend/                        # Vite + React app (see Frontend below)
 ├── data/                            # gitignored except templates
 │   └── test_cases.template.json
 └── docs/
 ```
+
+Each feature package owns its FastAPI router (`chat/router.py`, `downloads/router.py`,
+…); `main.py` registers them all.
 
 ## Data model
 
@@ -79,8 +88,8 @@ model-workbench/
 change. Every field except `id`, `category`, and `messages` is optional.
 
 **SQLite** (`data/workbench.db`, gitignored, local only — no multi-device sync):
-`chat_sessions`, `chat_messages`, `downloaded_models`, `eval_runs`, `eval_results`,
-`response_metrics` (recorded per chat turn, not just evals — tokens/sec, TTFT, latency,
+`chat_sessions`, `chat_messages`, `download_jobs`, `downloaded_models`, `eval_runs`,
+`eval_results`, `response_metrics` (recorded per chat turn, not just evals — tokens/sec, TTFT, latency,
 cost, RAM/VRAM). SQLite over Postgres because this is single-user/single-machine and needs
 no server; SQLite over plain JSON (unlike the test-case dataset) because eval reporting
 needs real aggregation (`GROUP BY model, backend, category`).
@@ -158,8 +167,8 @@ reply yields as one delta + done. While the loop runs, each executed call yields
 `tool_call_started` chunk (name + arguments) and then a `tool_call_finished` chunk
 (its `ToolCallRecord`): every loop reports through `run_tool`'s `on_event`, and
 `ToolEvents` relays those chunks out of the running loop task. The terminal chunk's
-`tool_calls` still lists every record. `tool_calling_mode` recording is deferred to the eval
-engine, which is where the signal gets consumed.
+`tool_calls` still lists every record. The eval engine records whether a result used
+native tool calling (`native_tool_calling` on each eval result).
 
 ## Shared tools directory
 
@@ -224,11 +233,12 @@ error, all its assertions passed, and any judge score is at least 0.5.
 | Area | Endpoints |
 |---|---|
 | Discovery/downloads | `GET /models/discover`, `GET /models/{id}`, `GET /models/{id}/feasibility`, `POST /models/{id}/download`, `GET /models/downloads`, `GET /models/downloads/events` (SSE), `GET /models/downloads/{job_id}`, `GET /models/downloaded`, `DELETE /models/downloaded/{id}` |
-| Chat | `POST /chat/stream` (SSE), `GET/DELETE /chat/sessions[/{id}]` |
+| Chat | `POST /chat/stream` (SSE), `POST /chat/sessions`, `GET/DELETE /chat/sessions[/{id}]` |
 | Tools | `GET /tools`, `POST /tools/reload` |
 | Dataset | `GET/POST/PUT/DELETE /dataset/cases` (filterable by `category`) |
 | Evals | `POST /evals/run` (SSE), `GET /evals/runs[/{id}/results]`, `GET /evals/report`, `PATCH /evals/results/{id}` |
 | Config | `GET/POST /config/hf-api-key`, `GET /config/hardware` |
+| Health | `GET /health` |
 
 ## Frontend
 
@@ -275,8 +285,7 @@ frontend/src/
 - **ORM**: SQLModel over raw SQL — typed models, standard, keeps CRUD-heavy code simple.
 - **Docker**: `backend/Dockerfile` builds and runs the backend standalone (build from the
   repo root: `docker build -f backend/Dockerfile .`, since it needs both `backend/` and
-  `data/` in the build context). A root `docker-compose.yml` chaining backend + frontend is
-  still deferred until the frontend exists — one service alone doesn't need compose. Local
-  dev still defaults to a Python venv + uvicorn; the image is for anyone who'd rather not
-  set up Python locally, and lays groundwork for the eventual compose file.
+  `data/` in the build context). There is no `docker-compose.yml` and no frontend image
+  yet; the frontend runs via the Vite dev server. Local dev defaults to a Python venv +
+  uvicorn; the image is for anyone who'd rather not set up Python locally.
 - **HF API key**: `backend/.env` via `pydantic-settings`, never in the DB or logs.
