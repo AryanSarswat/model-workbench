@@ -179,6 +179,42 @@ def test_misconfigured_backend_is_a_400_before_any_run_is_created():
         assert session.exec(select(EvalRun)).all() == []
 
 
+def test_unresolvable_judge_model_is_a_404_before_any_run_is_created():
+    _seed_case()
+    not_downloaded = WorkbenchError(404, "local_model_not_found", "download it first")
+
+    def fake_get_backend(name, model_id, hf_api_key):
+        if model_id == "judge/model":
+            raise not_downloaded
+        return _FakeBackend()
+
+    with patch.object(eval_router, "get_backend", side_effect=fake_get_backend):
+        response = client.post(
+            "/evals/run",
+            json={"model_id": "some/model", "backend": "gguf", "judge_model_id": "judge/model"},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "local_model_not_found"
+    with Session(_test_engine) as session:
+        assert session.exec(select(EvalRun)).all() == []
+
+
+def test_judge_backend_is_closed_when_the_run_ends():
+    _seed_case()
+    model_backend, judge_backend = _FakeBackend(), _FakeBackend()
+
+    with patch.object(eval_router, "get_backend", side_effect=[model_backend, judge_backend]):
+        response = client.post(
+            "/evals/run",
+            json={"model_id": "some/model", "backend": "api", "judge_model_id": "judge/model"},
+        )
+
+    assert _events(response)[-1]["done"] is True
+    assert model_backend.closed is True
+    assert judge_backend.closed is True
+
+
 def test_run_with_no_matching_cases_completes_instead_of_hanging_as_running():
     with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
         response = client.post(

@@ -41,6 +41,11 @@ def start_eval_run(request: EvalRunRequest, session: SessionDep) -> StreamingRes
     # undownloaded model is a normal 4xx, not a broken stream with a stuck run.
     hf_api_key = get_settings().hf_api_key
     backend = get_backend(request.backend, request.model_id, hf_api_key)
+    judge_backend = (
+        get_backend(request.backend, request.judge_model_id, hf_api_key)
+        if request.judge_model_id is not None
+        else None
+    )
     cases = load_cases(request.category)
     run = EvalRun(
         model_id=request.model_id,
@@ -53,7 +58,7 @@ def start_eval_run(request: EvalRunRequest, session: SessionDep) -> StreamingRes
     session.commit()
     session.refresh(run)
     return StreamingResponse(
-        _run_events(session, run, cases, backend, hf_api_key), media_type="text/event-stream"
+        _run_events(session, run, cases, backend, judge_backend), media_type="text/event-stream"
     )
 
 
@@ -73,7 +78,7 @@ async def _run_events(
     run: EvalRun,
     cases: list[TestCase],
     backend: InferenceBackend,
-    hf_api_key: str | None,
+    judge_backend: InferenceBackend | None,
 ) -> AsyncIterator[str]:
     # Per-case failures are recorded on the result by run_one_case; anything that
     # escapes here (or a client disconnect) ends the run as "failed", never "running".
@@ -81,7 +86,7 @@ async def _run_events(
     try:
         for case in cases:
             yield _event(run, current_case=case.id, done=False)
-            await run_one_case(session, run, case, backend, hf_api_key)
+            await run_one_case(session, run, case, backend, judge_backend)
             run.completed_cases += 1
             session.add(run)
             session.commit()
@@ -91,6 +96,8 @@ async def _run_events(
         error = str(exc)
     finally:
         await backend.aclose()
+        if judge_backend is not None:
+            await judge_backend.aclose()
         if run.status != "completed":
             run.status = "failed"
         run.finished_at = datetime.now(UTC)

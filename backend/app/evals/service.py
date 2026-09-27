@@ -1,5 +1,5 @@
 """Runs one test case through the same stream_chat() path used for regular chat.
-The backend is resolved, and closed, once per run by evals/router.py.
+The model and judge backends are resolved, and closed, once per run by evals/router.py.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ async def run_one_case(
     run: EvalRun,
     case: TestCase,
     backend: InferenceBackend,
-    hf_api_key: str | None,
+    judge_backend: InferenceBackend | None,
 ) -> EvalResult:
     messages = list(case.messages)
     if case.system_prompt is not None:
@@ -54,9 +54,9 @@ async def run_one_case(
     )
 
     judge_score = judge_rationale = None
-    if case.judge is not None and run.judge_model_id is not None:
+    if case.judge is not None and judge_backend is not None:
         judge_score, judge_rationale = await score_with_judge(
-            run.backend, run.judge_model_id, hf_api_key, case, response_text
+            judge_backend, run.judge_model_id, case, response_text
         )
 
     result = EvalResult(

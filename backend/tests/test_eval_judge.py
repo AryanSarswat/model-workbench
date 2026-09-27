@@ -12,7 +12,6 @@ class _FakeBackend:
     def __init__(self, reply: str | None = None, error: str | None = None):
         self._reply = reply
         self._error = error
-        self.closed = False
 
     async def stream_chat(self, model_id, messages, tools=None, output_schema=None):
         if self._error is not None:
@@ -20,9 +19,6 @@ class _FakeBackend:
             return
         yield ChatChunk(delta=self._reply)
         yield ChatChunk(done=True)
-
-    async def aclose(self):
-        self.closed = True
 
 
 def _case() -> TestCase:
@@ -34,59 +30,45 @@ def _case() -> TestCase:
     )
 
 
-def test_score_with_judge_parses_score_and_rationale(monkeypatch):
+def test_score_with_judge_parses_score_and_rationale():
     fake = _FakeBackend(reply='{"score": 0.8, "rationale": "Polite and on-topic."}')
-    monkeypatch.setattr(judge, "get_backend", lambda *a, **k: fake)
 
-    score, rationale = asyncio.run(
-        judge.score_with_judge("api", "judge/model", "fake-key", _case(), "hi there")
-    )
+    score, rationale = asyncio.run(judge.score_with_judge(fake, "judge/model", _case(), "hi there"))
 
     assert score == 0.8
     assert rationale == "Polite and on-topic."
-    assert fake.closed is True
 
 
-def test_score_with_judge_clamps_out_of_range_scores(monkeypatch):
+def test_score_with_judge_clamps_out_of_range_scores():
     fake = _FakeBackend(reply='{"score": 1.5, "rationale": "great"}')
-    monkeypatch.setattr(judge, "get_backend", lambda *a, **k: fake)
 
-    score, _ = asyncio.run(judge.score_with_judge("api", "judge/model", "fake-key", _case(), "hi"))
+    score, _ = asyncio.run(judge.score_with_judge(fake, "judge/model", _case(), "hi"))
 
     assert score == 1.0
 
 
-def test_score_with_judge_returns_zero_on_unparseable_reply(monkeypatch):
+def test_score_with_judge_returns_zero_on_unparseable_reply():
     fake = _FakeBackend(reply="not json at all")
-    monkeypatch.setattr(judge, "get_backend", lambda *a, **k: fake)
 
-    score, rationale = asyncio.run(
-        judge.score_with_judge("api", "judge/model", "fake-key", _case(), "hi")
-    )
+    score, rationale = asyncio.run(judge.score_with_judge(fake, "judge/model", _case(), "hi"))
 
     assert score == 0.0
     assert "not valid JSON" in rationale
 
 
-def test_score_with_judge_rejects_a_boolean_score(monkeypatch):
+def test_score_with_judge_rejects_a_boolean_score():
     fake = _FakeBackend(reply='{"score": true, "rationale": "great"}')
-    monkeypatch.setattr(judge, "get_backend", lambda *a, **k: fake)
 
-    score, rationale = asyncio.run(
-        judge.score_with_judge("api", "judge/model", "fake-key", _case(), "hi")
-    )
+    score, rationale = asyncio.run(judge.score_with_judge(fake, "judge/model", _case(), "hi"))
 
     assert score == 0.0
     assert "not valid JSON" in rationale
 
 
-def test_score_with_judge_returns_zero_on_backend_error(monkeypatch):
+def test_score_with_judge_returns_zero_on_backend_error():
     fake = _FakeBackend(error="model unavailable")
-    monkeypatch.setattr(judge, "get_backend", lambda *a, **k: fake)
 
-    score, rationale = asyncio.run(
-        judge.score_with_judge("api", "judge/model", "fake-key", _case(), "hi")
-    )
+    score, rationale = asyncio.run(judge.score_with_judge(fake, "judge/model", _case(), "hi"))
 
     assert score == 0.0
     assert "model unavailable" in rationale
@@ -98,7 +80,7 @@ def test_score_with_judge_raises_when_case_has_no_judge_criteria():
     )
 
     async def _call():
-        return await judge.score_with_judge("api", "judge/model", "fake-key", case, "hi")
+        return await judge.score_with_judge(_FakeBackend(), "judge/model", case, "hi")
 
     with pytest.raises(WorkbenchError) as exc_info:
         asyncio.run(_call())
