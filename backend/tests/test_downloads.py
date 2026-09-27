@@ -7,6 +7,7 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from app.db import get_session
 from app.discovery.schemas import GgufFile, ModelDetail, SnapshotFile
+from app.inference.model_cache import LoadedModelCache
 from app.main import app
 from app.models import DownloadedModelRecord, DownloadJob
 from tests.gguf_fixtures import write_gguf
@@ -108,6 +109,19 @@ def test_delete_downloaded_removes_db_record_and_file(tmp_path):
     assert response.status_code == 204
     assert not real_file.exists()
     assert client.get("/models/downloaded").json() == []
+
+
+def test_delete_downloaded_unloads_the_model_if_it_is_in_memory(tmp_path):
+    # Deleting the file alone would leave its weights loaded until restart.
+    real_file = tmp_path / "model.gguf"
+    real_file.write_bytes(b"fake weights")
+    record_id = _seed(local_path=str(real_file))
+    cache = LoadedModelCache()
+    cache.get_or_load(str(real_file), object)
+
+    client.delete(f"/models/downloaded/{record_id}")
+
+    assert cache.get(str(real_file)) is None
 
 
 def test_delete_downloaded_removes_directory(tmp_path):

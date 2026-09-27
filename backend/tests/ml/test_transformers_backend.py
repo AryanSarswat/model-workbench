@@ -92,11 +92,11 @@ class _FakeModel:
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    transformers_backend._CACHE.clear()
+    transformers_backend._CACHE.evict()
     _FakeTokenizer.instances.clear()
     _FakeModel.instances.clear()
     yield
-    transformers_backend._CACHE.clear()
+    transformers_backend._CACHE.evict()
     _FakeTokenizer.instances.clear()
     _FakeModel.instances.clear()
 

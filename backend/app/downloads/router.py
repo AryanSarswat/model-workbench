@@ -24,6 +24,7 @@ from app.discovery.hf_client import get_model_detail, get_snapshot_files
 from app.downloads.service import run_download, run_snapshot_download
 from app.errors import WorkbenchError
 from app.inference.gguf_header import describe_unsupported
+from app.inference.model_cache import evict_path
 from app.models import DownloadedModel, DownloadedModelRecord, DownloadJob
 
 router = APIRouter(prefix="/models", tags=["downloads"])
@@ -86,6 +87,7 @@ def delete_downloaded(record_id: int, session: SessionDep) -> None:
             message=f"No downloaded model record with id {record_id}.",
         )
 
+    evict_path(record.local_path)  # its weights may still be loaded in memory
     path = Path(record.local_path)
     if path.is_dir():
         shutil.rmtree(path, ignore_errors=True)
