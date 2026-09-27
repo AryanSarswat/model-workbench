@@ -106,7 +106,7 @@ class TransformersBackend:
         self._device = _detect_device()
 
     def capabilities(self) -> BackendCapabilities:
-        return BackendCapabilities(structured_output_mode="guided", native_tool_calling=True)
+        return BackendCapabilities(structured_output_mode="guided", native_tool_calling=False)
 
     def prevalidate_output_schema(self, schema: dict) -> None:
         """Reject a bad schema pre-stream without loading the model.

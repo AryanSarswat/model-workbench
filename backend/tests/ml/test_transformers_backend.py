@@ -174,13 +174,13 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     assert chunks[-1].usage.completion_tokens == 4  # 2 generate() turns x 2 completion tokens each
 
 
-def test_capabilities_report_guided_and_native_tool_calling():
+def test_capabilities_report_guided_and_no_native_tool_calling():
     backend = TransformersBackend("/tmp/snapshot")
 
     capabilities = backend.capabilities()
 
     assert capabilities.structured_output_mode == "guided"
-    assert capabilities.native_tool_calling is True
+    assert capabilities.native_tool_calling is False
 
 
 def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
