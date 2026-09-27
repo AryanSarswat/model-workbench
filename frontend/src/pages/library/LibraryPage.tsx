@@ -26,9 +26,10 @@ import { PageHeader } from '../../components/PageHeader'
 import { ProgressBar } from '../../components/ProgressBar'
 import { cx } from '../../lib/cx'
 import { formatGb, formatRelative } from '../../lib/format'
+import { gpuLabel } from '../../lib/hardware'
 import { playgroundPath } from '../../lib/links'
 import styles from './LibraryPage.module.css'
-import { formatChip, gpuLabel, summarizeParams } from './libraryFormat'
+import { formatChip, summarizeParams } from './libraryFormat'
 
 
 export default function LibraryPage() {
