@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { useBackends } from '../../api/hooks'
 import type { ToolCallRecord, ToolCallStart } from '../../api/types'
 import { Chip, type ChipTone } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { LiveDot } from '../../components/LiveDot'
-import { NATIVE_TOOL_CALLING } from './capabilities'
+import { toolCallingChip } from '../../lib/backends'
 import type { ChatTurn } from './chatReducer'
 import { formatMs, formatSeconds, formatTokensPerSec } from './format'
 import { backendDisplayLabel, shortModelName } from './modelOptions'
@@ -31,9 +32,9 @@ export function Transcript({ turns }: { turns: ChatTurn[] }) {
 // turn by useChatStream), not the page's current selection -- otherwise switching
 // models mid-chat would relabel earlier turns.
 function AssistantTurn({ turn }: { turn: ChatTurn }) {
-  const toolsNative = NATIVE_TOOL_CALLING[turn.backend]
-  const toolsChipLabel = toolsNative ? 'native' : 'fallback'
-  const toolsChipTone = toolsNative ? 'fit' : 'tight'
+  const { label: toolsChipLabel, tone: toolsChipTone } = toolCallingChip(
+    useBackends().data?.[turn.backend].native_tool_calling,
+  )
   const showToolBlocks = turn.toolCalls.length > 0 || turn.runningTool !== null
   const settled = !turn.streaming && !turn.error
 

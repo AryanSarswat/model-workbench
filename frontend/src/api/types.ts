@@ -3,6 +3,15 @@
 
 export type BackendName = 'api' | 'gguf' | 'transformers'
 
+export type StructuredOutputMode = 'grammar' | 'guided' | 'prompt_retry'
+
+// GET /backends, keyed by BackendName.
+export interface BackendInfo {
+  structured_output_mode: StructuredOutputMode
+  native_tool_calling: boolean
+  available: boolean // false: a local backend whose `local` extra isn't installed
+}
+
 // --- config ---
 
 export interface GpuInfo {
@@ -264,7 +273,7 @@ export interface EvalResult {
   category: string
   response: string
   error: string | null
-  structured_output_mode: 'grammar' | 'guided' | 'prompt_retry' | null
+  structured_output_mode: StructuredOutputMode | null
   native_tool_calling: boolean
   retries: number
   tools_called: string[]

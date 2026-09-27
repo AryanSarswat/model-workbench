@@ -275,8 +275,10 @@ frontend/src/
 - **SSE over fetch**: `POST /chat/stream` and `POST /evals/run` stream SSE from a POST,
   which `EventSource` can't send, so `postSse` reads the fetch body stream and parses
   `data:` events itself (abortable via `AbortSignal`).
-- **Server state**: TanStack Query. Shared hooks (hardware, HF key status) live in
-  `api/hooks.ts`; each page keeps its own.
+- **Server state**: TanStack Query. Shared hooks (hardware, HF key status, backend
+  capabilities) live in `api/hooks.ts`; each page keeps its own. What a backend can do
+  (structured-output mode, native tool calling, installed or not) comes from
+  `GET /backends` via `useBackends()`; `lib/backends.ts` only holds labels and copy.
 - **Routing**: React Router — `/` (Radar), `/models/:author/:name`, `/playground`
   (`?model=&backend=&quant=`), `/evals`, `/evals/runs/:runId`, `/dataset`, `/library`.
 - **Endpoints added for the UI**: `GET /models/downloads?active=` (download jobs, newest

@@ -26,7 +26,7 @@ export function RequestPanel({
   schemaText: string
   onSchemaTextChange: (value: string) => void
   schemaError: string | null
-  explanation: string
+  explanation: string | undefined
   tools: ToolSpec[]
   toolsError: unknown
   selectedTools: Set<string>
@@ -64,7 +64,7 @@ export function RequestPanel({
             {schemaError && <p className={styles.schemaError}>{schemaError}</p>}
           </>
         )}
-        <p className={styles.explanation}>{explanation}</p>
+        {explanation && <p className={styles.explanation}>{explanation}</p>}
       </section>
 
       <section className={styles.section}>

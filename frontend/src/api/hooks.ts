@@ -2,7 +2,7 @@
 // in their page's folder.
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
-import { getHardware, getHfKeyStatus, listDownloaded, listTools } from './endpoints'
+import { getBackends, getHardware, getHfKeyStatus, listDownloaded, listTools } from './endpoints'
 import { getSse } from './sse'
 import type { DownloadJob } from './types'
 
@@ -13,11 +13,17 @@ export const queryKeys = {
   hfKeyStatus: ['config', 'hf-api-key'] as const,
   downloadedModels: ['models', 'downloaded'] as const,
   tools: ['tools'] as const,
+  backends: ['backends'] as const,
 }
 
 // Hardware doesn't change while the app is open.
 export function useHardware() {
   return useQuery({ queryKey: queryKeys.hardware, queryFn: getHardware, staleTime: Infinity })
+}
+
+// Backend capabilities and availability are fixed for the server process's lifetime.
+export function useBackends() {
+  return useQuery({ queryKey: queryKeys.backends, queryFn: getBackends, staleTime: Infinity })
 }
 
 // Invalidate queryKeys.hfKeyStatus after setHfKey so the top bar updates.

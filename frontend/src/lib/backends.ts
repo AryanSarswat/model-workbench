@@ -1,33 +1,48 @@
-import type { BackendName } from '../api/types'
+import type { BackendName, StructuredOutputMode } from '../api/types'
+import type { ChipTone } from '../components/Chip'
 
-export interface BackendInfo {
-  label: string
-  structuredOutputMode: 'grammar' | 'guided' | 'prompt_retry'
-  guarantee: 'guaranteed' | 'best-effort'
-  explanation: string // one sentence on how structured output is enforced
-}
+// Presentation only: what each backend can do comes from GET /backends (useBackends).
 
 export const BACKEND_NAMES: BackendName[] = ['api', 'gguf', 'transformers']
 
-export const BACKENDS: Record<BackendName, BackendInfo> = {
-  api: {
-    label: 'API',
-    structuredOutputMode: 'prompt_retry',
-    guarantee: 'best-effort',
+export const BACKENDS: Record<BackendName, { label: string }> = {
+  api: { label: 'API' },
+  gguf: { label: 'GGUF' },
+  transformers: { label: 'Transformers' },
+}
+
+export const STRUCTURED_OUTPUT: Record<StructuredOutputMode, { guaranteed: boolean; explanation: string }> = {
+  prompt_retry: {
+    guaranteed: false,
     explanation:
-      'The API can’t enforce a schema, so the reply is parsed and retried with the error fed back. Usually valid, not guaranteed.',
+      'This backend can’t enforce a schema, so the reply is parsed and retried with the error fed back. Usually valid, not guaranteed.',
   },
-  gguf: {
-    label: 'GGUF',
-    structuredOutputMode: 'grammar',
-    guarantee: 'guaranteed',
+  grammar: {
+    guaranteed: true,
     explanation: 'llama.cpp compiles this schema into a GBNF grammar, so the reply is guaranteed to parse.',
   },
-  transformers: {
-    label: 'Transformers',
-    structuredOutputMode: 'guided',
-    guarantee: 'guaranteed',
+  guided: {
+    guaranteed: true,
     explanation:
       'Guided generation (outlines) restricts tokens to the schema, so the reply is guaranteed to parse.',
   },
+}
+
+interface ChipLook {
+  label: string
+  tone: ChipTone
+}
+
+// While GET /backends hasn't answered (or failed), capability chips render neutral
+// rather than guessing.
+const UNKNOWN: ChipLook = { label: '…', tone: 'idle' }
+
+export function structuredOutputChip(mode: StructuredOutputMode | undefined): ChipLook {
+  if (mode === undefined) return UNKNOWN
+  return STRUCTURED_OUTPUT[mode].guaranteed ? { label: 'guaranteed', tone: 'fit' } : { label: 'best-effort', tone: 'tight' }
+}
+
+export function toolCallingChip(native: boolean | undefined): ChipLook {
+  if (native === undefined) return UNKNOWN
+  return native ? { label: 'native', tone: 'fit' } : { label: 'fallback', tone: 'tight' }
 }
