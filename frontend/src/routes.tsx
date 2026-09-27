@@ -19,7 +19,7 @@ export const routes: RouteObject[] = [
         errorElement: <RouteError />, // a page failed: shown inside the shell, nav still works
         children: [
           { path: '/', element: <RadarPage /> },
-          { path: '/models/:author/:name', element: <ModelPage /> },
+          { path: '/models/*', element: <ModelPage /> }, // Hub ids with or without an author
           { path: '/playground', element: <PlaygroundPage /> }, // reads ?model=&backend=&quant=
           { path: '/evals', element: <EvalsPage /> },
           { path: '/evals/runs/:runId', element: <ReviewPage /> },

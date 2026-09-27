@@ -136,6 +136,25 @@ describe('ModelPage', () => {
     expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument()
   })
 
+  it('opens a model whose Hub id has no author, like gpt2', async () => {
+    const gpt2: ModelDetail = { ...detail, id: 'gpt2', gguf_files: [] }
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url === '/api/models/gpt2') return Response.json(gpt2)
+      if (url === '/api/models/gpt2/feasibility') return Response.json({ ...feasibility, options: [] })
+      if (url === '/api/models/downloads/events') return jobsStream()
+      return withCommon({ '/api/models/downloaded': Response.json([]) })[url] ?? new Response('not mocked', { status: 500 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <RouterProvider router={createMemoryRouter(routes, { initialEntries: ['/models/gpt2'] })} />
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'gpt2' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/models/gpt2', expect.anything())
+  })
+
   it('POSTs the right body when Download is clicked', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url === '/api/models/Qwen/Qwen3-14B/download') {

@@ -43,11 +43,10 @@ interface FailedDownload {
 }
 
 export default function ModelPage() {
-  const { author, name } = useParams()
-  const modelId = author && name ? `${author}/${name}` : null
+  // The splat is the whole Hub id: "Qwen/Qwen3-14B", or just "gpt2" for author-less repos.
+  const modelId = useParams()['*'] || null
 
   if (modelId === null) {
-    // The route always supplies both segments; this only guards TypeScript's optional params.
     return (
       <main className={styles.main}>
         <PageHeader eyebrow="Radar" title="Model not found" />
