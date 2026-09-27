@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import NamedTuple
@@ -19,6 +20,7 @@ from app.errors import WorkbenchError
 from app.inference.schemas import (
     ChatChunk,
     ChatMessage,
+    ContextReport,
     TokenUsage,
     ToolCallRecord,
     ToolCallStart,
@@ -88,6 +90,7 @@ class ToolTurn(NamedTuple):
     result: LoopResult
     usage: TokenUsage | None
     retries: int = 0
+    context: ContextReport | None = None
 
 
 async def stream_tool_turn(
@@ -105,19 +108,20 @@ async def stream_tool_turn(
         loop = asyncio.create_task(run(events.emit))
         async for event in events.stream(loop):
             yield event
-        result, usage, retries = loop.result()
+        turn = loop.result()
     except reraise:
         raise
     except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
         yield ChatChunk(done=True, error=str(e))
         return
-    yield ChatChunk(delta=result.text)
+    yield ChatChunk(delta=turn.result.text)
     yield ChatChunk(
         done=True,
-        usage=usage,
-        tools_called=result.tools_called,
-        tool_calls=result.tool_calls,
-        retries=retries,
+        usage=turn.usage,
+        tools_called=turn.result.tools_called,
+        tool_calls=turn.result.tool_calls,
+        retries=turn.retries,
+        context=turn.context,
     )
 
 
@@ -140,6 +144,18 @@ async def run_tool(tool: Tool, args: dict, on_event: ToolEventSink | None = None
     if on_event is not None:
         on_event(ChatChunk(tool_call_finished=record))
     return record
+
+
+_TOOL_RESULT = re.compile(r"Tool '[^']*' returned: ")
+
+
+def tool_result_text(call: ToolCallRecord) -> str:
+    """How a tool's result is fed back to the model (as a user-role message)."""
+    return f"Tool '{call.name}' returned: {call.result}"
+
+
+def is_tool_result(content: str) -> bool:
+    return _TOOL_RESULT.match(content) is not None
 
 
 async def run_tool_loop(
@@ -198,7 +214,5 @@ async def run_tool_loop(
             continue
         call = await run_tool(tool, parsed.arguments, on_event)
         tool_calls.append(call)
-        history.append(
-            ChatMessage(role="user", content=f"Tool '{parsed.tool_name}' returned: {call.result}")
-        )
+        history.append(ChatMessage(role="user", content=tool_result_text(call)))
     return LoopResult(text=last_text, tool_calls=tool_calls)

@@ -49,6 +49,29 @@ class ToolCallStart(BaseModel):
     arguments: dict
 
 
+# Where a message in the model's context came from: the caller's system prompt or
+# turns, the workbench's own additions (tool protocol, retry feedback), or a tool result.
+ContextKind = Literal["system", "instructions", "user", "assistant", "tool"]
+
+
+class ContextMessage(BaseModel):
+    kind: ContextKind
+    content: str
+    # None when the backend has no local tokenizer (the remote API).
+    tokens: int | None
+
+
+class ContextReport(BaseModel):
+    """Every message the turn's last generation was given, for the context meter.
+
+    The done chunk's usage.prompt_tokens minus the messages' tokens is chat-template
+    markup (and, on llama.cpp's native path, the tool schemas it injects)."""
+
+    # The model's context window in tokens; None when unknown (the remote API).
+    window: int | None
+    messages: list[ContextMessage]
+
+
 class ChatChunk(BaseModel):
     delta: str = ""
     done: bool = False
@@ -62,6 +85,7 @@ class ChatChunk(BaseModel):
     tools_called: list[str] = []
     tool_calls: list[ToolCallRecord] = []
     retries: int = 0
+    context: ContextReport | None = None
 
 
 class BackendCapabilities(BaseModel):
