@@ -45,7 +45,12 @@ frontend talks to the backend same-origin and the backend needs no CORS setup.
 make fe-test    # vitest
 make fe-lint    # eslint + tsc
 make fe-build   # production build into frontend/dist/
+make fe-types   # regenerate the frontend's API types from the backend's OpenAPI schema
 ```
+
+The frontend's API types are generated, not hand-written: after changing a backend
+request/response model, run `make fe-types` and commit the two files it rewrites
+(`frontend/openapi.json`, `frontend/src/api/schema.gen.ts`). CI fails when either is stale.
 
 ## Run tests
 
@@ -67,9 +72,9 @@ make docker-run     # docker run --rm -p 8000:8000 model-workbench-backend
 ## Before opening a PR
 
 ```bash
-make ci   # backend lint+test+coverage, frontend lint/typecheck/test/build, then a Docker
-          # build/boot/health check -- the same jobs GitHub Actions runs, so a pass here
-          # means the PR checks will pass
+make ci   # backend lint+test+coverage, generated-API-types check, frontend
+          # lint/typecheck/test/build, then a Docker build/boot/health check -- the same
+          # jobs GitHub Actions runs, so a pass here means the PR checks will pass
 ```
 
 Note: the container's `data/` directory is ephemeral (lost when the container is removed).

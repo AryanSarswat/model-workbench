@@ -20,8 +20,9 @@ A FastAPI backend (`backend/`) and a Vite + React frontend (`frontend/`). The ba
   Living reference docs belong in `docs/*.md` and should be kept up to date as the
   architecture evolves; specs/plans (if produced during a work session) are gitignored
   under `docs/superpowers/`.
-- **CI must stay green.** Every push runs lint (`ruff check` + `ruff format --check`), `pytest --cov`, the
-  frontend's lint/typecheck/test/build, and a Docker build-and-boot check via GitHub
+- **CI must stay green.** Every push runs lint (`ruff check` + `ruff format --check`), `pytest --cov`,
+  a check that the generated frontend API types are current, the frontend's
+  lint/typecheck/test/build, and a Docker build-and-boot check via GitHub
   Actions (`.github/workflows/ci.yml`, jobs `backend`, `frontend`, `docker`). `backend` and
   `docker` are required status checks on `main` — a PR literally cannot merge until they pass.
 - **Private dataset never gets committed.** `data/test_cases/` and `data/*.db` are
@@ -69,6 +70,7 @@ make fe-dev          # Vite dev server (proxies /api to `make run` on :8000)
 make fe-test         # vitest
 make fe-lint         # eslint + tsc
 make fe-build        # production build
+make fe-types        # regenerate the frontend's API types from the backend's OpenAPI schema
 make ci              # everything the CI jobs (`backend`, `frontend`, `docker`) run, end to end
 ```
 

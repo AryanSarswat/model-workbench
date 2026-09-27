@@ -6,22 +6,23 @@ storage.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel
 
 from app.evals.assertions import AssertionResult
+from app.inference.schemas import BackendName, StructuredOutputMode
+from app.models.eval_result import ManualVerdict
 
 
 class EvalRunRequest(BaseModel):
     model_id: str
-    backend: str = "api"
+    backend: BackendName = "api"
     category: str | None = None  # None runs every category
     judge_model_id: str | None = None
 
 
 class ManualVerdictUpdate(BaseModel):
-    manual_verdict: Literal["pass", "fail"] | None = None  # the report's pass rule reads these
+    manual_verdict: ManualVerdict | None = None  # the report's pass rule reads these
     manual_notes: str | None = None
 
 
@@ -36,7 +37,7 @@ class EvalResultOut(BaseModel):
     category: str
     response: str
     error: str | None
-    structured_output_mode: str | None
+    structured_output_mode: StructuredOutputMode | None
     native_tool_calling: bool
     retries: int
     tools_called: list[str]
@@ -45,7 +46,7 @@ class EvalResultOut(BaseModel):
     assertions: list[AssertionResult]
     judge_score: float | None
     judge_rationale: str | None
-    manual_verdict: str | None
+    manual_verdict: ManualVerdict | None
     manual_notes: str | None
     response_metric_id: int | None
     created_at: datetime
@@ -58,7 +59,7 @@ class EvalReportRow(BaseModel):
     """
 
     model_id: str
-    backend: str
+    backend: BackendName
     category: str
     cases: int  # distinct case_ids counted
     passed: int

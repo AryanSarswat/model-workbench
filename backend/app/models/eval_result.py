@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import AutoString, Field, SQLModel
+
+from app.inference.schemas import StructuredOutputMode
+
+ManualVerdict = Literal["pass", "fail"]
 
 
 class EvalResult(SQLModel, table=True):
@@ -14,7 +19,8 @@ class EvalResult(SQLModel, table=True):
     category: str  # snapshotted from the case so aggregation needs no JSON reads
     response: str
     error: str | None = None  # backend error or invalid case schema; assertions then fail
-    structured_output_mode: str | None = None  # backend.capabilities().structured_output_mode
+    # backend.capabilities().structured_output_mode
+    structured_output_mode: StructuredOutputMode | None = Field(default=None, sa_type=AutoString)
     native_tool_calling: bool = False
     retries: int = 0
     tools_called: str = ""  # comma-joined tool names (tool names never contain commas)
@@ -23,7 +29,8 @@ class EvalResult(SQLModel, table=True):
     assertions_detail: str = "[]"  # JSON-encoded list of {type, passed, detail}
     judge_score: float | None = None
     judge_rationale: str | None = None
-    manual_verdict: str | None = None  # "pass" | "fail" | None until reviewed
+    # None until reviewed
+    manual_verdict: ManualVerdict | None = Field(default=None, sa_type=AutoString)
     manual_notes: str | None = None
     response_metric_id: int | None = Field(default=None, foreign_key="response_metrics.id")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

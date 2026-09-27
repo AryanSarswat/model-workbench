@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import AutoString, Field, SQLModel
+
+from app.inference.schemas import LocalBackendName
 
 
 class DownloadedModelBase(SQLModel):
     repo_id: str = Field(index=True)
-    backend: str  # "gguf" | "transformers"
+    backend: LocalBackendName = Field(sa_type=AutoString)
     quant: str | None = None  # GGUF filename when backend == "gguf", else None
     local_path: str
     size_bytes: int

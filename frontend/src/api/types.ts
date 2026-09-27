@@ -1,132 +1,69 @@
-// Mirrors of the backend's request/response models. Datetimes arrive as ISO strings;
-// optional backend fields are serialized as null, never omitted.
+// The backend's request/response types, re-exported under the names the app uses.
+// Generated from the backend's OpenAPI schema into schema.gen.ts -- regenerate with
+// `make fe-types` after changing a backend model; never edit schema.gen.ts by hand.
+// Datetimes arrive as ISO strings. Only what OpenAPI can't express is hand-written
+// below: the SSE event payloads, and a few narrowings of the generated types.
+import type { components, operations } from './schema.gen'
 
-export type BackendName = 'api' | 'gguf' | 'transformers'
+type Schemas = components['schemas']
 
-export type StructuredOutputMode = 'grammar' | 'guided' | 'prompt_retry'
+// SQLModel types a table's primary key as optional (it's unset until the row is
+// inserted); every row the API returns is persisted, so its id is always set.
+type Persisted<T> = Omit<T, 'id'> & { id: number }
 
-// GET /backends, keyed by BackendName.
-export interface BackendInfo {
-  structured_output_mode: StructuredOutputMode
-  native_tool_calling: boolean
-  available: boolean // false: a local backend whose `local` extra isn't installed
-}
+// --- backends ---
+
+export type BackendInfo = Schemas['BackendInfo'] // GET /backends, keyed by BackendName
+export type BackendName = Schemas['EvalRun']['backend']
+export type StructuredOutputMode = BackendInfo['structured_output_mode']
 
 // --- config ---
 
-export interface GpuInfo {
-  kind: 'apple_silicon' | 'nvidia' | 'none'
-  name: string | null
-  vram_gb: number | null
-}
-
-export interface HardwareInfo {
-  platform: string
-  arch: string
-  total_ram_gb: number
-  gpu: GpuInfo
-  usable_memory_gb: number // computed server-side: NVIDIA VRAM if known, else total RAM
-}
-
-export interface ApiKeyStatus {
-  is_set: boolean
-}
+export type GpuInfo = Schemas['GPUInfo']
+export type HardwareInfo = Schemas['HardwareInfo']
+export type ApiKeyStatus = Schemas['ApiKeyStatus']
 
 // --- discovery ---
 
-export type DiscoverSort = 'trending' | 'recent'
+export type DiscoverSort = NonNullable<
+  NonNullable<operations['discover_models_models_discover_get']['parameters']['query']>['sort']
+>
+export type DiscoveredModel = Schemas['DiscoveredModel']
+export type GgufFile = Schemas['GgufFile']
+export type ModelDetail = Schemas['ModelDetail']
+export type FeasibilityVerdict = Schemas['FeasibilityOption']['verdict']
 
-export interface DiscoveredModel {
-  id: string
-  author: string | null
-  pipeline_tag: string | null
-  downloads: number | null
-  likes: number | null
-  trending_score: number | null
-  created_at: string | null
-  gated: boolean | string | null // false, or a reason like "auto"/"manual"
-  tags: string[]
-  library_name: string | null
-}
+// Narrowed from the schema's `filename: string | null`: the backend sets the GGUF file
+// to download/load exactly for gguf options, and null for transformers.
+export type FeasibilityOption = Omit<Schemas['FeasibilityOption'], 'backend' | 'filename'> &
+  ({ backend: 'gguf'; filename: string } | { backend: 'transformers'; filename: null })
 
-export interface GgufFile {
-  filename: string
-  size_bytes: number
-}
-
-export interface ModelDetail extends DiscoveredModel {
-  gguf_files: GgufFile[]
-  parameter_count: number | null
-  dtype: string | null
-}
-
-export type FeasibilityVerdict = 'comfortable' | 'tight' | 'wont_fit'
-
-// `filename` is the GGUF file to download/load, and is null exactly for transformers.
-export type FeasibilityOption = {
-  label: string // display text: a GGUF filename, or e.g. "transformers (BF16)"
-  verdict: FeasibilityVerdict
-  estimated_memory_gb: number
-  reason: string
-} & ({ backend: 'gguf'; filename: string } | { backend: 'transformers'; filename: null })
-
-export interface FeasibilityReport {
-  available_memory_gb: number
-  // Verdict thresholds as fractions of available_memory_gb.
-  comfortable_fraction: number
-  tight_fraction: number
+export type FeasibilityReport = Omit<Schemas['FeasibilityReport'], 'options'> & {
   options: FeasibilityOption[]
 }
 
 // --- downloads ---
 
+// Narrowed from the schema's two optional fields: the backend 400s unless exactly one
+// of `filename` / `snapshot: true` is sent.
 export type DownloadRequest = { filename: string } | { snapshot: true }
 
-export type DownloadStatus = 'pending' | 'downloading' | 'completed' | 'failed'
-
-export interface DownloadJob {
-  id: number
-  repo_id: string
-  kind: 'gguf' | 'snapshot'
-  filename: string | null // the requested GGUF file; null for snapshots
-  current_file: string | null // snapshots only
-  status: DownloadStatus
-  percent: number // 0..100
-  detail: string
-  error: string | null
-  downloaded_model_id: number | null
-  created_at: string
-  updated_at: string
-}
-
-export interface DownloadedModelRecord {
-  id: number
-  repo_id: string
-  backend: 'gguf' | 'transformers'
-  model_id: string // what to send as model_id to run this record (resolved by the backend's registry)
-  quant: string | null // GGUF filename when backend is gguf
-  local_path: string
-  size_bytes: number
-  downloaded_at: string
-  last_used_at: string | null
-  unsupported_reason: string | null // why the local llama.cpp build can't load this GGUF
-}
+export type DownloadJob = Persisted<Schemas['DownloadJob']>
+export type DownloadStatus = DownloadJob['status']
+export type DownloadedModelRecord = Schemas['DownloadedModel']
 
 // --- chat ---
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
+export type ChatMessage = Schemas['ChatMessage']
+export type ChatRequest = Schemas['ChatRequest']
+export type ChatSession = Persisted<Schemas['ChatSession']>
+export type ChatMessageRecord = Persisted<Schemas['ChatMessageRecord']>
+export type ChatSessionDetail = Omit<Schemas['ChatSessionDetail'], 'messages'> & {
+  messages: ChatMessageRecord[]
 }
 
-export interface ChatRequest {
-  model_id: string
-  messages: ChatMessage[]
-  backend?: BackendName // server default: 'api'
-  tools?: string[] | null // tool names
-  output_schema?: Record<string, unknown> | null // raw JSON Schema
-  session_id?: number | null // file this turn into an existing session
-}
+// The chat stream's SSE payloads: FastAPI's schema only covers JSON responses, so
+// these mirror app/inference/schemas.py by hand.
 
 export interface TokenUsage {
   prompt_tokens: number
@@ -164,78 +101,24 @@ export interface ChatChunk {
   retries: number
 }
 
-export interface ChatSession {
-  id: number
-  created_at: string
-}
-
-export interface ChatMessageRecord {
-  id: number
-  session_id: number
-  role: 'user' | 'assistant'
-  content: string
-  sequence: number
-  created_at: string
-}
-
-export interface ChatSessionDetail extends ChatSession {
-  messages: ChatMessageRecord[]
-}
-
 // --- tools ---
 
-export interface ToolSpec {
-  name: string
-  description: string
-  parameters: Record<string, unknown> // JSON Schema of the arguments
-}
+export type ToolSpec = Schemas['ToolSpec']
 
 // --- dataset ---
 
-export type AssertionType =
-  | 'schema_valid'
-  | 'contains'
-  | 'regex'
-  | 'tool_called'
-  | 'structured_output_first_try'
-  | 'native_tool_calling'
-  | 'json_parse_success'
-
-export interface Assertion {
-  type: AssertionType
-  value?: string | null // contains
-  pattern?: string | null // regex
-  name?: string | null // tool_called
-}
-
-export interface TestCaseJudge {
-  criteria: string
-}
-
-// Responses always carry every field; only id/category/messages are required on write.
-export interface TestCase {
-  id: string // URL-safe: letters, digits, . _ -
-  category: string
-  messages: ChatMessage[]
-  system_prompt?: string | null
-  output_schema?: Record<string, unknown> | null
-  expected_tools?: string[] | null
-  assertions?: Assertion[]
-  judge?: TestCaseJudge | null
-  tags?: string[]
-}
+export type Assertion = Schemas['Assertion']
+export type AssertionType = Assertion['type']
+export type TestCaseJudge = Schemas['TestCaseJudge']
+export type TestCase = Schemas['TestCase']
 
 // --- evals ---
 
-export interface EvalRunRequest {
-  model_id: string
-  backend?: BackendName // server default: 'api'
-  category?: string | null // null runs every category
-  judge_model_id?: string | null
-}
+export type EvalRunRequest = Schemas['EvalRunRequest']
 
-// One SSE event of POST /evals/run. The final event has done=true, plus error if the
-// run failed as a whole.
+// One SSE event of POST /evals/run (hand-written for the same reason as ChatChunk;
+// built in app/evals/router.py). The final event has done=true, plus error if the run
+// failed as a whole.
 export interface EvalProgressEvent {
   run_id: number
   completed: number
@@ -245,66 +128,10 @@ export interface EvalProgressEvent {
   error?: string
 }
 
-export interface EvalRun {
-  id: number
-  model_id: string
-  backend: BackendName
-  category: string | null
-  judge_model_id: string | null
-  status: 'running' | 'completed' | 'failed'
-  total_cases: number
-  completed_cases: number
-  created_at: string
-  finished_at: string | null
-}
-
-export interface AssertionResult {
-  type: AssertionType
-  passed: boolean
-  detail: string
-}
-
-export type ManualVerdict = 'pass' | 'fail'
-
-export interface EvalResult {
-  id: number
-  run_id: number
-  case_id: string
-  category: string
-  response: string
-  error: string | null
-  structured_output_mode: StructuredOutputMode | null
-  native_tool_calling: boolean
-  retries: number
-  tools_called: string[]
-  assertions_passed: number
-  assertions_total: number
-  assertions: AssertionResult[]
-  judge_score: number | null // 0..1
-  judge_rationale: string | null
-  manual_verdict: ManualVerdict | null
-  manual_notes: string | null
-  response_metric_id: number | null
-  created_at: string
-  passed: boolean // the backend's pass rule, the same one GET /evals/report counts
-}
-
-export interface ManualVerdictUpdate {
-  manual_verdict: ManualVerdict | null
-  manual_notes: string | null
-}
-
+export type EvalRun = Persisted<Schemas['EvalRun']>
+export type AssertionResult = Schemas['AssertionResult']
+export type EvalResult = Schemas['EvalResultOut']
+export type ManualVerdictUpdate = Schemas['ManualVerdictUpdate']
+export type ManualVerdict = NonNullable<ManualVerdictUpdate['manual_verdict']>
 // One row per (model_id, backend, category), counting only the latest result per case.
-export interface EvalReportRow {
-  model_id: string
-  backend: BackendName
-  category: string
-  cases: number
-  passed: number
-  pass_rate: number // 0..1
-  avg_tokens_per_sec: number | null
-  avg_ttft_ms: number | null
-  structured_output_reliability: number | null
-  tool_calling_reliability: number | null
-  latest_run_id: number
-}
+export type EvalReportRow = Schemas['EvalReportRow']
