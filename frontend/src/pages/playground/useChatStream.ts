@@ -78,6 +78,7 @@ export function useChatStream() {
               toolCalls: chunk.tool_calls,
               retries: chunk.retries,
               metrics: { ttftMs: firstDeltaAt !== null ? firstDeltaAt - startedAt : null, tokensPerSec, totalMs },
+              context: chunk.context,
             })
             settled = true
           }

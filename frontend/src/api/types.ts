@@ -85,8 +85,25 @@ export interface ToolCallStart {
   arguments: Record<string, unknown>
 }
 
-// One SSE event of POST /chat/stream. usage/tools_called/tool_calls/retries are set
-// on the terminal (done) chunk only. While a tool turn runs, a chunk announces each
+// Where a message in the model's context came from: the caller's system prompt or
+// turns, the workbench's own additions (tool protocol, retry feedback), or a tool result.
+export type ContextKind = 'system' | 'instructions' | 'user' | 'assistant' | 'tool'
+
+export interface ContextMessage {
+  kind: ContextKind
+  content: string
+  tokens: number | null // null when the backend has no local tokenizer (the HF API)
+}
+
+// Every message the turn's last generation was given. usage.prompt_tokens minus the
+// messages' tokens is chat-template markup (and llama.cpp's injected tool schemas).
+export interface ContextReport {
+  window: number | null // the model's context window; null when unknown (the HF API)
+  messages: ContextMessage[]
+}
+
+// One SSE event of POST /chat/stream. usage/tools_called/tool_calls/retries/context are
+// set on the terminal (done) chunk only. While a tool turn runs, a chunk announces each
 // call as it starts and another carries its record as it finishes (calls run one at
 // a time, so a finished record closes the latest start).
 export interface ChatChunk {
@@ -99,6 +116,7 @@ export interface ChatChunk {
   tools_called: string[]
   tool_calls: ToolCallRecord[]
   retries: number
+  context?: ContextReport | null // absent from a backend that predates the context report
 }
 
 // --- tools ---
