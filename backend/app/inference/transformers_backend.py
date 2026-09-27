@@ -205,7 +205,9 @@ class TransformersBackend:
             usages.append(usage)
             return text
 
-        loop_result = await run_tool_loop(_generate, prompt_messages, tools, on_event=on_event)
+        loop_result = await run_tool_loop(
+            _generate, prompt_messages, tools, on_event=on_event, output_schema=output_schema
+        )
         # The schema instruction rides every loop turn, so a conforming draft
         # skips the guided redraft.
         if output_schema is not None and not is_conforming_json(loop_result.text, output_schema):

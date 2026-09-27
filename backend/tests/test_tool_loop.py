@@ -26,7 +26,7 @@ def test_tool_call_then_reply_returns_final_text_and_records_result():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), _specs()))
 
-    assert result.text == '{"reply": "5"}'
+    assert result.text == "5"
     assert result.tools_called == ["calculator"]
     assert any("Tool 'calculator' returned: 5" in m.content for m in seen[-1] if m.role == "user")
 
@@ -42,7 +42,7 @@ def test_unknown_tool_name_appends_error_and_continues():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), _specs()))
 
-    assert result.text == '{"reply": "done"}'
+    assert result.text == "done"
     assert result.tools_called == []
     assert any("Tool 'nope' is not available." in m.content for m in seen[-1])
 
@@ -77,8 +77,35 @@ def test_garbage_then_reply_retries():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), _specs()))
 
-    assert result.text == '{"reply": "hi"}'
+    assert result.text == "hi"
     assert result.tools_called == []
+    assert any("That was not valid JSON." in m.content for m in seen[-1])
+
+
+def test_schema_conforming_turn_is_the_final_reply():
+    # With an output_schema the tool instruction asks for a schema-shaped final
+    # reply, so a conforming object ends the loop; a non-conforming one is retried.
+    schema = {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {"answer": {"type": "integer"}},
+    }
+    seen: list[list[ChatMessage]] = []
+    turns = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"answer": "five"}',
+        'Here you go: {"answer": 5}',
+    ]
+
+    async def generate(history: list[ChatMessage]) -> str:
+        seen.append(list(history))
+        return turns.pop(0)
+
+    result = asyncio.run(run_tool_loop(generate, _messages(), _specs(), output_schema=schema))
+
+    assert result.text == '{"answer": 5}'
+    assert result.tools_called == ["calculator"]
+    assert len(seen) == 3
     assert any("That was not valid JSON." in m.content for m in seen[-1])
 
 
@@ -115,7 +142,7 @@ def test_two_different_tools_called_in_sequence_are_both_recorded():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), specs))
 
-    assert result.text == '{"reply": "done"}'
+    assert result.text == "done"
     assert result.tools_called == ["calculator", "web_fetch"]
 
 
