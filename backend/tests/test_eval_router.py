@@ -90,16 +90,24 @@ def test_start_eval_run_streams_progress_and_persists_results():
 
     assert response.status_code == 200
     events = _events(response)
-    # One "now running X" event per case, then a final done event.
-    assert events[0] == {"completed": 0, "total": 1, "current_case": case["id"], "done": False}
-    assert events[-1]["done"] is True
-    assert events[-1]["completed"] == 1
-    assert backend.closed is True
-
     with Session(_test_engine) as session:
         runs = list(session.exec(select(EvalRun)).all())
         results = list(session.exec(select(EvalResult)).all())
     assert len(runs) == 1
+    # One "now running X" event per case, then a final done event -- each naming
+    # the run so the client never has to guess which run it started.
+    assert events[0] == {
+        "run_id": runs[0].id,
+        "completed": 0,
+        "total": 1,
+        "current_case": case["id"],
+        "done": False,
+    }
+    assert events[-1]["run_id"] == runs[0].id
+    assert events[-1]["done"] is True
+    assert events[-1]["completed"] == 1
+    assert backend.closed is True
+
     assert runs[0].status == "completed"
     assert runs[0].completed_cases == 1
     assert len(results) == 1
@@ -117,6 +125,25 @@ def test_list_eval_runs_returns_newest_first():
     assert response.status_code == 200
     ids = [r["id"] for r in response.json()]
     assert ids == sorted(ids, reverse=True)
+
+
+def test_get_eval_run_returns_the_run():
+    _seed_case()
+    with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
+        run_id = _events(client.post("/evals/run", json={"model_id": "some/model"}))[0]["run_id"]
+
+    response = client.get(f"/evals/runs/{run_id}")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == run_id
+    assert response.json()["status"] == "completed"
+
+
+def test_get_eval_run_returns_404_for_missing_run():
+    response = client.get("/evals/runs/9999")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "eval_run_not_found"
 
 
 def test_get_eval_run_results_returns_404_for_missing_run():
@@ -140,6 +167,45 @@ def test_get_eval_run_results_returns_its_results():
     assert len(response.json()) == 1
 
 
+def test_eval_results_expose_pass_status_and_decoded_lists():
+    # Storage encodings (comma-joined tools, JSON-encoded assertions) stay
+    # server-side; the API returns lists plus the report's pass verdict.
+    with Session(_test_engine) as session:
+        run = EvalRun(model_id="some/model", backend="api", total_cases=1)
+        session.add(run)
+        session.commit()
+        session.refresh(run)
+        session.add(
+            EvalResult(
+                run_id=run.id,
+                case_id="case-1",
+                category="tools",
+                response="done",
+                tools_called="web_search,web_fetch",
+                assertions_passed=1,
+                assertions_total=2,
+                assertions_detail=json.dumps(
+                    [
+                        {"type": "tool_called", "passed": True, "detail": ""},
+                        {"type": "contains", "passed": False, "detail": "'x' not found"},
+                    ]
+                ),
+            )
+        )
+        session.commit()
+        run_id = run.id
+
+    [result] = client.get(f"/evals/runs/{run_id}/results").json()
+
+    assert result["tools_called"] == ["web_search", "web_fetch"]
+    assert result["assertions"] == [
+        {"type": "tool_called", "passed": True, "detail": ""},
+        {"type": "contains", "passed": False, "detail": "'x' not found"},
+    ]
+    assert result["passed"] is False
+    assert "assertions_detail" not in result
+
+
 def test_patch_eval_result_sets_manual_verdict():
     _seed_case()
     with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
@@ -155,6 +221,21 @@ def test_patch_eval_result_sets_manual_verdict():
     assert response.status_code == 200
     assert response.json()["manual_verdict"] == "pass"
     assert response.json()["manual_notes"] == "looks right"
+
+
+def test_manual_fail_verdict_overrides_passing_assertions_in_passed():
+    _seed_case()
+    with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
+        client.post("/evals/run", json={"model_id": "some/model", "backend": "api"})
+    with Session(_test_engine) as session:
+        result_id = session.exec(select(EvalResult)).one().id
+
+    response = client.patch(
+        f"/evals/results/{result_id}", json={"manual_verdict": "fail", "manual_notes": None}
+    )
+
+    assert response.json()["assertions_passed"] == response.json()["assertions_total"]
+    assert response.json()["passed"] is False
 
 
 def test_patch_missing_eval_result_returns_404():
@@ -221,6 +302,9 @@ def test_run_with_no_matching_cases_completes_instead_of_hanging_as_running():
             "/evals/run", json={"model_id": "some/model", "backend": "api", "category": "none"}
         )
 
-    assert _events(response) == [{"completed": 0, "total": 0, "current_case": None, "done": True}]
     with Session(_test_engine) as session:
-        assert session.exec(select(EvalRun)).one().status == "completed"
+        run = session.exec(select(EvalRun)).one()
+    assert run.status == "completed"
+    assert _events(response) == [
+        {"run_id": run.id, "completed": 0, "total": 0, "current_case": None, "done": True}
+    ]

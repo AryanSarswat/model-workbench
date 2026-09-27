@@ -5,7 +5,6 @@ import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { BACKENDS } from '../../lib/backends'
-import { resultPassed } from '../../lib/evalPass'
 import { formatRelative } from '../../lib/format'
 import styles from './ReviewPage.module.css'
 import { AssertionsSection, CasePanel, JudgeSection, VerdictForm } from './CasePanel'
@@ -135,7 +134,7 @@ export default function ReviewPage() {
 }
 
 function CaseRow({ result, selected, onSelect }: { result: EvalResult; selected: boolean; onSelect: () => void }) {
-  const passed = resultPassed(result)
+  const passed = result.passed
   return (
     <button type="button" className={styles.caseRow} aria-current={selected} onClick={onSelect}>
       <span className={styles.caseId}>{result.case_id}</span>

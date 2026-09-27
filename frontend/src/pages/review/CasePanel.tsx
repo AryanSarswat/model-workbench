@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ApiError } from '../../api/client'
-import type { AssertionResult, EvalResult, TestCase } from '../../api/types'
+import type { EvalResult, TestCase } from '../../api/types'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import styles from './ReviewPage.module.css'
@@ -35,7 +35,7 @@ export function CasePanel({ result }: { result: EvalResult }) {
       <div className={styles.chipRow}>
         <Chip tone="idle">{result.structured_output_mode ? `JSON · ${result.structured_output_mode}` : 'JSON · none'}</Chip>
         <Chip tone="idle">{result.retries === 0 ? 'first try' : `${result.retries} retries`}</Chip>
-        <Chip tone="idle">{result.tools_called ? `tools · ${result.tools_called}` : 'tools · none called'}</Chip>
+        <Chip tone="idle">{result.tools_called.length > 0 ? `tools · ${result.tools_called.join(', ')}` : 'tools · none called'}</Chip>
         <Chip tone="idle">{result.native_tool_calling ? 'native tool calling' : 'no native tool calling'}</Chip>
       </div>
     </section>
@@ -78,18 +78,12 @@ function PromptNote({ testCase }: { testCase: TestCase }) {
 }
 
 export function AssertionsSection({ result }: { result: EvalResult }) {
-  let assertions: AssertionResult[]
-  try {
-    assertions = JSON.parse(result.assertions_detail) as AssertionResult[]
-  } catch {
-    assertions = []
-  }
   return (
     <section className={styles.asideSection}>
       <h2 className="eyebrow">
         Assertions · {result.assertions_passed} of {result.assertions_total}
       </h2>
-      {assertions.map((assertion, i) => (
+      {result.assertions.map((assertion, i) => (
         <div key={i} className={styles.assertion}>
           {assertion.passed ? <PassIcon /> : <FailIcon />}
           <div className={styles.assertionText}>

@@ -1,7 +1,7 @@
 // Queries and mutations used by ReviewPage.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
-import { getCase, getEvalRunResults, listEvalRuns, updateEvalResult } from '../../api/endpoints'
+import { getCase, getEvalRun, getEvalRunResults, updateEvalResult } from '../../api/endpoints'
 import type { ManualVerdictUpdate } from '../../api/types'
 import { reportKey } from '../evals/activeRun'
 
@@ -11,12 +11,10 @@ const reviewKeys = {
   case: (caseId: string) => ['eval-review', 'case', caseId] as const,
 }
 
-// No GET /evals/runs/{id} endpoint exists -- list and find, like the Evals screen does
-// to resolve a running eval's id.
 export function useEvalRun(runId: number) {
   return useQuery({
     queryKey: reviewKeys.run(runId),
-    queryFn: async () => (await listEvalRuns()).find((run) => run.id === runId) ?? null,
+    queryFn: () => getEvalRun(runId),
     refetchInterval: (query) => (query.state.data?.status === 'running' ? 2000 : false),
   })
 }

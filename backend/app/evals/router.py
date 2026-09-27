@@ -1,4 +1,4 @@
-"""POST /evals/run (SSE progress) + GET /evals/runs[/{id}/results] + GET
+"""POST /evals/run (SSE progress) + GET /evals/runs[/{id}[/results]] + GET
 /evals/report + PATCH /evals/results/{id}.
 
 The run streams progress for the lifetime of the request, persisting each case's
@@ -20,8 +20,8 @@ from app.config import get_settings
 from app.dataset.store import TestCase, load_cases
 from app.db import SessionDep
 from app.errors import WorkbenchError
-from app.evals.report import build_eval_report
-from app.evals.schemas import EvalReportRow, EvalRunRequest, ManualVerdictUpdate
+from app.evals.report import build_eval_report, result_passed
+from app.evals.schemas import EvalReportRow, EvalResultOut, EvalRunRequest, ManualVerdictUpdate
 from app.evals.service import run_one_case
 from app.inference.base import InferenceBackend
 from app.inference.registry import get_backend
@@ -61,6 +61,7 @@ def start_eval_run(request: EvalRunRequest, session: SessionDep) -> StreamingRes
 
 def _event(run: EvalRun, current_case: str | None, done: bool, **extra: str) -> str:
     payload = {
+        "run_id": run.id,
         "completed": run.completed_cases,
         "total": run.total_cases,
         "current_case": current_case,
@@ -108,12 +109,28 @@ def list_eval_runs(session: SessionDep) -> list[EvalRun]:
     return list(session.exec(select(EvalRun).order_by(EvalRun.created_at.desc())).all())
 
 
-@router.get("/runs/{run_id}/results")
-def get_eval_run_results(run_id: int, session: SessionDep) -> list[EvalResult]:
+def _result_out(result: EvalResult) -> EvalResultOut:
+    return EvalResultOut(
+        **result.model_dump(exclude={"tools_called", "assertions_detail"}),
+        tools_called=result.tools_called.split(",") if result.tools_called else [],
+        assertions=json.loads(result.assertions_detail),
+        passed=result_passed(result),
+    )
+
+
+@router.get("/runs/{run_id}")
+def get_eval_run(run_id: int, session: SessionDep) -> EvalRun:
     run = session.get(EvalRun, run_id)
     if run is None:
         raise WorkbenchError(404, "eval_run_not_found", f"No eval run with id {run_id}.")
-    return list(session.exec(select(EvalResult).where(EvalResult.run_id == run_id)).all())
+    return run
+
+
+@router.get("/runs/{run_id}/results")
+def get_eval_run_results(run_id: int, session: SessionDep) -> list[EvalResultOut]:
+    get_eval_run(run_id, session)  # 404s for an unknown run rather than returning []
+    results = session.exec(select(EvalResult).where(EvalResult.run_id == run_id)).all()
+    return [_result_out(result) for result in results]
 
 
 @router.get("/report")
@@ -124,7 +141,7 @@ def get_eval_report(session: SessionDep) -> list[EvalReportRow]:
 @router.patch("/results/{result_id}")
 def update_eval_result(
     result_id: int, body: ManualVerdictUpdate, session: SessionDep
-) -> EvalResult:
+) -> EvalResultOut:
     result = session.get(EvalResult, result_id)
     if result is None:
         raise WorkbenchError(404, "eval_result_not_found", f"No eval result with id {result_id}.")
@@ -133,4 +150,4 @@ def update_eval_result(
     session.add(result)
     session.commit()
     session.refresh(result)
-    return result
+    return _result_out(result)

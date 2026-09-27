@@ -5,9 +5,12 @@ storage.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
+
+from app.evals.assertions import AssertionResult
 
 
 class EvalRunRequest(BaseModel):
@@ -20,6 +23,33 @@ class EvalRunRequest(BaseModel):
 class ManualVerdictUpdate(BaseModel):
     manual_verdict: Literal["pass", "fail"] | None = None  # the report's pass rule reads these
     manual_notes: str | None = None
+
+
+class EvalResultOut(BaseModel):
+    """An EvalResult as the API returns it: the report's pass rule applied, and the
+    storage-encoded columns (comma-joined tools, JSON-encoded assertions) decoded.
+    """
+
+    id: int
+    run_id: int
+    case_id: str
+    category: str
+    response: str
+    error: str | None
+    structured_output_mode: str | None
+    native_tool_calling: bool
+    retries: int
+    tools_called: list[str]
+    assertions_passed: int
+    assertions_total: int
+    assertions: list[AssertionResult]
+    judge_score: float | None
+    judge_rationale: str | None
+    manual_verdict: str | None
+    manual_notes: str | None
+    response_metric_id: int | None
+    created_at: datetime
+    passed: bool  # app/evals/report.py result_passed -- the same rule the report counts
 
 
 class EvalReportRow(BaseModel):
