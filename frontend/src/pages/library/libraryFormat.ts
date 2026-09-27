@@ -14,13 +14,6 @@ export function formatChip(record: DownloadedModelRecord): string {
   return `GGUF · ${stripped || withoutExt}`
 }
 
-// The playground chat link for a downloaded model.
-export function chatPath(record: DownloadedModelRecord): string {
-  const params = new URLSearchParams({ model: record.repo_id, backend: record.backend })
-  if (record.backend === 'gguf' && record.quant) params.set('quant', record.quant)
-  return `/playground?${params.toString()}`
-}
-
 // "expression: string, timezone?: string" from a ToolSpec's JSON-Schema parameters.
 export function summarizeParams(spec: ToolSpec): string {
   const schema = spec.parameters as { properties?: Record<string, { type?: string }>; required?: string[] }

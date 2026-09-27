@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import {
   deleteDownloaded,
+  modelPath,
   reloadTools,
   setHfKey,
 } from '../../api/endpoints'
@@ -25,8 +26,9 @@ import { PageHeader } from '../../components/PageHeader'
 import { ProgressBar } from '../../components/ProgressBar'
 import { cx } from '../../lib/cx'
 import { formatGb, formatRelative } from '../../lib/format'
+import { playgroundPath } from '../../lib/links'
 import styles from './LibraryPage.module.css'
-import { chatPath, formatChip, gpuLabel, summarizeParams } from './libraryFormat'
+import { formatChip, gpuLabel, summarizeParams } from './libraryFormat'
 
 
 export default function LibraryPage() {
@@ -95,7 +97,7 @@ export default function LibraryPage() {
           )}
           {downloaded.map((record) => (
             <div key={record.id} className={styles.diskRow}>
-              <Link to={`/models/${record.repo_id}`} className={styles.repoLink}>
+              <Link to={`/models/${modelPath(record.repo_id)}`} className={styles.repoLink}>
                 {record.repo_id}
               </Link>
               <span>
@@ -104,7 +106,7 @@ export default function LibraryPage() {
               <span className={styles.size}>{formatGb(record.size_bytes)}</span>
               <span className={styles.lastUsed}>{formatRelative(record.last_used_at ?? record.downloaded_at)}</span>
               <div className={styles.rowActions}>
-                <Button to={chatPath(record)}>Chat</Button>
+                <Button to={playgroundPath({ model: record.repo_id, backend: record.backend, quant: record.quant })}>Chat</Button>
                 <button
                   type="button"
                   aria-label={`Delete ${record.repo_id}`}

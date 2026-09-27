@@ -2,6 +2,7 @@
 // downloading, and building the various playground/eval links.
 import type { BackendName, DownloadJob, DownloadedModelRecord, EvalReportRow, FeasibilityOption, ModelDetail } from '../../api/types'
 import { formatGb, formatParamCount } from '../../lib/format'
+import { playgroundPath } from '../../lib/links'
 
 export function splitModelId(id: string): { author: string; name: string } {
   const slash = id.indexOf('/')
@@ -41,17 +42,11 @@ export function findActiveSnapshotJob(jobs: DownloadJob[], modelId: string): Dow
 // transformers snapshot, else fall back to the (always-available) API backend.
 export function playgroundLink(modelId: string, downloaded: DownloadedModelRecord[]): string {
   const gguf = downloaded.find((r) => r.repo_id === modelId && r.backend === 'gguf' && r.quant)
-  if (gguf?.quant) return optionPlaygroundLink(modelId, 'gguf', gguf.quant)
+  if (gguf?.quant) return playgroundPath({ model: modelId, backend: 'gguf', quant: gguf.quant })
   if (downloaded.some((r) => r.repo_id === modelId && r.backend === 'transformers')) {
-    return optionPlaygroundLink(modelId, 'transformers')
+    return playgroundPath({ model: modelId, backend: 'transformers' })
   }
-  return optionPlaygroundLink(modelId, 'api')
-}
-
-export function optionPlaygroundLink(modelId: string, backend: BackendName, filename?: string): string {
-  const params = new URLSearchParams({ model: modelId, backend })
-  if (backend === 'gguf' && filename) params.set('quant', filename)
-  return `/playground?${params}`
+  return playgroundPath({ model: modelId, backend: 'api' })
 }
 
 // The backend with the most evaluated cases for this model, used to pick which set of
