@@ -115,7 +115,10 @@ def test_schema_conforming_turn_is_the_final_reply():
     assert result.text == '{"answer": 5}'
     assert result.tools_called == ["calculator"]
     assert len(seen) == 3
-    assert any("That was not valid JSON." in m.content for m in seen[-1])
+    # The retry asks for the schema-shaped final answer, not a {"reply": ...} one.
+    (retry,) = [m.content for m in seen[-1] if m.role == "user" and "JSON Schema" in m.content]
+    assert "conforming to the schema" in retry
+    assert '"reply"' not in retry
 
 
 def test_always_tool_calls_stops_after_max_iterations():

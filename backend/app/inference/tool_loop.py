@@ -39,6 +39,12 @@ _RETRY_MESSAGE = (
     '\'{"tool": "<name>", "arguments": {...}}\' to call a tool or '
     '\'{"reply": "<final answer>"}\' for the final answer.'
 )
+_SCHEMA_RETRY_MESSAGE = (
+    "That was neither a tool call nor a final answer matching the required JSON "
+    "Schema. Reply with exactly one JSON object: "
+    '\'{"tool": "<name>", "arguments": {...}}\' to call a tool or the final answer '
+    "as a JSON object conforming to the schema."
+)
 
 
 class LoopResult(BaseModel):
@@ -156,6 +162,7 @@ async def run_tool_loop(
     prompt from the same list, so building it here would duplicate it).
     """
     retrier = PromptJsonRetrier()
+    retry_message = _RETRY_MESSAGE if output_schema is None else _SCHEMA_RETRY_MESSAGE
     history = list(messages)
     last_text = ""
     tool_calls: list[ToolCallRecord] = []
@@ -169,7 +176,7 @@ async def run_tool_loop(
             obj = extract_json_object(last_text) if output_schema is not None else None
             if obj is not None and matches_schema(obj, output_schema):
                 return LoopResult(text=json.dumps(obj), tool_calls=tool_calls)
-            history.append(ChatMessage(role="user", content=_RETRY_MESSAGE))
+            history.append(ChatMessage(role="user", content=retry_message))
             continue
         try:
             tool = get_enabled_tool(parsed.tool_name, tools)
