@@ -1,6 +1,9 @@
+import sys
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.errors import WorkbenchError
 from app.inference import registry
@@ -21,12 +24,12 @@ def _use_test_db(monkeypatch):
     SQLModel.metadata.drop_all(_test_engine)
 
 
-def _seed(repo_id: str, quant: str | None, local_path: str) -> None:
+def _seed(repo_id: str, quant: str | None, local_path: str, backend: str = "gguf") -> None:
     with Session(_test_engine) as session:
         session.add(
             DownloadedModelRecord(
                 repo_id=repo_id,
-                backend="gguf",
+                backend=backend,
                 quant=quant,
                 local_path=local_path,
                 size_bytes=1024,
@@ -84,3 +87,41 @@ def test_get_backend_gguf_without_local_extra_raises_backend_not_available(monke
 
     assert exc_info.value.code == "backend_not_available"
     assert exc_info.value.status_code == 400
+
+
+def _last_used_by_path() -> dict[str, object]:
+    with Session(_test_engine) as session:
+        return {r.local_path: r.last_used_at for r in session.exec(select(DownloadedModelRecord))}
+
+
+@pytest.fixture
+def _stub_local_backends(monkeypatch):
+    """Resolution is what stamps last_used_at; skip the local extra so this runs slim."""
+    monkeypatch.setattr(registry, "_require_local", lambda *a: None)
+    stub = SimpleNamespace(LlamaCppBackend=lambda path: path, TransformersBackend=lambda path: path)
+    monkeypatch.setitem(sys.modules, "app.inference.llama_cpp_backend", stub)
+    monkeypatch.setitem(sys.modules, "app.inference.transformers_backend", stub)
+
+
+@pytest.mark.usefixtures("_stub_local_backends")
+def test_get_backend_gguf_records_last_used_on_only_the_resolved_quant():
+    _seed("org/model", "a.gguf", "/tmp/a.gguf")
+    _seed("org/model", "b.gguf", "/tmp/b.gguf")
+
+    get_backend("gguf", "org/model:b.gguf", hf_api_key=None)
+
+    last_used = _last_used_by_path()
+    assert last_used["/tmp/b.gguf"] is not None
+    assert last_used["/tmp/a.gguf"] is None
+
+
+@pytest.mark.usefixtures("_stub_local_backends")
+def test_get_backend_transformers_records_last_used_on_the_resolved_snapshot():
+    _seed("org/model", None, "/tmp/snapshot", backend="transformers")
+    _seed("org/other", None, "/tmp/other", backend="transformers")
+
+    get_backend("transformers", "org/model", hf_api_key=None)
+
+    last_used = _last_used_by_path()
+    assert last_used["/tmp/snapshot"] is not None
+    assert last_used["/tmp/other"] is None
