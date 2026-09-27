@@ -36,10 +36,12 @@ const detail: ModelDetail = {
 
 const feasibility: FeasibilityReport = {
   available_memory_gb: 18,
+  comfortable_fraction: 0.7,
+  tight_fraction: 0.95,
   options: [
-    { label: 'Qwen3-14B-Q3_K_M.gguf', verdict: 'comfortable', estimated_memory_gb: 8.8, reason: 'should run comfortably.' },
-    { label: 'Qwen3-14B-Q4_K_M.gguf', verdict: 'comfortable', estimated_memory_gb: 10.8, reason: 'should run comfortably.' },
-    { label: 'Qwen3-14B-Q5_K_M.gguf', verdict: 'tight', estimated_memory_gb: 12.6, reason: 'little headroom.' },
+    { label: 'Qwen3-14B-Q3_K_M.gguf', backend: 'gguf', filename: 'Qwen3-14B-Q3_K_M.gguf', verdict: 'comfortable', estimated_memory_gb: 8.8, reason: 'should run comfortably.' },
+    { label: 'Qwen3-14B-Q4_K_M.gguf', backend: 'gguf', filename: 'Qwen3-14B-Q4_K_M.gguf', verdict: 'comfortable', estimated_memory_gb: 10.8, reason: 'should run comfortably.' },
+    { label: 'Qwen3-14B-Q5_K_M.gguf', backend: 'gguf', filename: 'Qwen3-14B-Q5_K_M.gguf', verdict: 'tight', estimated_memory_gb: 12.6, reason: 'little headroom.' },
   ],
 }
 

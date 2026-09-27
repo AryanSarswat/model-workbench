@@ -5,9 +5,9 @@ import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { ProgressBar } from '../../components/ProgressBar'
 import { GaugeAxisLabels, MemoryGauge } from '../radar/MemoryGauge'
-import { VERDICT_CHIP_TONE, VERDICT_LABEL } from '../radar/gauge'
+import { VERDICT_CHIP_TONE, VERDICT_LABEL, type VerdictThresholds } from '../radar/gauge'
 import styles from './ModelPage.module.css'
-import { findActiveGgufJob, findActiveSnapshotJob, findDownloadedGguf, findDownloadedSnapshot, optionBackend, optionPlaygroundLink, optionSizeLabel } from './modelHelpers'
+import { findActiveGgufJob, findActiveSnapshotJob, findDownloadedGguf, findDownloadedSnapshot, optionPlaygroundLink, optionSizeLabel } from './modelHelpers'
 
 export interface FailedDownload {
   id: number
@@ -74,6 +74,7 @@ export function WaysToRunIt({
               detail={detail}
               option={option}
               usableMemoryGb={feasibilityQuery.data.available_memory_gb}
+              thresholds={feasibilityQuery.data}
               downloaded={downloaded}
               activeJobs={activeJobs}
               onDownload={onDownload}
@@ -106,6 +107,7 @@ function OptionRow({
   detail,
   option,
   usableMemoryGb,
+  thresholds,
   downloaded,
   activeJobs,
   onDownload,
@@ -115,14 +117,14 @@ function OptionRow({
   detail: ModelDetail
   option: FeasibilityOption
   usableMemoryGb: number
+  thresholds: VerdictThresholds
   downloaded: DownloadedModelRecord[]
   activeJobs: DownloadJob[]
   onDownload: (request: DownloadRequest) => void
   downloadPending: boolean
 }) {
-  const backend = optionBackend(option.label)
+  const { backend, filename } = option
   const isSnapshot = backend === 'transformers'
-  const filename = option.label
 
   const onDisk = isSnapshot ? findDownloadedSnapshot(downloaded, modelId) : findDownloadedGguf(downloaded, modelId, filename)
   const activeJob = isSnapshot ? findActiveSnapshotJob(activeJobs, modelId) : findActiveGgufJob(activeJobs, modelId, filename)
@@ -136,14 +138,14 @@ function OptionRow({
       </div>
       <div className={styles.optionBackend}>{backend}</div>
       <div>
-        <MemoryGauge lo={0} hi={option.estimated_memory_gb} usableMemoryGb={usableMemoryGb} />
+        <MemoryGauge lo={0} hi={option.estimated_memory_gb} usableMemoryGb={usableMemoryGb} thresholds={thresholds} />
       </div>
       <div>
         <Chip tone={VERDICT_CHIP_TONE[option.verdict]}>{VERDICT_LABEL[option.verdict]}</Chip>
       </div>
       <div className={styles.actionCell}>
         {onDisk ? (
-          <Button to={optionPlaygroundLink(modelId, backend, filename)} variant="solid" className={styles.actionButton}>
+          <Button to={optionPlaygroundLink(modelId, backend, filename ?? undefined)} variant="solid" className={styles.actionButton}>
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M3 8.5l3 3 7-7" />
             </svg>

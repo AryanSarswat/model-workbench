@@ -13,7 +13,7 @@ import { PageHeader } from '../../components/PageHeader'
 import { SegmentedControl } from '../../components/SegmentedControl'
 import { formatCount, formatRelative } from '../../lib/format'
 import { GaugeAxisLabels, MemoryGauge } from './MemoryGauge'
-import { VERDICT_CHIP_TONE, VERDICT_LABEL, bestVerdict, feasibilityQueryOptions, formatMemoryRange } from './gauge'
+import { VERDICT_CHIP_TONE, VERDICT_LABEL, bestVerdict, feasibilityQueryOptions, formatMemoryRange, formatThreshold } from './gauge'
 import styles from './RadarPage.module.css'
 
 const SORT_OPTIONS: { value: DiscoverSort; label: string }[] = [
@@ -38,11 +38,11 @@ function shortFeasibilityError(error: unknown, gated: DiscoveredModel['gated']):
   return 'Unavailable'
 }
 
-// GGUF / transformers chips derived from a repo's feasibility option labels.
+// GGUF / transformers chips derived from a repo's feasibility option backends.
 function formatChips(options: FeasibilityReport['options']): string[] {
   const chips: string[] = []
-  if (options.some((o) => o.label.toLowerCase().endsWith('.gguf'))) chips.push('GGUF')
-  if (options.some((o) => o.label.toLowerCase().startsWith('transformers'))) chips.push('transformers')
+  if (options.some((o) => o.backend === 'gguf')) chips.push('GGUF')
+  if (options.some((o) => o.backend === 'transformers')) chips.push('transformers')
   return chips
 }
 
@@ -104,6 +104,8 @@ export default function RadarPage() {
 }
 
 function RadarTable({ usableMemoryGb, rows }: { usableMemoryGb: number; rows: Row[] }) {
+  // Every report carries the same thresholds; the legend shows them once any row has loaded.
+  const thresholds = rows.find((row) => row.feasibility.data)?.feasibility.data
   return (
     <section aria-label="Models" className={styles.table}>
       <div className={styles.headerRow}>
@@ -127,11 +129,11 @@ function RadarTable({ usableMemoryGb, rows }: { usableMemoryGb: number; rows: Ro
       <footer className={styles.footer}>
         <span className={styles.legendItem}>
           <span className={['seg-fit', styles.swatch].join(' ')} />
-          Comfortable, under 70% of memory
+          Comfortable{thresholds && `, under ${formatThreshold(thresholds.comfortable_fraction)} of memory`}
         </span>
         <span className={styles.legendItem}>
           <span className={['seg-tight', styles.swatch].join(' ')} />
-          Tight, under 95%
+          Tight{thresholds && `, under ${formatThreshold(thresholds.tight_fraction)}`}
         </span>
         <span className={styles.legendItem}>
           <span className={['hatch', styles.swatch].join(' ')} />
@@ -225,7 +227,7 @@ function FeasibilityGauge({
   const hi = Math.max(...estimates)
   return (
     <div className={styles.gaugeCell}>
-      <MemoryGauge lo={lo} hi={hi} usableMemoryGb={usableMemoryGb} />
+      <MemoryGauge lo={lo} hi={hi} usableMemoryGb={usableMemoryGb} thresholds={feasibility.data} />
       <div className={styles.range}>{formatMemoryRange(lo, hi, feasibility.data.options.length)}</div>
     </div>
   )

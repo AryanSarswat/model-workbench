@@ -8,19 +8,14 @@ export function splitModelId(id: string): { author: string; name: string } {
   return slash === -1 ? { author: '', name: id } : { author: id.slice(0, slash), name: id.slice(slash + 1) }
 }
 
-// A feasibility option's label is a GGUF filename, or "transformers (DTYPE)".
-export function optionBackend(label: string): 'gguf' | 'transformers' {
-  return label.toLowerCase().endsWith('.gguf') ? 'gguf' : 'transformers'
-}
-
 export function formatParamCount(count: number): string {
   return `${(count / 1e9).toFixed(1)}B params`
 }
 
 // The file-size or param-count subtitle shown next to an option's backend reason.
 export function optionSizeLabel(option: FeasibilityOption, detail: ModelDetail): string | null {
-  if (optionBackend(option.label) === 'gguf') {
-    const file = detail.gguf_files.find((f) => f.filename === option.label)
+  if (option.backend === 'gguf') {
+    const file = detail.gguf_files.find((f) => f.filename === option.filename)
     return file ? `${formatGb(file.size_bytes)} file` : null
   }
   return detail.parameter_count == null ? null : formatParamCount(detail.parameter_count)

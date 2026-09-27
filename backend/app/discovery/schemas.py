@@ -40,7 +40,9 @@ class ModelDetail(DiscoveredModel):
 
 
 class FeasibilityOption(BaseModel):
-    label: str  # a GGUF filename, or e.g. "transformers (BF16)"
+    label: str  # display text: a GGUF filename, or e.g. "transformers (BF16)"
+    backend: Literal["gguf", "transformers"]
+    filename: str | None = None  # the GGUF file to download/load; None for transformers
     verdict: Literal["comfortable", "tight", "wont_fit"]
     estimated_memory_gb: float
     reason: str
@@ -48,4 +50,8 @@ class FeasibilityOption(BaseModel):
 
 class FeasibilityReport(BaseModel):
     available_memory_gb: float
+    # Verdict thresholds as fractions of available_memory_gb: below comfortable_fraction is
+    # "comfortable", below tight_fraction is "tight", otherwise "wont_fit".
+    comfortable_fraction: float
+    tight_fraction: float
     options: list[FeasibilityOption]

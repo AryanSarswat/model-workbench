@@ -1,4 +1,4 @@
-import { gaugeScale, gaugeSegments, type GaugeSegment } from './gauge'
+import { gaugeMax, gaugeSegments, type GaugeSegment, type VerdictThresholds } from './gauge'
 
 const SEGMENT_CLASS: Record<GaugeSegment['cls'], string> = {
   'seg-fit': 'seg seg-fit',
@@ -12,14 +12,16 @@ export function MemoryGauge({
   lo,
   hi,
   usableMemoryGb,
+  thresholds,
   height = 10,
 }: {
   lo: number
   hi: number
   usableMemoryGb: number
+  thresholds: VerdictThresholds
   height?: number
 }) {
-  const segments = gaugeSegments(lo, hi, usableMemoryGb)
+  const segments = gaugeSegments(lo, hi, usableMemoryGb, thresholds)
   return (
     <div style={{ position: 'relative', height, background: 'var(--track)' }}>
       {segments.map((seg) => (
@@ -36,7 +38,7 @@ export function MemoryGauge({
 
 // The "0 ... <usable> GB ... <max>+" scale labels above a MemoryGauge.
 export function GaugeAxisLabels({ usableMemoryGb }: { usableMemoryGb: number }) {
-  const { max } = gaugeScale(usableMemoryGb)
+  const max = gaugeMax(usableMemoryGb)
   return (
     <div style={{ position: 'relative', height: 16 }}>
       <div className="eyebrow" style={{ position: 'absolute', left: 0, bottom: 0 }}>

@@ -31,6 +31,8 @@ def test_gguf_quant_estimates_from_file_size():
     [option] = report.options
     assert option.estimated_memory_gb == 6.0  # 5GB * 1.2 overhead
     assert option.verdict == "comfortable"  # 6 < 16 * 0.7
+    assert option.backend == "gguf"
+    assert option.filename == "model.Q4_K_M.gguf"
 
 
 def test_unknown_quant_raises_404_with_available_options():
@@ -56,6 +58,8 @@ def test_no_quant_estimates_from_parameter_count_and_dtype():
     assert option.estimated_memory_gb == pytest.approx(15.65, abs=0.01)
     assert option.verdict == "wont_fit"  # 15.65 > 16 * 0.95
     assert option.label == "transformers (BF16)"
+    assert option.backend == "transformers"
+    assert option.filename is None
 
 
 def test_no_quant_returns_one_option_per_gguf_file_plus_transformers():
@@ -98,6 +102,8 @@ def test_tight_verdict_when_close_to_available_memory():
     ):
         report = estimate_feasibility("meta-llama/Llama-3-8B")
     assert report.options[0].verdict == "tight"
+    # The report carries the thresholds it used, so clients can draw matching bands.
+    assert (report.comfortable_fraction, report.tight_fraction) == (0.7, 0.95)
 
 
 def test_unknown_dtype_falls_back_to_4_bytes_per_param():
@@ -126,9 +132,13 @@ def test_feasibility_endpoint_returns_report():
     with patch("app.discovery.router.estimate_feasibility") as mock_estimate:
         mock_estimate.return_value = FeasibilityReport(
             available_memory_gb=16.0,
+            comfortable_fraction=0.7,
+            tight_fraction=0.95,
             options=[
                 {
                     "label": "model.gguf",
+                    "backend": "gguf",
+                    "filename": "model.gguf",
                     "verdict": "comfortable",
                     "estimated_memory_gb": 4.0,
                     "reason": "ok",
@@ -148,7 +158,9 @@ def test_feasibility_route_is_not_swallowed_by_model_detail_catch_all():
         patch("app.discovery.router.estimate_feasibility") as mock_feasibility,
         patch("app.discovery.router.get_model_detail") as mock_detail,
     ):
-        mock_feasibility.return_value = FeasibilityReport(available_memory_gb=16.0, options=[])
+        mock_feasibility.return_value = FeasibilityReport(
+            available_memory_gb=16.0, comfortable_fraction=0.7, tight_fraction=0.95, options=[]
+        )
         response = client.get("/models/meta-llama/Llama-3-8B/feasibility")
     assert response.status_code == 200
     mock_feasibility.assert_called_once()
