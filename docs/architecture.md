@@ -210,17 +210,19 @@ error, all its assertions passed, and any judge score is at least 0.5.
 - `POST /models/{id}/download` — either one GGUF file (`filename` from `gguf_files`)
   or a whole transformers snapshot (`snapshot: true` -- every non-GGUF file in the repo,
   into `models/<repo>/snapshot/`). Both stream directly (not via `hf_hub_download`,
-  which has no progress-callback hook) so `GET /models/downloads/{job_id}` can be
-  polled for real byte-level `{status, percent, detail}` -- snapshot percent is
-  aggregate bytes over the summed Hub-reported sizes. Runs as a FastAPI background
-  task, not SSE (unlike eval runs, which stream `{completed, total, current_case}`);
-  downloads may move to SSE too once there's a frontend to stream it to.
+  which has no progress-callback hook) for real byte-level `{status, percent, detail}`
+  on the job row -- snapshot percent is aggregate bytes over the summed Hub-reported
+  sizes. Runs as a FastAPI background task.
+- `GET /models/downloads/events` (SSE) — sends every active job on connect, then each
+  job whenever its row changes, through to its final `completed`/`failed` state; a
+  `: ping` comment every 15 s when idle. The download threads only write the table, so
+  the stream reads it every 0.5 s server-side rather than being pushed to.
 
 ## API surface
 
 | Area | Endpoints |
 |---|---|
-| Discovery/downloads | `GET /models/discover`, `GET /models/{id}`, `GET /models/{id}/feasibility`, `POST /models/{id}/download`, `GET /models/downloads`, `GET /models/downloads/{job_id}`, `GET /models/downloaded`, `DELETE /models/downloaded/{id}` |
+| Discovery/downloads | `GET /models/discover`, `GET /models/{id}`, `GET /models/{id}/feasibility`, `POST /models/{id}/download`, `GET /models/downloads`, `GET /models/downloads/events` (SSE), `GET /models/downloads/{job_id}`, `GET /models/downloaded`, `DELETE /models/downloaded/{id}` |
 | Chat | `POST /chat/stream` (SSE), `GET/DELETE /chat/sessions[/{id}]` |
 | Tools | `GET /tools`, `POST /tools/reload` |
 | Dataset | `GET/POST/PUT/DELETE /dataset/cases` (filterable by `category`) |
