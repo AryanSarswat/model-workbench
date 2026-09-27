@@ -162,6 +162,7 @@ describe('PlaygroundPage', () => {
     const snapshot: DownloadedModelRecord = {
       id: 1,
       repo_id: 'org/model',
+      model_id: 'org/model',
       backend: 'transformers',
       quant: null,
       local_path: '/models/org-model',
