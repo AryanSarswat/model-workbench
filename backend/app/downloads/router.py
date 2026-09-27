@@ -2,8 +2,8 @@
 
 Two download kinds: a single GGUF file (`filename` from `GET /models/{id}`'s
 gguf_files), or a full transformers snapshot (`snapshot: true` -- every non-GGUF file
-in the repo, for the transformers backend). Progress for both is polled via
-`GET /models/downloads/{job_id}`.
+in the repo, for the transformers backend). Progress for both streams over SSE from
+`GET /models/downloads/events`; `GET /models/downloads/{job_id}` reads one job.
 """
 
 from __future__ import annotations
@@ -16,11 +16,13 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
 from app.discovery.hf_client import get_model_detail, get_snapshot_files
+from app.downloads.events import job_events
 from app.downloads.service import run_download, run_snapshot_download
 from app.errors import WorkbenchError
 from app.inference.gguf_header import describe_unsupported
@@ -104,6 +106,12 @@ def list_download_jobs(session: SessionDep, active: bool = False) -> list[Downlo
         query = query.where(DownloadJob.status.in_(["pending", "downloading"]))
     query = query.order_by(DownloadJob.created_at.desc(), DownloadJob.id.desc())
     return list(session.exec(query).all())
+
+
+# Declared before /downloads/{job_id}, which would otherwise try to parse "events" as an id.
+@router.get("/downloads/events")
+def stream_download_jobs() -> StreamingResponse:
+    return StreamingResponse(job_events(), media_type="text/event-stream")
 
 
 @router.get("/downloads/{job_id}")
