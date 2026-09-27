@@ -44,14 +44,18 @@ export default function PlaygroundPage() {
   // pick one -- preferring the URL's ?model=&quant= the first time we land on the
   // backend it named, otherwise just the first option. This runs during render
   // (React's documented pattern for adjusting state to match another value) rather
-  // than in an effect: it converges in at most one extra render, since the picked
-  // modelId is always a member of modelOptions and the condition then goes false.
+  // than in an effect. It only sets state when the pick differs from the current
+  // modelId, so it converges in at most one extra render: the pick is either a member
+  // of modelOptions (the condition then goes false) or, with no options, '' (the pick
+  // then equals modelId). Without that guard an empty option list would re-set ''
+  // on every render and loop forever.
   // Keying off "not a current option" (rather than a one-shot latch) means switching
   // gguf -> api -> gguf re-picks instead of leaving a stale api model_id selected for
   // gguf, which is exactly the bug this guards against.
   if (backend !== 'api' && !downloadedQuery.isPending && !modelOptions.some((option) => option.modelId === modelId)) {
     const useUrlParams = backend === initialBackend
-    setModelId(pickPrefilledModelId(modelOptions, useUrlParams ? paramModel : null, useUrlParams ? paramQuant : null))
+    const picked = pickPrefilledModelId(modelOptions, useUrlParams ? paramModel : null, useUrlParams ? paramQuant : null)
+    if (picked !== modelId) setModelId(picked)
   }
 
   const schemaParse = schemaEnabled ? parseSchemaJson(schemaText) : null
