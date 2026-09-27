@@ -16,6 +16,7 @@ import llama_cpp
 from llama_cpp import Llama, LlamaGrammar
 
 from app.errors import WorkbenchError
+from app.inference.context import build_context_report
 from app.inference.gguf_header import describe_unsupported
 from app.inference.model_cache import LoadedModelCache
 from app.inference.schemas import (
@@ -23,6 +24,7 @@ from app.inference.schemas import (
     BackendCapabilities,
     ChatChunk,
     ChatMessage,
+    ContextReport,
     TokenUsage,
     ToolCallRecord,
     combine_usage,
@@ -96,6 +98,18 @@ async def _run_tool(
     return call.result
 
 
+def _context_report(
+    llama: Llama, request: list[ChatMessage], sent: list[dict] | None = None
+) -> ContextReport:
+    """Token counts per message, against the window the model was loaded with."""
+    return build_context_report(
+        request,
+        lambda text: len(llama.tokenize(text.encode("utf-8"), add_bos=False)),
+        llama.n_ctx(),
+        sent,
+    )
+
+
 def _describe_load_failure(model_path: str, error: Exception) -> str:
     """The load error, naming the cause when it is a tensor type this llama.cpp
     build can't read -- llama.cpp itself only says "Failed to load model"."""
@@ -161,6 +175,7 @@ class LlamaCppBackend:
         usages: list[TokenUsage] = []
         retrier = PromptJsonRetrier()
         for _ in range(MAX_TOOL_TURNS):
+            sent = list(history)
             extra_kwargs: dict = {"grammar": grammar} if grammar is not None else {}
             response = await asyncio.to_thread(
                 llama.create_chat_completion,
@@ -185,7 +200,9 @@ class LlamaCppBackend:
                 parsed = retrier.parse_tool_call_or_reply(content) if content else None
                 if not isinstance(parsed, ToolCall):
                     return ToolTurn(
-                        LoopResult(text=content, tool_calls=executed), combine_usage(usages)
+                        LoopResult(text=content, tool_calls=executed),
+                        combine_usage(usages),
+                        context=_context_report(llama, messages, sent),
                     )
                 history.append(dict(message))
                 result = await _run_tool(
@@ -210,7 +227,11 @@ class LlamaCppBackend:
                 history.append(
                     {"role": "tool", "tool_call_id": call.get("id", ""), "content": result}
                 )
-        return ToolTurn(LoopResult(text=last_content, tool_calls=executed), combine_usage(usages))
+        return ToolTurn(
+            LoopResult(text=last_content, tool_calls=executed),
+            combine_usage(usages),
+            context=_context_report(llama, messages, sent),
+        )
 
     async def aclose(self) -> None:
         """No-op: the cached Llama stays loaded for the next turn."""
@@ -252,7 +273,11 @@ class LlamaCppBackend:
                 )
                 final_text = response["choices"][0]["message"]["content"] or ""
                 yield ChatChunk(delta=final_text)
-                yield ChatChunk(done=True, usage=_parse_usage(response.get("usage")))
+                yield ChatChunk(
+                    done=True,
+                    usage=_parse_usage(response.get("usage")),
+                    context=_context_report(llama, messages),
+                )
                 return
             stream = llama.create_chat_completion(
                 messages=[m.model_dump() for m in messages],
@@ -269,7 +294,9 @@ class LlamaCppBackend:
                     yield ChatChunk(delta=delta)
             completion_text = "".join(parts)
             yield ChatChunk(
-                done=True, usage=_estimate_streaming_usage(llama, messages, completion_text)
+                done=True,
+                usage=_estimate_streaming_usage(llama, messages, completion_text),
+                context=_context_report(llama, messages),
             )
         except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
             yield ChatChunk(done=True, error=str(e))

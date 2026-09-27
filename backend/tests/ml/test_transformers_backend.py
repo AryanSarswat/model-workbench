@@ -1,6 +1,7 @@
 import asyncio
 import json
 import sys
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -142,6 +143,8 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
             return next(scripted)
 
     class _ToolModel(_FakeModel):
+        config = SimpleNamespace(max_position_embeddings=32768)
+
         def generate(self, **kwargs):
             assert "streamer" not in kwargs
             assert kwargs.get("max_new_tokens") == 512
@@ -175,6 +178,9 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     assert "<|user|>Tool 'calculator' returned: 5<|end|>" in prompts[1]
     assert prompts[1].endswith("<|assistant|>")
     assert chunks[-1].tools_called == ["calculator"]
+    # The context is the last turn's messages, against the model's trained window.
+    assert [m.kind for m in done.context.messages] == ["instructions", "user", "assistant", "tool"]
+    assert done.context.window == 32768
     assert chunks[-1].usage.prompt_tokens == 2  # every _FakeEncoding uses input_ids=[[1, 2]]
     assert chunks[-1].usage.completion_tokens == 4  # 2 generate() turns x 2 completion tokens each
 
@@ -201,6 +207,8 @@ def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
     assert _FakeModel.instances[0].device == backend._device
     assert chunks[-1].usage.prompt_tokens == 2  # input_ids=[[1, 2]] from _FakeEncoding
     assert chunks[-1].usage.completion_tokens == 1  # "Hello".split() -> one token
+    [message] = chunks[-1].context.messages
+    assert (message.kind, message.tokens) == ("user", 1)  # "hi"
 
 
 def test_stream_chat_converts_generation_error_to_a_terminal_error_chunk(monkeypatch):

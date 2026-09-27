@@ -31,12 +31,14 @@ from transformers import (
 )
 
 from app.errors import WorkbenchError
+from app.inference.context import build_context_report
 from app.inference.model_cache import LoadedModelCache
 from app.inference.schemas import (
     BACKEND_CAPABILITIES,
     BackendCapabilities,
     ChatChunk,
     ChatMessage,
+    ContextReport,
     TokenUsage,
     combine_usage,
 )
@@ -70,6 +72,21 @@ _SENTINEL = object()
 # Cap for non-streamed turns: generate() defaults to input + 20 tokens, which
 # truncates tool-call JSON.
 _MAX_NEW_TOKENS = 512
+
+
+def _context_report(
+    model: AutoModelForCausalLM,
+    tokenizer: AutoTokenizer,
+    request: list[ChatMessage],
+    sent: list[dict] | None = None,
+) -> ContextReport:
+    """Token counts per message, against the model's trained context length."""
+    return build_context_report(
+        request,
+        lambda text: len(tokenizer(text, add_special_tokens=False)["input_ids"]),
+        getattr(getattr(model, "config", None), "max_position_embeddings", None),
+        sent,
+    )
 
 
 def _detect_device() -> str:
@@ -197,15 +214,14 @@ class TransformersBackend:
         """
         prompt_messages = PromptJsonRetrier().build_tool_messages(messages, tools, output_schema)
         conversation = ""
+        sent: list[dict] = []
         usages: list[TokenUsage] = []
 
         async def _generate(history: list[ChatMessage]) -> str:
-            nonlocal conversation
+            nonlocal conversation, sent
+            sent = [m.model_dump() for m in history]
             conversation = await asyncio.to_thread(
-                tokenizer.apply_chat_template,
-                [m.model_dump() for m in history],
-                add_generation_prompt=True,
-                tokenize=False,
+                tokenizer.apply_chat_template, sent, add_generation_prompt=True, tokenize=False
             )
             text, usage = await self._generate_turn(model, tokenizer, conversation)
             usages.append(usage)
@@ -221,11 +237,10 @@ class TransformersBackend:
                 model, tokenizer, conversation, output_schema
             )
             usages.append(final_usage)
-            return ToolTurn(
-                LoopResult(text=final_text, tool_calls=loop_result.tool_calls),
-                combine_usage(usages),
-            )
-        return ToolTurn(loop_result, combine_usage(usages))
+            loop_result = LoopResult(text=final_text, tool_calls=loop_result.tool_calls)
+        # The guided redraft reuses the last turn's prompt, so `sent` covers it too.
+        context = await asyncio.to_thread(_context_report, model, tokenizer, messages, sent)
+        return ToolTurn(loop_result, combine_usage(usages), context=context)
 
     async def stream_chat(
         self,
@@ -279,11 +294,12 @@ class TransformersBackend:
                 completion_ids = outputs[0][input_len:]
                 final = tokenizer.decode(completion_ids, skip_special_tokens=True)
                 usage = TokenUsage(prompt_tokens=input_len, completion_tokens=len(completion_ids))
+                context = await asyncio.to_thread(_context_report, model, tokenizer, messages)
             except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
                 yield ChatChunk(done=True, error=str(e))
                 return
             yield ChatChunk(delta=final)
-            yield ChatChunk(done=True, usage=usage)
+            yield ChatChunk(done=True, usage=usage, context=context)
             return
         try:
             inputs = tokenizer.apply_chat_template(
@@ -328,9 +344,11 @@ class TransformersBackend:
                         tokenizer, completion_text, add_special_tokens=False
                     )
                     completion_tokens = len(encoded["input_ids"])
+                context = await asyncio.to_thread(_context_report, model, tokenizer, messages)
                 yield ChatChunk(
                     done=True,
                     usage=TokenUsage(prompt_tokens=input_len, completion_tokens=completion_tokens),
+                    context=context,
                 )
         except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
             yield ChatChunk(done=True, error=str(e))

@@ -29,6 +29,9 @@ class _FakeLlama:
     def n_ctx(self) -> int:
         return self._n_ctx
 
+    def n_ctx(self) -> int:
+        return 4096
+
     def tokenize(self, data: bytes, add_bos: bool = True) -> list[int]:
         # One "token" per whitespace-separated word -- good enough to test the
         # wiring, not a real tokenizer.
@@ -91,6 +94,7 @@ def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
     assert [c.delta for c in chunks] == ["Hel", "lo", ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
+    assert [m.kind for m in chunks[-1].context.messages] == ["user"]
 
 
 def test_stream_chat_converts_generation_error_to_a_terminal_error_chunk(monkeypatch):
@@ -184,6 +188,10 @@ def test_stream_chat_with_tools_executes_the_call_and_streams_the_final_text(mon
     llama = llama_cpp_backend._CACHE.get("/tmp/fake.gguf")
     tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
     assert tool_messages == [{"role": "tool", "tool_call_id": "call_1", "content": "5"}]
+    # The context is that last turn's messages, against the loaded window.
+    assert [m.kind for m in done.context.messages] == ["user", "assistant", "tool"]
+    assert done.context.window == 4096
+    assert done.context.messages[0].tokens == 5  # "What is 2 + 3?" in the fake's words
 
 
 class _FakeFailsAfterToolLlama(_FakeToolLlama):
