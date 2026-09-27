@@ -82,6 +82,33 @@ def test_garbage_then_reply_retries():
     assert any("That was not valid JSON." in m.content for m in seen[-1])
 
 
+def test_schema_conforming_turn_is_the_final_reply():
+    # With an output_schema the tool instruction asks for a schema-shaped final
+    # reply, so a conforming object ends the loop; a non-conforming one is retried.
+    schema = {
+        "type": "object",
+        "required": ["answer"],
+        "properties": {"answer": {"type": "integer"}},
+    }
+    seen: list[list[ChatMessage]] = []
+    turns = [
+        '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
+        '{"answer": "five"}',
+        'Here you go: {"answer": 5}',
+    ]
+
+    async def generate(history: list[ChatMessage]) -> str:
+        seen.append(list(history))
+        return turns.pop(0)
+
+    result = asyncio.run(run_tool_loop(generate, _messages(), _specs(), output_schema=schema))
+
+    assert result.text == '{"answer": 5}'
+    assert result.tools_called == ["calculator"]
+    assert len(seen) == 3
+    assert any("That was not valid JSON." in m.content for m in seen[-1])
+
+
 def test_always_tool_calls_stops_after_max_iterations():
     calls: list[list[ChatMessage]] = []
 

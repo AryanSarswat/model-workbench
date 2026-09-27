@@ -131,7 +131,13 @@ class HFInferenceAPIBackend:
                     )
                     events = ToolEvents()
                     loop = asyncio.create_task(
-                        run_tool_loop(_generate, prompt_messages, tools, on_event=events.emit)
+                        run_tool_loop(
+                            _generate,
+                            prompt_messages,
+                            tools,
+                            on_event=events.emit,
+                            output_schema=output_schema,
+                        )
                     )
                     async for event in events.stream(loop):
                         yield event

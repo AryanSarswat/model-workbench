@@ -8,6 +8,7 @@ system|user|assistant.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 
@@ -15,7 +16,12 @@ from pydantic import BaseModel
 
 from app.errors import WorkbenchError
 from app.inference.schemas import ChatChunk, ChatMessage, ToolCallRecord, ToolCallStart
-from app.inference.structured_output import PromptJsonRetrier, TextReply
+from app.inference.structured_output import (
+    PromptJsonRetrier,
+    TextReply,
+    extract_json_object,
+    matches_schema,
+)
 from app.tools import Tool, ToolSpec, get_enabled_tool
 
 _RETRY_MESSAGE = (
@@ -87,10 +93,14 @@ async def run_tool_loop(
     tools: list[ToolSpec],
     max_iterations: int = 5,
     on_event: ToolEventSink | None = None,
+    output_schema: dict | None = None,
 ) -> LoopResult:
     """Run up to max_iterations model turns until a final reply, else return the
     last raw text. Tool results, unknown-tool errors, and JSON retries are fed
     back as user-role messages; a raising tool yields an "Error: ..." result.
+
+    With output_schema, a turn whose JSON object conforms to it (and is not a tool
+    call) is also a final reply, since the tool instruction asks for that shape.
 
     `messages` must already carry the tool instruction from
     PromptJsonRetrier.build_tool_messages (the transformers backend renders its
@@ -107,6 +117,9 @@ async def run_tool_loop(
         if isinstance(parsed, TextReply):
             return LoopResult(text=parsed.text, tool_calls=tool_calls)
         if parsed is None:
+            obj = extract_json_object(last_text) if output_schema is not None else None
+            if obj is not None and matches_schema(obj, output_schema):
+                return LoopResult(text=json.dumps(obj), tool_calls=tool_calls)
             history.append(ChatMessage(role="user", content=_RETRY_MESSAGE))
             continue
         try:

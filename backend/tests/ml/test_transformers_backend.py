@@ -477,13 +477,9 @@ def _conforming_schema() -> dict:
 
 def test_tool_loop_conforming_draft_skips_guided_turn(monkeypatch):
     # After the tool call the model emits the schema-shaped answer directly;
-    # the loop treats it as a non-tool turn and retries, so all five loop
-    # turns run -- but the conforming draft returns as-is, no guided turn.
+    # it ends the loop and returns as-is, no guided turn.
     scripted = [
         '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
-        '{"answer": 5}',
-        '{"answer": 5}',
-        '{"answer": 5}',
         '{"answer": 5}',
     ]
     schema = _conforming_schema()
@@ -506,7 +502,7 @@ def test_tool_loop_conforming_draft_skips_guided_turn(monkeypatch):
 
     assert [c.delta for c in chunks[-2:]] == ['{"answer": 5}', ""]
     assert chunks[-1].done is True
-    assert len(model.generate_calls) == 5
+    assert len(model.generate_calls) == 2
     assert all("logits_processor" not in call for call in model.generate_calls)
     assert built == []
     # The schema instruction rode the single template-built prompt.

@@ -259,9 +259,6 @@ def test_stream_chat_with_tools_and_schema_skips_schema_loop_when_draft_conforms
     script = [
         '{"tool": "calculator", "arguments": {"expression": "6 * 7"}}',
         '{"answer": 42}',
-        '{"answer": 42}',
-        '{"answer": 42}',
-        '{"answer": 42}',
     ]
     calls = []
 
@@ -273,12 +270,12 @@ def test_stream_chat_with_tools_and_schema_skips_schema_loop_when_draft_conforms
 
     chunks = _run_schema_chat(backend, _SCHEMA, tools=_tools())
 
-    # The tool loop's draft already conformed, so no schema-loop turn ran:
-    # five tool-loop turns, zero schema-loop turns.
+    # The conforming draft ended the tool loop and no schema-loop turn ran:
+    # two tool-loop turns, zero schema-loop turns.
     assert [c.delta for c in chunks[-2:]] == ['{"answer": 42}', ""]
     assert chunks[-1].done is True
     assert chunks[-1].error is None
-    assert len(calls) == 5
+    assert len(calls) == 2
 
 
 def test_stream_chat_with_tools_and_schema_constrains_the_final_reply(monkeypatch):
