@@ -45,9 +45,7 @@ def _load() -> None:
     _registry.clear()
     for module_name in _TOOL_MODULE_NAMES:
         module = importlib.import_module(module_name)
-        _registry[module.TOOL_SPEC.name] = Tool(
-            spec=module.TOOL_SPEC, run_fn=module.run
-        )
+        _registry[module.TOOL_SPEC.name] = Tool(spec=module.TOOL_SPEC, run_fn=module.run)
 
 
 _load()

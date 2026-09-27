@@ -50,7 +50,9 @@ def _run_stream_chat(backend: HFInferenceAPIBackend) -> list[ChatChunk]:
 def _run_tool_chat(backend: HFInferenceAPIBackend) -> list[ChatChunk]:
     async def _collect() -> list[ChatChunk]:
         messages = [ChatMessage(role="user", content="What is 2 + 3?")]
-        return [chunk async for chunk in backend.stream_chat("some/model", messages, tools=_tools())]
+        return [
+            chunk async for chunk in backend.stream_chat("some/model", messages, tools=_tools())
+        ]
 
     return asyncio.run(_collect())
 
@@ -135,9 +137,7 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     # The real calculator ran and its result reached the model on the next turn.
-    assert any(
-        "Tool 'calculator' returned: 5" in m["content"] for m in sent_messages[-1]
-    )
+    assert any("Tool 'calculator' returned: 5" in m["content"] for m in sent_messages[-1])
 
 
 def test_stream_chat_with_tools_converts_hf_error_to_a_terminal_error_chunk(monkeypatch):
@@ -181,9 +181,7 @@ _SCHEMA = {
 }
 
 
-def _run_schema_chat(
-    backend: HFInferenceAPIBackend, schema: dict, tools=None
-) -> list[ChatChunk]:
+def _run_schema_chat(backend: HFInferenceAPIBackend, schema: dict, tools=None) -> list[ChatChunk]:
     async def _collect() -> list[ChatChunk]:
         messages = [ChatMessage(role="user", content="Answer with JSON.")]
         return [
@@ -232,9 +230,7 @@ def test_stream_chat_with_schema_retries_garbage_then_succeeds(monkeypatch):
     assert chunks[-1].done is True
     assert chunks[-1].retries == 1
     # The retry fed error feedback back before the successful turn.
-    assert any(
-        "required schema" in m["content"] for m in sent_messages[-1] if m["role"] == "user"
-    )
+    assert any("required schema" in m["content"] for m in sent_messages[-1] if m["role"] == "user")
 
 
 def test_stream_chat_with_schema_returns_last_text_when_turns_run_out(monkeypatch):

@@ -65,8 +65,7 @@ def test_build_tool_messages_keeps_existing_system_first():
 
 def test_parse_tool_call_with_surrounding_chatter():
     parsed = PromptJsonRetrier().parse_tool_call_or_reply(
-        'Sure, computing that: {"tool": "calculator", '
-        '"arguments": {"expression": "2+3"}} done'
+        'Sure, computing that: {"tool": "calculator", "arguments": {"expression": "2+3"}} done'
     )
 
     assert parsed == ToolCall(tool_name="calculator", arguments={"expression": "2+3"})

@@ -53,9 +53,7 @@ def _seed_session() -> int:
 def _seed_message(session_id: int, role: str, content: str, sequence: int) -> None:
     with Session(_test_engine) as session:
         session.add(
-            ChatMessageRecord(
-                session_id=session_id, role=role, content=content, sequence=sequence
-            )
+            ChatMessageRecord(session_id=session_id, role=role, content=content, sequence=sequence)
         )
         session.commit()
 
@@ -154,7 +152,12 @@ def test_stream_with_session_stores_only_the_new_user_turn():
 
     assert response.status_code == 200
     stored = [(m.role, m.content) for m in _messages_in_db(session_id)]
-    assert stored == [("user", "hi"), ("assistant", "Hello"), ("user", "again"), ("assistant", "Hello")]
+    assert stored == [
+        ("user", "hi"),
+        ("assistant", "Hello"),
+        ("user", "again"),
+        ("assistant", "Hello"),
+    ]
 
 
 def test_stream_error_persists_no_assistant_reply():

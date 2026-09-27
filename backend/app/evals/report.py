@@ -97,9 +97,7 @@ def build_eval_report(session: Session) -> list[EvalReportRow]:
                 ),
                 avg_ttft_ms=sum(ttft_ms) / len(ttft_ms) if ttft_ms else None,
                 structured_output_reliability=(
-                    sum(schema_assertions) / len(schema_assertions)
-                    if schema_assertions
-                    else None
+                    sum(schema_assertions) / len(schema_assertions) if schema_assertions else None
                 ),
                 tool_calling_reliability=(
                     sum(tool_assertions) / len(tool_assertions) if tool_assertions else None

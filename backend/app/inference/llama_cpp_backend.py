@@ -96,9 +96,7 @@ def _build_grammar(output_schema: dict) -> LlamaGrammar:
         # a well-formed but unrecognized schema; AttributeError/TypeError cover
         # non-object or non-serializable input, which from_json_schema/json
         # reject with those instead.
-        raise WorkbenchError(
-            400, "invalid_output_schema", f"invalid output_schema: {e}"
-        ) from None
+        raise WorkbenchError(400, "invalid_output_schema", f"invalid output_schema: {e}") from None
 
 
 class LlamaCppBackend:
@@ -169,9 +167,7 @@ class LlamaCppBackend:
                 content = message.get("content") or ""
                 parsed = retrier.parse_tool_call_or_reply(content) if content else None
                 if not isinstance(parsed, ToolCall):
-                    return LoopResult(text=content, tool_calls=executed), combine_usage(
-                        usages
-                    )
+                    return LoopResult(text=content, tool_calls=executed), combine_usage(usages)
                 history.append(dict(message))
                 result = await _run_tool(parsed.tool_name, parsed.arguments, executed, on_event)
                 history.append({"role": "tool", "tool_call_id": "", "content": result})

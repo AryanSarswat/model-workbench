@@ -142,14 +142,20 @@ def test_build_eval_report_reliability_none_vs_computed_and_avg_tokens_per_sec()
         run = _run(session)
 
         metric_a = ResponseMetricRecord(
-            model_id="some/model", backend="api", latency_ms=100.0, ram_used_gb=1.0,
+            model_id="some/model",
+            backend="api",
+            latency_ms=100.0,
+            ram_used_gb=1.0,
             tokens_per_sec=10.0,
         )
         session.add(metric_a)
         session.commit()
         session.refresh(metric_a)
         metric_b = ResponseMetricRecord(
-            model_id="some/model", backend="api", latency_ms=100.0, ram_used_gb=1.0,
+            model_id="some/model",
+            backend="api",
+            latency_ms=100.0,
+            ram_used_gb=1.0,
             tokens_per_sec=20.0,
         )
         session.add(metric_b)

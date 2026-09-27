@@ -79,9 +79,7 @@ def test_get_memory_usage_reports_real_ram_snapshot():
 
 
 def test_get_memory_usage_reports_none_vram_without_nvidia():
-    with patch(
-        "app.config._detect_gpu", return_value=GPUInfo(kind="apple_silicon", vram_gb=None)
-    ):
+    with patch("app.config._detect_gpu", return_value=GPUInfo(kind="apple_silicon", vram_gb=None)):
         usage = get_memory_usage()
     assert usage.vram_used_gb is None
 

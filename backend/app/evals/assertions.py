@@ -82,6 +82,4 @@ def _run_one(
         passed = extract_json_object(response) is not None
         detail = "" if passed else "no JSON object found in response"
         return AssertionResult(type=assertion.type, passed=passed, detail=detail)
-    raise WorkbenchError(
-        400, "unsupported_assertion", f"Unknown assertion type: {assertion.type}"
-    )
+    raise WorkbenchError(400, "unsupported_assertion", f"Unknown assertion type: {assertion.type}")

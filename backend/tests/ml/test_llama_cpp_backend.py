@@ -53,7 +53,9 @@ def _run_tool_chat(backend: LlamaCppBackend) -> list[ChatChunk]:
     async def _collect() -> list[ChatChunk]:
         messages = [ChatMessage(role="user", content="What is 2 + 3?")]
         tools = [get_tool("calculator").spec]
-        return [chunk async for chunk in backend.stream_chat("whatever/model", messages, tools=tools)]
+        return [
+            chunk async for chunk in backend.stream_chat("whatever/model", messages, tools=tools)
+        ]
 
     return asyncio.run(_collect())
 
@@ -288,9 +290,7 @@ _SCHEMA = {
 }
 
 
-def _run_schema_chat(
-    backend: LlamaCppBackend, schema: dict, tools=None
-) -> list[ChatChunk]:
+def _run_schema_chat(backend: LlamaCppBackend, schema: dict, tools=None) -> list[ChatChunk]:
     async def _collect() -> list[ChatChunk]:
         messages = [ChatMessage(role="user", content="hi")]
         return [
@@ -397,9 +397,7 @@ class _FakeSchemaToolLlama(_FakeLlama):
         self.grammars: list = []
         self.turns = 0
 
-    def create_chat_completion(
-        self, messages, stream=True, tools=None, tool_choice=None, **kwargs
-    ):
+    def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None, **kwargs):
         assert stream is False
         self.grammars.append(kwargs.get("grammar"))
         self.turns += 1

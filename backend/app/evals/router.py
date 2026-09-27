@@ -123,9 +123,7 @@ def update_eval_result(
 ) -> EvalResult:
     result = session.get(EvalResult, result_id)
     if result is None:
-        raise WorkbenchError(
-            404, "eval_result_not_found", f"No eval result with id {result_id}."
-        )
+        raise WorkbenchError(404, "eval_result_not_found", f"No eval result with id {result_id}.")
     result.manual_verdict = body.manual_verdict
     result.manual_notes = body.manual_notes
     session.add(result)

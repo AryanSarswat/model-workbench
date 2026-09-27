@@ -77,9 +77,7 @@ def test_turn_recorder_collects_text_terminal_metadata_and_last_error():
     assert recorder.first_chunk_at is None  # an empty delta is not a first token
     recorder.observe(ChatChunk(delta="Hel"))
     recorder.observe(ChatChunk(delta="lo"))
-    recorder.observe(
-        ChatChunk(done=True, usage=usage, tools_called=["calculator"], retries=1)
-    )
+    recorder.observe(ChatChunk(done=True, usage=usage, tools_called=["calculator"], retries=1))
 
     assert recorder.text == "Hello"
     assert recorder.first_chunk_at is not None

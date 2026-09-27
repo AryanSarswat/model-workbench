@@ -11,7 +11,9 @@ from app.downloads import events
 from app.models import DownloadJob
 from tests.test_downloads import client
 
-_engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+_engine = create_engine(
+    "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+)
 
 
 def _session() -> Session:

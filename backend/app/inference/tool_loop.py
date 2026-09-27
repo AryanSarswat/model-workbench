@@ -126,8 +126,6 @@ async def run_tool_loop(
         call = await run_tool(tool, parsed.arguments, on_event)
         tool_calls.append(call)
         history.append(
-            ChatMessage(
-                role="user", content=f"Tool '{parsed.tool_name}' returned: {call.result}"
-            )
+            ChatMessage(role="user", content=f"Tool '{parsed.tool_name}' returned: {call.result}")
         )
     return LoopResult(text=last_text, tool_calls=tool_calls)

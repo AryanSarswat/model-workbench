@@ -8,7 +8,9 @@ from app.models import DownloadJob, EvalRun
 
 
 def test_startup_fails_jobs_a_restart_interrupted_and_leaves_finished_ones_alone():
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         session.add_all(
@@ -27,7 +29,11 @@ def test_startup_fails_jobs_a_restart_interrupted_and_leaves_finished_ones_alone
     with Session(engine) as session:
         jobs = {j.repo_id: j for j in session.exec(select(DownloadJob)).all()}
         runs = session.exec(select(EvalRun).order_by(EvalRun.id)).all()
-    assert [jobs[r].status for r in ("a/pending", "a/downloading", "a/done")] == ["failed", "failed", "completed"]
+    assert [jobs[r].status for r in ("a/pending", "a/downloading", "a/done")] == [
+        "failed",
+        "failed",
+        "completed",
+    ]
     assert "restart" in jobs["a/downloading"].error
     assert jobs["a/done"].error is None
     assert [r.status for r in runs] == ["failed", "completed"]
