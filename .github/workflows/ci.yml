@@ -25,6 +25,9 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Check formatting
+        run: uv run ruff format --check .
+
       # Application suite only -- ML backend tests (tests/ml/) run locally via
       # `make test-ml`, never in CI (see Makefile for why: --ignore, not -m).
       - name: Test with coverage

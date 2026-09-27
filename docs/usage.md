@@ -54,7 +54,8 @@ make fe-build   # production build into frontend/dist/
 make test      # application suite (what CI runs) -- skips backend/tests/ml/
 make test-ml   # local-inference backend tests (torch/llama.cpp), run locally
 make test-all  # everything together
-make lint      # cd backend && uv run ruff check .
+make lint      # cd backend && uv run ruff check . && uv run ruff format --check .
+make format    # cd backend && uv run ruff format .
 ```
 
 ## Run the API in Docker (alternative to the venv)
