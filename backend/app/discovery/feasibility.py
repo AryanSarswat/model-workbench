@@ -1,6 +1,7 @@
 """Model-feasibility estimate: will this model actually fit on this machine?
 
-Two estimation methods, matching docs/architecture.md §8:
+Two estimation methods, matching docs/architecture.md's "Discovery, downloads, and
+feasibility" section:
 - Each GGUF file: estimate from that file's size.
 - The transformers path: estimate from parameter_count x bytes-per-dtype (safetensors
   metadata).

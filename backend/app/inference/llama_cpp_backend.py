@@ -1,8 +1,8 @@
 """Local GGUF inference via llama-cpp-python -- runs on any hardware (CPU fallback).
 
-Loaded models stay in a process-wide cache (reloading multi-GB weights every turn
-would be far too slow), so aclose() is a no-op. No eviction: a deliberate single-user
-simplification.
+The loaded model stays in a process-wide LoadedModelCache (reloading multi-GB weights
+every turn would be far too slow), so aclose() is a no-op. The cache holds one model:
+loading a different file drops the previous one, and deleting a download evicts it.
 """
 
 from __future__ import annotations

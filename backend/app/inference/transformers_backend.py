@@ -1,8 +1,9 @@
 """Local transformers inference from a downloaded snapshot -- fallback for models
 without a GGUF build (MPS/CUDA/CPU auto-detected).
 
-Same lifecycle as LlamaCppBackend: loaded snapshots stay in a process-wide cache with
-no eviction, so aclose() is a no-op.
+Same lifecycle as LlamaCppBackend: the loaded snapshot stays in a one-model
+LoadedModelCache (evicted on switch or delete, releasing CUDA/MPS memory), so aclose()
+is a no-op.
 
 Generation runs until the model's EOS token -- no token cap. trust_remote_code stays
 off: a snapshot is an arbitrary user-chosen repo, and loading it must never execute

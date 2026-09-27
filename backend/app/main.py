@@ -1,4 +1,4 @@
-"""FastAPI app entrypoint. Routers are registered here as each feature area lands."""
+"""FastAPI app entrypoint: registers every feature area's router and the error handler."""
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
