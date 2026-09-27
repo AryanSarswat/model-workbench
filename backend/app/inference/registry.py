@@ -11,12 +11,14 @@ The local backends live behind the `local` extra (torch/llama.cpp) and are impor
 lazily -- importing this module must never require them, so the app boots and the
 application suite passes in a slim env without them. Resolution (pure DB) still runs
 first, so undownloaded-model 404s stay slim-safe; only constructing the backend needs
-the extra.
+the extra. Resolving a local model also stamps its `last_used_at`: every caller is a
+chat turn, eval run, or eval judge about to run it.
 """
 
 from __future__ import annotations
 
 import importlib.util
+from datetime import UTC, datetime
 
 from sqlmodel import Session, select
 
@@ -103,7 +105,7 @@ def _resolve_gguf_path(model_id: str) -> str:
             message=f"Multiple GGUF quants of '{repo_id}' are downloaded -- pick one.",
             details={"available": available, "hint": "use 'repo_id:filename' as model_id"},
         )
-    return records[0].local_path
+    return _mark_used(records[0])
 
 
 def _resolve_snapshot_dir(model_id: str) -> str:
@@ -127,4 +129,13 @@ def _resolve_snapshot_dir(model_id: str) -> str:
             code="local_model_not_found",
             message=f"No downloaded transformers snapshot matches '{model_id}' -- download it first.",
         )
-    return record.local_path
+    return _mark_used(record)
+
+
+def _mark_used(record: DownloadedModelRecord) -> str:
+    """Stamps the uniquely resolved record's last_used_at and returns its path."""
+    with Session(engine) as session:
+        record.last_used_at = datetime.now(UTC)
+        session.add(record)
+        session.commit()
+        return record.local_path
