@@ -33,6 +33,13 @@ jobs:
       - name: Test with coverage
         run: uv run pytest tests --ignore=tests/ml --cov --cov-report=term-missing
 
+      # The frontend's API types are generated from this snapshot (`make fe-types`);
+      # a backend model change that wasn't regenerated fails here.
+      - name: Check OpenAPI snapshot is current
+        run: |
+          uv run python -m scripts.export_openapi > ../frontend/openapi.json
+          git diff --exit-code ../frontend/openapi.json
+
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -81,6 +88,13 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # schema.gen.ts must match the committed OpenAPI snapshot, which the backend job
+      # checks against the API itself. Regenerate both with `make fe-types`.
+      - name: Check generated API types are current
+        run: |
+          npm run gen:types
+          git diff --exit-code src/api/schema.gen.ts
 
       - name: Lint
         run: npm run lint

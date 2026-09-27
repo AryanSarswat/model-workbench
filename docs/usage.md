@@ -72,9 +72,9 @@ make docker-run     # docker run --rm -p 8000:8000 model-workbench-backend
 ## Before opening a PR
 
 ```bash
-make ci   # backend lint+test+coverage, frontend lint/typecheck/test/build, then a Docker
-          # build/boot/health check -- the same jobs GitHub Actions runs, so a pass here
-          # means the PR checks will pass
+make ci   # backend lint+test+coverage, generated-API-types check, frontend
+          # lint/typecheck/test/build, then a Docker build/boot/health check -- the same
+          # jobs GitHub Actions runs, so a pass here means the PR checks will pass
 ```
 
 Note: the container's `data/` directory is ephemeral (lost when the container is removed).

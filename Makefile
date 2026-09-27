@@ -45,6 +45,8 @@ ci:
 	cd backend && uv run ruff check .
 	cd backend && uv run ruff format --check .
 	cd backend && uv run pytest --cov --cov-report=term-missing
+	cd backend && uv run python -m scripts.export_openapi > ../frontend/openapi.json
+	git diff --exit-code frontend/openapi.json
 	$(MAKE) fe-ci
 	$(MAKE) docker-ci
 
@@ -79,6 +81,8 @@ fe-types:
 # Same sequence as the `frontend` CI job.
 fe-ci:
 	cd frontend && npm ci
+	cd frontend && npm run gen:types
+	git diff --exit-code frontend/src/api/schema.gen.ts
 	$(MAKE) fe-lint
 	$(MAKE) fe-test
 	$(MAKE) fe-build
