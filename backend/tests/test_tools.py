@@ -72,7 +72,7 @@ def test_web_fetch_rejects_unsupported_scheme():
 
 
 def test_registry_list_get_resolve():
-    assert {tool.spec.name for tool in list_tools()} == {"calculator", "web_fetch"}
+    assert {tool.spec.name for tool in list_tools()} == {"calculator", "web_fetch", "web_search"}
     assert get_tool("calculator").spec.name == "calculator"
     assert resolve_tool_names(None) == []
     assert resolve_tool_names([]) == []
@@ -85,4 +85,4 @@ def test_registry_list_get_resolve():
 
 def test_reload_tools_keeps_registry_working():
     reload_tools()
-    assert {tool.spec.name for tool in list_tools()} == {"calculator", "web_fetch"}
+    assert {tool.spec.name for tool in list_tools()} == {"calculator", "web_fetch", "web_search"}

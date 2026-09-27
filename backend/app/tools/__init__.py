@@ -36,7 +36,7 @@ class Tool:
 
 # Explicit module list -- no filesystem scanning, so stray files can never be
 # imported as tools.
-_TOOL_MODULE_NAMES = ("app.tools.calculator", "app.tools.web_fetch")
+_TOOL_MODULE_NAMES = ("app.tools.calculator", "app.tools.web_fetch", "app.tools.web_search")
 
 _registry: dict[str, Tool] = {}
 
