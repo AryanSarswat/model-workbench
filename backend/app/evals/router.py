@@ -11,15 +11,14 @@ import json
 import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from app.config import get_settings
 from app.dataset.store import TestCase, load_cases
-from app.db import get_session
+from app.db import SessionDep
 from app.errors import WorkbenchError
 from app.evals.report import build_eval_report
 from app.evals.schemas import EvalReportRow, EvalRunRequest, ManualVerdictUpdate
@@ -31,8 +30,6 @@ from app.models import EvalResult, EvalRun
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/evals", tags=["evals"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.post("/run")

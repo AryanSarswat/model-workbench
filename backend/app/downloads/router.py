@@ -13,14 +13,13 @@ import os
 import shutil
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app.db import get_session
+from app.db import SessionDep
 from app.discovery.hf_client import get_model_detail, get_snapshot_files
 from app.downloads.events import job_events
 from app.downloads.service import run_download, run_snapshot_download
@@ -36,8 +35,6 @@ from app.models import (
 )
 
 router = APIRouter(prefix="/models", tags=["downloads"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 class DownloadRequest(BaseModel):
