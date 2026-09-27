@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createCase, updateCase, deleteCase } from '../../api/endpoints'
+import { queryKeys } from '../../api/hooks'
 import type { TestCase, ToolSpec } from '../../api/types'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
@@ -39,7 +40,7 @@ export function CaseEditor({
   const saveMutation = useMutation({
     mutationFn: (testCase: TestCase) => (isNew ? createCase(testCase) : updateCase(testCase)),
     onSuccess: (saved) => {
-      void queryClient.invalidateQueries({ queryKey: ['dataset', 'cases'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.datasetCases })
       onSaved(saved)
     },
   })
@@ -47,7 +48,7 @@ export function CaseEditor({
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteCase(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['dataset', 'cases'] })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.datasetCases })
       onDeleted()
     },
   })

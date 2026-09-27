@@ -4,16 +4,25 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { getBackends, getHardware, getHfKeyStatus, listDownloaded, listTools } from './endpoints'
 import { getSse } from './sse'
-import type { DownloadJob } from './types'
+import type { DiscoverSort, DownloadJob } from './types'
 
-// One key per resource, so a change made on one page (a delete, a finished download,
-// a tools reload) refreshes every page that shows it.
+// Every query key in the app, one per resource, so a change made on one page (a delete,
+// a finished download, a saved case) refreshes every page that shows it.
 export const queryKeys = {
   hardware: ['config', 'hardware'] as const,
   hfKeyStatus: ['config', 'hf-api-key'] as const,
   downloadedModels: ['models', 'downloaded'] as const,
+  discoverModels: (sort: DiscoverSort) => ['models', 'discover', sort] as const,
+  model: (modelId: string) => ['models', modelId] as const,
+  feasibility: (modelId: string) => ['models', modelId, 'feasibility'] as const,
   tools: ['tools'] as const,
   backends: ['backends'] as const,
+  datasetCases: ['dataset', 'cases'] as const,
+  evalReport: ['evals', 'report'] as const,
+  activeEvalRun: ['evals', 'active-run'] as const,
+  evalRun: (runId: number) => ['eval-review', 'run', runId] as const,
+  evalRunResults: (runId: number) => ['eval-review', 'results', runId] as const,
+  testCase: (caseId: string) => ['eval-review', 'case', caseId] as const,
 }
 
 // Hardware doesn't change while the app is open.

@@ -2,6 +2,7 @@
 // use the verdict thresholds the feasibility report carries, so they line up with the
 // verdicts the API already computed.
 import { getFeasibility } from '../../api/endpoints'
+import { queryKeys } from '../../api/hooks'
 import type { FeasibilityReport, FeasibilityVerdict } from '../../api/types'
 import type { ChipTone } from '../../components/Chip'
 
@@ -92,7 +93,7 @@ const FEASIBILITY_STALE_TIME = 10 * 60 * 1000
 // pages hit the same cache entry with the same staleTime/retry instead of racing configs.
 export function feasibilityQueryOptions(modelId: string) {
   return {
-    queryKey: ['models', modelId, 'feasibility'] as const,
+    queryKey: queryKeys.feasibility(modelId),
     queryFn: () => getFeasibility(modelId),
     staleTime: FEASIBILITY_STALE_TIME,
     retry: false,

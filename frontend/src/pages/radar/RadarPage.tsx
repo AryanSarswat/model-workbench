@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { ApiError } from '../../api/client'
 import { discoverModels, modelPath } from '../../api/endpoints'
-import { useHardware } from '../../api/hooks'
+import { queryKeys, useHardware } from '../../api/hooks'
 import type { DiscoverSort, DiscoveredModel, FeasibilityReport } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
@@ -51,7 +51,7 @@ export default function RadarPage() {
   const [filterText, setFilterText] = useState('')
 
   const hardwareQuery = useHardware()
-  const modelsQuery = useQuery({ queryKey: ['models', 'discover', sort], queryFn: () => discoverModels(sort, 20) })
+  const modelsQuery = useQuery({ queryKey: queryKeys.discoverModels(sort), queryFn: () => discoverModels(sort, 20) })
   const models = modelsQuery.data ?? []
 
   const feasibilityResults = useQueries({

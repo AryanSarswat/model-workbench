@@ -3,17 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { getCase, getEvalRun, getEvalRunResults, updateEvalResult } from '../../api/endpoints'
 import type { ManualVerdictUpdate } from '../../api/types'
-import { reportKey } from '../evals/activeRun'
-
-const reviewKeys = {
-  run: (runId: number) => ['eval-review', 'run', runId] as const,
-  results: (runId: number) => ['eval-review', 'results', runId] as const,
-  case: (caseId: string) => ['eval-review', 'case', caseId] as const,
-}
+import { queryKeys } from '../../api/hooks'
 
 export function useEvalRun(runId: number) {
   return useQuery({
-    queryKey: reviewKeys.run(runId),
+    queryKey: queryKeys.evalRun(runId),
     queryFn: () => getEvalRun(runId),
     refetchInterval: (query) => (query.state.data?.status === 'running' ? 2000 : false),
   })
@@ -27,13 +21,13 @@ export function useEvalRunResults(runId: number, isRunning: boolean) {
   const wasRunning = useRef(isRunning)
   useEffect(() => {
     if (wasRunning.current && !isRunning) {
-      queryClient.invalidateQueries({ queryKey: reviewKeys.results(runId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.evalRunResults(runId) })
     }
     wasRunning.current = isRunning
   }, [isRunning, runId, queryClient])
 
   return useQuery({
-    queryKey: reviewKeys.results(runId),
+    queryKey: queryKeys.evalRunResults(runId),
     queryFn: () => getEvalRunResults(runId),
     refetchInterval: isRunning ? 2000 : false,
   })
@@ -42,7 +36,7 @@ export function useEvalRunResults(runId: number, isRunning: boolean) {
 // The Prompt panel's fetch for the selected case. 404 means the case was since deleted
 // from the dataset -- the page shows a fallback message for that, not an error.
 export function useCase(caseId: string) {
-  return useQuery({ queryKey: reviewKeys.case(caseId), queryFn: () => getCase(caseId), retry: false })
+  return useQuery({ queryKey: queryKeys.testCase(caseId), queryFn: () => getCase(caseId), retry: false })
 }
 
 export function useUpdateEvalResult(runId: number) {
@@ -50,8 +44,8 @@ export function useUpdateEvalResult(runId: number) {
   return useMutation({
     mutationFn: ({ resultId, update }: { resultId: number; update: ManualVerdictUpdate }) => updateEvalResult(resultId, update),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: reviewKeys.results(runId) })
-      queryClient.invalidateQueries({ queryKey: reportKey })
+      queryClient.invalidateQueries({ queryKey: queryKeys.evalRunResults(runId) })
+      queryClient.invalidateQueries({ queryKey: queryKeys.evalReport })
     },
   })
 }
