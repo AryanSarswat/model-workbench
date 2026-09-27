@@ -9,7 +9,6 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 from huggingface_hub import AsyncInferenceClient
-from huggingface_hub.errors import HTTPError
 
 from app.inference.schemas import (
     BACKEND_CAPABILITIES,
@@ -184,5 +183,5 @@ class HFInferenceAPIBackend:
                         completion_tokens=completion_chunk.usage.completion_tokens,
                     )
             yield ChatChunk(done=True, usage=usage)
-        except HTTPError as e:
+        except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
             yield ChatChunk(done=True, error=str(e))
