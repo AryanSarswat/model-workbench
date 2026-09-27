@@ -4,6 +4,9 @@ from datetime import UTC, datetime
 
 from sqlmodel import Field, SQLModel
 
+# Statuses of a job that hasn't finished yet (vs. "completed" / "failed").
+ACTIVE_DOWNLOAD_STATUSES = ("pending", "downloading")
+
 
 class DownloadJob(SQLModel, table=True):
     __tablename__ = "download_jobs"

@@ -15,11 +15,10 @@ from sqlalchemy import or_
 from sqlmodel import Session, select
 
 from app import db
-from app.models import DownloadJob
+from app.models import ACTIVE_DOWNLOAD_STATUSES, DownloadJob
 
 POLL_SECONDS = 0.5
 HEARTBEAT_SECONDS = 15.0
-_ACTIVE = ("pending", "downloading")
 
 
 def _default_session() -> Session:
@@ -42,7 +41,7 @@ async def job_events(
         with session_factory() as session:
             query = select(DownloadJob).where(
                 or_(
-                    DownloadJob.status.in_(_ACTIVE),
+                    DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES),
                     DownloadJob.id > newest_at_connect,
                     DownloadJob.id.in_(list(sent)),
                 )

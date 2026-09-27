@@ -28,7 +28,12 @@ from app.errors import WorkbenchError
 from app.inference.gguf_header import describe_unsupported
 from app.inference.model_cache import evict_path
 from app.inference.registry import local_model_ids
-from app.models import DownloadedModel, DownloadedModelRecord, DownloadJob
+from app.models import (
+    ACTIVE_DOWNLOAD_STATUSES,
+    DownloadedModel,
+    DownloadedModelRecord,
+    DownloadJob,
+)
 
 router = APIRouter(prefix="/models", tags=["downloads"])
 
@@ -108,7 +113,7 @@ def list_download_jobs(session: SessionDep, active: bool = False) -> list[Downlo
     """Every download job, newest first; `active=true` keeps only pending/downloading."""
     query = select(DownloadJob)
     if active:
-        query = query.where(DownloadJob.status.in_(["pending", "downloading"]))
+        query = query.where(DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES))
     query = query.order_by(DownloadJob.created_at.desc(), DownloadJob.id.desc())
     return list(session.exec(query).all())
 
@@ -204,7 +209,7 @@ def _reject_duplicate(session: Session, repo_id: str, kind: str, filename: str |
             DownloadJob.repo_id == repo_id,
             DownloadJob.kind == kind,
             DownloadJob.filename == filename,
-            DownloadJob.status.in_(["pending", "downloading"]),
+            DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES),
         )
     ).first()
     if job is not None:

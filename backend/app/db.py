@@ -14,7 +14,7 @@ from pathlib import Path
 from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.models import DownloadJob, EvalRun
+from app.models import ACTIVE_DOWNLOAD_STATUSES, DownloadJob, EvalRun
 
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "workbench.db"
 engine = create_engine(f"sqlite:///{DB_PATH}")
@@ -31,7 +31,7 @@ def fail_interrupted_jobs(target: Engine = engine) -> None:
     now = datetime.now(UTC)
     with Session(target) as session:
         interrupted_downloads = select(DownloadJob).where(
-            DownloadJob.status.in_(["pending", "downloading"])
+            DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES)
         )
         for job in session.exec(interrupted_downloads):
             job.status = "failed"
