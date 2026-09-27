@@ -60,6 +60,7 @@ make setup          # cd backend && uv sync --extra dev
 make test            # run tests
 make lint            # ruff check
 make run             # run the API (from repo root)
+make dev             # API + Vite dev server together (Ctrl+C stops both)
 make docker-build    # build the backend image
 make docker-run      # run the backend image
 make fe-setup        # cd frontend && npm ci

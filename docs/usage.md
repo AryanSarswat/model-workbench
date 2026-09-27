@@ -33,6 +33,8 @@ Needs Node 22.22+ or 24 (CI uses Node 22).
 
 ```bash
 make fe-setup   # cd frontend && npm ci
+make dev        # both at once, in one terminal (Ctrl+C stops both)
+# or separately:
 make run        # terminal 1: the API on :8000
 make fe-dev     # terminal 2: Vite dev server on :5173
 ```
