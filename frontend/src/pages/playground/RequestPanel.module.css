@@ -115,3 +115,11 @@
   font-size: 13px;
   color: var(--ink-2);
 }
+
+@media (max-width: 1100px) {
+  .aside {
+    border-left: none;
+    border-top: 1px solid var(--rule);
+    overflow-y: visible;
+  }
+}
