@@ -82,14 +82,7 @@ def load_cases(category: str | None = None) -> list[TestCase]:
 
 
 def get_case(case_id: str) -> TestCase:
-    path = _case_path(case_id)
-    if not path.is_file():
-        raise WorkbenchError(
-            status_code=404,
-            code="test_case_not_found",
-            message=f"No test case with id {case_id!r}.",
-        )
-    return TestCase.model_validate_json(path.read_text())
+    return TestCase.model_validate_json(_existing_case_path(case_id).read_text())
 
 
 def create_case(case: TestCase) -> TestCase:
@@ -112,18 +105,16 @@ def update_case(case_id: str, case: TestCase) -> TestCase:
             code="test_case_id_mismatch",
             message=f"Path id {case_id!r} does not match body id {case.id!r}.",
         )
-    path = _case_path(case_id)
-    if not path.is_file():
-        raise WorkbenchError(
-            status_code=404,
-            code="test_case_not_found",
-            message=f"No test case with id {case_id!r}.",
-        )
+    path = _existing_case_path(case_id)
     path.write_text(case.model_dump_json(indent=2) + "\n")
     return case
 
 
 def delete_case(case_id: str) -> None:
+    _existing_case_path(case_id).unlink()
+
+
+def _existing_case_path(case_id: str) -> Path:
     path = _case_path(case_id)
     if not path.is_file():
         raise WorkbenchError(
@@ -131,7 +122,7 @@ def delete_case(case_id: str) -> None:
             code="test_case_not_found",
             message=f"No test case with id {case_id!r}.",
         )
-    path.unlink()
+    return path
 
 
 def _case_path(case_id: str) -> Path:
