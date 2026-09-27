@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -10,6 +11,28 @@ from app.tools import get_tool, list_tools, reload_tools, resolve_tool_names
 
 async def _run(name: str, args: dict) -> str:
     return await get_tool(name).run(args)
+
+
+@contextmanager
+def _serve_html_once(html: str):
+    """A local http server that answers one GET with `html`; yields its URL."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(html.encode())
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.handle_request, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}/"
+    finally:
+        server.server_close()
 
 
 def test_calculator_evaluates_arithmetic():
@@ -34,36 +57,40 @@ def test_calculator_errors_never_raise():
         assert result.startswith("Error: "), bad
 
 
-def test_web_fetch_reads_file_url(tmp_path):
-    target = tmp_path / "page.txt"
-    target.write_text("hello from disk")
-    result = asyncio.run(_run("web_fetch", {"url": target.as_uri()}))
-    assert result == "hello from disk"
+def test_web_fetch_rejects_file_urls(tmp_path):
+    # A fetched page can prompt-inject the model; file:// would let it read local
+    # secrets (e.g. backend/.env) and send them out in a second fetch.
+    secret = tmp_path / ".env"
+    secret.write_text("HF_TOKEN=hf_secret")
+
+    result = asyncio.run(_run("web_fetch", {"url": secret.as_uri()}))
+
+    assert result == "Error: unsupported URL scheme: file"
 
 
-def test_web_fetch_returns_a_pages_readable_text_not_its_markup(tmp_path):
+def test_web_fetch_returns_a_pages_readable_text_not_its_markup():
     # Raw HTML spends the whole character budget on <head>, CSS, scripts and menus.
-    page = tmp_path / "page.html"
-    page.write_text(
+    html = (
         "<html><head><title>T</title><style>body{color:red}</style>"
         "<script>var tracking = 1;</script></head>"
         "<body><nav>Home | About</nav><h1>Seattle forecast</h1>"
         "<p>Rain,   then\n clearing.</p><p>High 61°F</p></body></html>"
     )
 
-    result = asyncio.run(_run("web_fetch", {"url": page.as_uri()}))
+    with _serve_html_once(html) as url:
+        result = asyncio.run(_run("web_fetch", {"url": url}))
 
     assert result == "Seattle forecast\nRain, then clearing.\nHigh 61°F"
 
 
-def test_web_fetch_keeps_only_the_main_content_when_the_page_marks_it(tmp_path):
-    page = tmp_path / "wiki.html"
-    page.write_text(
+def test_web_fetch_keeps_only_the_main_content_when_the_page_marks_it():
+    html = (
         "<body><div>Deutsch</div><div>Español</div>"
         "<main><h1>Seattle</h1><p>A seaport city.</p></main><div>Privacy policy</div></body>"
     )
 
-    assert asyncio.run(_run("web_fetch", {"url": page.as_uri()})) == "Seattle\nA seaport city."
+    with _serve_html_once(html) as url:
+        assert asyncio.run(_run("web_fetch", {"url": url})) == "Seattle\nA seaport city."
 
 
 def test_web_fetch_identifies_as_a_browser_not_python_urllib():

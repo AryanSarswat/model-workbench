@@ -101,9 +101,7 @@ def test_always_tool_calls_stops_after_max_iterations():
     assert result.tools_called == ["calculator", "calculator", "calculator"]
 
 
-def test_two_different_tools_called_in_sequence_are_both_recorded(tmp_path):
-    page = tmp_path / "page.txt"
-    page.write_text("hello from the page")
+def test_two_different_tools_called_in_sequence_are_both_recorded():
     specs = [get_tool("calculator").spec, get_tool("web_fetch").spec]
     seen: list[list[ChatMessage]] = []
 
@@ -112,7 +110,7 @@ def test_two_different_tools_called_in_sequence_are_both_recorded(tmp_path):
         if len(seen) == 1:
             return '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}'
         if len(seen) == 2:
-            return f'{{"tool": "web_fetch", "arguments": {{"url": "{page.as_uri()}"}}}}'
+            return '{"tool": "web_fetch", "arguments": {"url": "gopher://example.com/"}}'
         return '{"reply": "done"}'
 
     result = asyncio.run(run_tool_loop(generate, _messages(), specs))
@@ -121,14 +119,14 @@ def test_two_different_tools_called_in_sequence_are_both_recorded(tmp_path):
     assert result.tools_called == ["calculator", "web_fetch"]
 
 
-def test_each_executed_call_keeps_its_arguments_and_the_result_the_model_saw(tmp_path):
+def test_each_executed_call_keeps_its_arguments_and_the_result_the_model_saw():
     # The UI needs what each call was asked and what it returned -- including a
     # failing fetch, whose "Error: ..." text is all the model ever saw.
-    missing = (tmp_path / "missing.txt").as_uri()
+    unfetchable = "gopher://example.com/"
     specs = [get_tool("calculator").spec, get_tool("web_fetch").spec]
     turns = [
         '{"tool": "calculator", "arguments": {"expression": "2 + 3"}}',
-        f'{{"tool": "web_fetch", "arguments": {{"url": "{missing}"}}}}',
+        f'{{"tool": "web_fetch", "arguments": {{"url": "{unfetchable}"}}}}',
         '{"reply": "done"}',
     ]
 
@@ -143,7 +141,7 @@ def test_each_executed_call_keeps_its_arguments_and_the_result_the_model_saw(tmp
         {"expression": "2 + 3"},
         "5",
     )
-    assert (fetch.name, fetch.arguments) == ("web_fetch", {"url": missing})
+    assert (fetch.name, fetch.arguments) == ("web_fetch", {"url": unfetchable})
     assert fetch.result.startswith("Error: ")
     assert all(call.duration_ms >= 0 for call in result.tool_calls)
 
