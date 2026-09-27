@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DownloadedModelRecord, DownloadJob, HardwareInfo } from '../../api/types'
+import { sseStream } from '../../test/sseStream'
 import LibraryPage from './LibraryPage'
 
 const hardware: HardwareInfo = {
@@ -43,7 +44,7 @@ function routeResponses(overrides: Record<string, Response> = {}) {
     '/api/config/hardware': Response.json(hardware),
     '/api/config/hf-api-key': Response.json({ is_set: false }),
     '/api/models/downloaded': Response.json([downloaded]),
-    '/api/models/downloads?active=true': Response.json([]),
+    '/api/models/downloads/events': sseStream().response,
     '/api/tools': Response.json([]),
   }
   return { ...base, ...overrides }
@@ -121,7 +122,7 @@ describe('LibraryPage', () => {
     expect(await screen.findByText('0 models · 0.0 GB')).toBeInTheDocument()
   })
 
-  it('surfaces a failed download once it drops out of the active-jobs list', async () => {
+  it('shows a download while it runs, then its error when the stream reports it failed', async () => {
     const failedJob: DownloadJob = {
       id: 42,
       repo_id: 'org/broken-model',
@@ -136,27 +137,17 @@ describe('LibraryPage', () => {
       created_at: '2026-09-25T00:00:00Z',
       updated_at: '2026-09-25T00:00:05Z',
     }
-    let activeJobsCallCount = 0
-    const responses = routeResponses({ '/api/models/downloaded': Response.json([]) })
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url === '/api/models/downloads?active=true') {
-        activeJobsCallCount += 1
-        // First poll: still downloading. Second poll (simulated below): it's gone.
-        return activeJobsCallCount === 1
-          ? Response.json([{ ...failedJob, status: 'downloading', error: null }])
-          : Response.json([])
-      }
-      if (url === '/api/models/downloads/42') return Response.json(failedJob)
-      return responses[url] ?? new Response('not mocked', { status: 500 })
+    const stream = sseStream()
+    const responses = routeResponses({
+      '/api/models/downloaded': Response.json([]),
+      '/api/models/downloads/events': stream.response,
     })
-    const queryClient = renderLibrary(fetchMock)
+    renderLibrary(vi.fn(async (url: string) => responses[url] ?? new Response('not mocked', { status: 500 })))
 
-    await screen.findByText('org/broken-model')
+    stream.send({ ...failedJob, status: 'downloading', error: null })
+    expect(await screen.findByText('org/broken-model')).toBeInTheDocument()
 
-    // Simulate the 1s poll picking up that the job is no longer active, instead of
-    // waiting on a real timer.
-    await queryClient.refetchQueries({ queryKey: ['library', 'downloadJobs'] })
-
+    stream.send(failedJob)
     expect(await screen.findByText(/Connection reset by peer/)).toBeInTheDocument()
   })
 })
