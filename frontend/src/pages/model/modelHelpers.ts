@@ -1,15 +1,11 @@
 // Pure helpers for the Model detail page: matching options to what's on disk or
 // downloading, and building the various playground/eval links.
 import type { BackendName, DownloadJob, DownloadedModelRecord, EvalReportRow, FeasibilityOption, ModelDetail } from '../../api/types'
-import { formatGb } from '../../lib/format'
+import { formatGb, formatParamCount } from '../../lib/format'
 
 export function splitModelId(id: string): { author: string; name: string } {
   const slash = id.indexOf('/')
   return slash === -1 ? { author: '', name: id } : { author: id.slice(0, slash), name: id.slice(slash + 1) }
-}
-
-export function formatParamCount(count: number): string {
-  return `${(count / 1e9).toFixed(1)}B params`
 }
 
 // The file-size or param-count subtitle shown next to an option's backend reason.

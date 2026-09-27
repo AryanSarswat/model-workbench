@@ -21,3 +21,20 @@ export function formatRelative(iso: string | null | undefined, now: Date = new D
   if (days < 30) return `${Math.round(days / 7)} wk ago`
   return `${Math.round(days / 30)} mo ago`
 }
+
+// 14_800_000_000 -> "14.8B params"
+export function formatParamCount(count: number): string {
+  return `${(count / 1e9).toFixed(1)}B params`
+}
+
+export function formatMs(ms: number | null): string {
+  return ms == null ? DASH : `${Math.round(ms)} ms`
+}
+
+export function formatSeconds(ms: number | null): string {
+  return ms == null ? DASH : `${(ms / 1000).toFixed(1)} s`
+}
+
+export function formatTokensPerSec(tokensPerSec: number | null): string {
+  return tokensPerSec == null ? DASH : `${tokensPerSec.toFixed(1)} tok/s`
+}

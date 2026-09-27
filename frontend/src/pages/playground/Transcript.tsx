@@ -5,8 +5,8 @@ import { Chip, type ChipTone } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { LiveDot } from '../../components/LiveDot'
 import { toolCallingChip } from '../../lib/backends'
+import { formatMs, formatSeconds, formatTokensPerSec } from '../../lib/format'
 import type { ChatTurn } from './chatReducer'
-import { formatMs, formatSeconds, formatTokensPerSec } from './format'
 import { backendDisplayLabel, shortModelName } from './modelOptions'
 import { parseSchemaJson } from './requestBuilder'
 import styles from './Transcript.module.css'
@@ -94,7 +94,7 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
           <span>TTFT {formatMs(turn.metrics?.ttftMs ?? null)}</span>
           <span>{formatTokensPerSec(turn.metrics?.tokensPerSec ?? null)}</span>
           <span>{turn.usage ? `${turn.usage.completion_tokens} tokens` : '— tokens'}</span>
-          <span>{turn.metrics ? formatSeconds(turn.metrics.totalMs) : '—'}</span>
+          <span>{formatSeconds(turn.metrics?.totalMs ?? null)}</span>
         </div>
       )}
 
