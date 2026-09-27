@@ -32,7 +32,7 @@ from app.inference.structured_output import (
     validate_output_schema,
 )
 from app.inference.tool_loop import LoopResult, ToolEvents, ToolEventSink, run_tool
-from app.tools import ToolSpec, get_tool
+from app.tools import ToolSpec, get_enabled_tool
 
 _CACHE: LoadedModelCache[Llama] = LoadedModelCache()
 _SENTINEL = object()
@@ -66,12 +66,17 @@ def _estimate_streaming_usage(
 
 
 async def _run_tool(
-    name: str, args: dict, executed: list[ToolCallRecord], on_event: ToolEventSink | None
+    name: str,
+    args: dict,
+    tools: list[ToolSpec],
+    executed: list[ToolCallRecord],
+    on_event: ToolEventSink | None,
 ) -> str:
-    """Execute one tool call; an unknown or failing tool becomes an "Error: ..."
-    result for the model, never a loop crash. Only resolved tools are recorded."""
+    """Execute one tool call; an unknown, not-enabled, or failing tool becomes an
+    "Error: ..." result for the model, never a loop crash. Only resolved tools are
+    recorded."""
     try:
-        tool = get_tool(name)
+        tool = get_enabled_tool(name, tools)
     except WorkbenchError as e:
         return f"Error: {e.message}"
     call = await run_tool(tool, args, on_event)
@@ -169,7 +174,9 @@ class LlamaCppBackend:
                 if not isinstance(parsed, ToolCall):
                     return LoopResult(text=content, tool_calls=executed), combine_usage(usages)
                 history.append(dict(message))
-                result = await _run_tool(parsed.tool_name, parsed.arguments, executed, on_event)
+                result = await _run_tool(
+                    parsed.tool_name, parsed.arguments, tools, executed, on_event
+                )
                 history.append({"role": "tool", "tool_call_id": "", "content": result})
                 continue
             history.append(dict(message))
@@ -183,7 +190,7 @@ class LlamaCppBackend:
                     except json.JSONDecodeError:
                         args = None
                 if isinstance(args, dict):
-                    result = await _run_tool(name, args, executed, on_event)
+                    result = await _run_tool(name, args, tools, executed, on_event)
                 else:
                     result = f"Error: invalid arguments for tool '{name}': expected a JSON object"
                 history.append(

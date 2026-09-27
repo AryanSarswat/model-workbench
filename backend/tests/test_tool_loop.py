@@ -47,6 +47,25 @@ def test_unknown_tool_name_appends_error_and_continues():
     assert any("Tool 'nope' is not available." in m.content for m in seen[-1])
 
 
+def test_registered_tool_the_request_did_not_enable_is_not_run():
+    # The request's tools are the allowlist: a model (or a prompt injection) naming
+    # any other registered tool must get the unknown-tool feedback, not a run.
+    seen: list[list[ChatMessage]] = []
+    events: list[ChatChunk] = []
+
+    async def generate(history: list[ChatMessage]) -> str:
+        seen.append(list(history))
+        if len(seen) == 1:
+            return '{"tool": "web_fetch", "arguments": {"url": "http://127.0.0.1:1/"}}'
+        return '{"reply": "done"}'
+
+    result = asyncio.run(run_tool_loop(generate, _messages(), _specs(), on_event=events.append))
+
+    assert result.tools_called == []
+    assert events == []
+    assert any("Tool 'web_fetch' is not available." in m.content for m in seen[-1])
+
+
 def test_garbage_then_reply_retries():
     seen: list[list[ChatMessage]] = []
 

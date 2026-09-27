@@ -199,6 +199,8 @@ def test_stream_chat_with_tools_ends_in_an_error_chunk_after_live_tool_events(mo
 class _FakeUnknownToolLlama(_FakeLlama):
     """First turn requests a tool name that isn't registered, the second answers."""
 
+    tool_name = "nonexistent_tool"
+
     def __init__(self, model_path: str, verbose: bool = False) -> None:
         super().__init__(model_path, verbose)
         self.seen: list[list[dict]] = []
@@ -207,9 +209,7 @@ class _FakeUnknownToolLlama(_FakeLlama):
         assert stream is False
         self.seen.append(list(messages))
         if len(self.seen) == 1:
-            return {
-                "choices": [{"message": _tool_call_message("call_1", "nonexistent_tool", "{}")}]
-            }
+            return {"choices": [{"message": _tool_call_message("call_1", self.tool_name, "{}")}]}
         return {"choices": [{"message": {"role": "assistant", "content": "done"}}]}
 
 
@@ -223,6 +223,24 @@ def test_stream_chat_with_tools_does_not_record_an_unknown_tool_name(monkeypatch
     assert chunks[-1].done is True
     # The name was never resolved, so it must never be recorded as "called."
     assert chunks[-1].tools_called == []
+
+
+class _FakeDisabledToolLlama(_FakeUnknownToolLlama):
+    """Requests web_fetch, which is registered but not in the request's tools."""
+
+    tool_name = "web_fetch"
+
+
+def test_stream_chat_with_tools_does_not_run_a_tool_the_request_did_not_enable(monkeypatch):
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FakeDisabledToolLlama)
+    backend = LlamaCppBackend("/tmp/fake.gguf")
+
+    chunks = _run_tool_chat(backend)  # enables only calculator
+
+    assert chunks[-1].tools_called == []
+    llama = llama_cpp_backend._CACHE.get("/tmp/fake.gguf")
+    tool_messages = [m for m in llama.seen[-1] if m["role"] == "tool"]
+    assert [m["content"] for m in tool_messages] == ["Error: Unknown tool: web_fetch"]
 
 
 class _FakeStubbornLlama(_FakeLlama):
