@@ -18,7 +18,7 @@ def result_passed(result: EvalResult) -> bool:
 
     `manual_verdict` always wins when set ("pass" or "fail"). Otherwise a result
     passes iff it did not error, all of its assertions passed, and (when a judge
-    scored it) the judge score is at least 0.5. The frontend mirrors this rule.
+    scored it) the judge score is at least 0.5. The API returns it as EvalResultOut.passed.
     """
     if result.manual_verdict == "pass":
         return True
