@@ -153,7 +153,10 @@ final reply (loop turns stay unconstrained). Invalid schemas are a 400
 `invalid_output_schema` pre-stream.
 
 `capabilities()` reports which mode is active, so a response can be labeled
-"grammar-enforced" vs "best-effort" — this feeds eval assertions too.
+"grammar-enforced" vs "best-effort" — this feeds eval assertions too. Each backend's
+capabilities are defined once, in `BACKEND_CAPABILITIES` (`inference/schemas.py`), so
+`GET /backends` can report them — plus whether the backend's `local` extra is installed —
+without importing torch/llama.cpp.
 
 **Tool calling:** tools live in `backend/app/tools/` (below). llama.cpp uses native
 `tools=[...]` (`tool_choice="auto"`); the other backends run the shared `run_tool_loop`
@@ -244,6 +247,7 @@ comma-joined and JSON-encoded columns they're stored as never reach the client.
 | Discovery/downloads | `GET /models/discover`, `GET /models/{id}`, `GET /models/{id}/feasibility`, `POST /models/{id}/download`, `GET /models/downloads`, `GET /models/downloads/events` (SSE), `GET /models/downloads/{job_id}`, `GET /models/downloaded`, `DELETE /models/downloaded/{id}` |
 | Chat | `POST /chat/stream` (SSE), `POST /chat/sessions`, `GET/DELETE /chat/sessions[/{id}]` |
 | Tools | `GET /tools`, `POST /tools/reload` |
+| Backends | `GET /backends` (capabilities and availability per backend) |
 | Dataset | `GET/POST/PUT/DELETE /dataset/cases` (filterable by `category`) |
 | Evals | `POST /evals/run` (SSE), `GET /evals/runs[/{id}[/results]]`, `GET /evals/report`, `PATCH /evals/results/{id}` |
 | Config | `GET/POST /config/hf-api-key`, `GET /config/hardware` |
@@ -271,8 +275,10 @@ frontend/src/
 - **SSE over fetch**: `POST /chat/stream` and `POST /evals/run` stream SSE from a POST,
   which `EventSource` can't send, so `postSse` reads the fetch body stream and parses
   `data:` events itself (abortable via `AbortSignal`).
-- **Server state**: TanStack Query. Shared hooks (hardware, HF key status) live in
-  `api/hooks.ts`; each page keeps its own.
+- **Server state**: TanStack Query. Shared hooks (hardware, HF key status, backend
+  capabilities) live in `api/hooks.ts`; each page keeps its own. What a backend can do
+  (structured-output mode, native tool calling, installed or not) comes from
+  `GET /backends` via `useBackends()`; `lib/backends.ts` only holds labels and copy.
 - **Routing**: React Router — `/` (Radar), `/models/:author/:name`, `/playground`
   (`?model=&backend=&quant=`), `/evals`, `/evals/runs/:runId`, `/dataset`, `/library`.
 - **Endpoints added for the UI**: `GET /models/downloads?active=` (download jobs, newest

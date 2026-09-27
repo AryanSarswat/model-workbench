@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Button } from '../../components/Button'
-import { Chip, type ChipTone } from '../../components/Chip'
+import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
 import { SegmentedControl } from '../../components/SegmentedControl'
-import { BACKEND_NAMES, BACKENDS } from '../../lib/backends'
-import type { BackendName } from '../../api/types'
+import { BACKEND_NAMES, BACKENDS, structuredOutputChip, toolCallingChip } from '../../lib/backends'
+import type { BackendInfo, BackendName } from '../../api/types'
 import type { ModelOption } from './modelOptions'
 import styles from './ModelBar.module.css'
 
@@ -19,10 +19,7 @@ export function ModelBar({
   unloadable,
   recordsLoading,
   recordsError,
-  structuredOutputLabel,
-  structuredOutputTone,
-  toolsLabel,
-  toolsTone,
+  backends,
   onNewChat,
 }: {
   backend: BackendName
@@ -33,12 +30,13 @@ export function ModelBar({
   unloadable: ModelOption['unloadable']
   recordsLoading: boolean
   recordsError: unknown
-  structuredOutputLabel: string
-  structuredOutputTone: ChipTone
-  toolsLabel: string
-  toolsTone: ChipTone
+  backends: Record<BackendName, BackendInfo> | undefined // undefined while GET /backends loads
   onNewChat: () => void
 }) {
+  const capabilities = backends?.[backend]
+  const jsonChip = structuredOutputChip(capabilities?.structured_output_mode)
+  const toolsChip = toolCallingChip(capabilities?.native_tool_calling)
+
   return (
     <div className={styles.bar}>
       {backend === 'api' ? (
@@ -89,7 +87,15 @@ export function ModelBar({
           mono
           value={backend}
           onChange={onBackendChange}
-          options={BACKEND_NAMES.map((name) => ({ value: name, label: BACKENDS[name].label }))}
+          options={BACKEND_NAMES.map((name) => {
+            const unavailable = backends?.[name].available === false
+            return {
+              value: name,
+              label: BACKENDS[name].label,
+              disabled: unavailable,
+              title: unavailable ? 'Not installed here: run cd backend && uv sync --extra local' : undefined,
+            }
+          })}
         />
       </div>
 
@@ -98,8 +104,8 @@ export function ModelBar({
           <Chip tone="nofit">quant {unloadable.quant} · not loadable</Chip>
         ) : (
           <>
-            <Chip tone={structuredOutputTone}>JSON · {structuredOutputLabel}</Chip>
-            <Chip tone={toolsTone}>tools · {toolsLabel}</Chip>
+            <Chip tone={jsonChip.tone}>JSON · {jsonChip.label}</Chip>
+            <Chip tone={toolsChip.tone}>tools · {toolsChip.label}</Chip>
           </>
         )}
         <Button variant="outline" onClick={onNewChat}>

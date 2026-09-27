@@ -14,6 +14,7 @@ from app.discovery.router import router as discovery_router
 from app.downloads.router import router as downloads_router
 from app.errors import WorkbenchError
 from app.evals.router import router as evals_router
+from app.inference.router import router as backends_router
 from app.tools.router import router as tools_router
 
 
@@ -35,6 +36,7 @@ app.include_router(config_router)
 app.include_router(tools_router)
 app.include_router(dataset_router)
 app.include_router(evals_router)
+app.include_router(backends_router)
 
 
 @app.exception_handler(WorkbenchError)

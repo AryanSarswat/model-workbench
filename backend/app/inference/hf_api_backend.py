@@ -13,6 +13,7 @@ from huggingface_hub import AsyncInferenceClient
 from huggingface_hub.errors import HTTPError
 
 from app.inference.schemas import (
+    BACKEND_CAPABILITIES,
     BackendCapabilities,
     ChatChunk,
     ChatMessage,
@@ -39,8 +40,7 @@ class HFInferenceAPIBackend:
         self._client = AsyncInferenceClient(token=api_key)
 
     def capabilities(self) -> BackendCapabilities:
-        # A remote provider offers no grammar/guided decoding control.
-        return BackendCapabilities(structured_output_mode="prompt_retry", native_tool_calling=False)
+        return BACKEND_CAPABILITIES["api"]
 
     def prevalidate_output_schema(self, schema: dict) -> None:
         """Shared dict/serializable check only: the retry loop has no

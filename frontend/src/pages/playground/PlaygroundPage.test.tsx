@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
-import type { DownloadedModelRecord } from '../../api/types'
+import type { BackendInfo, BackendName, DownloadedModelRecord } from '../../api/types'
 import PlaygroundPage from './PlaygroundPage'
 
 function sseResponse(events: object[]): Response {
@@ -28,10 +28,22 @@ function liveSseResponse() {
   }
 }
 
-function renderPlayground(initialEntry: string, chatEvents: object[] | Response, downloadedModels: DownloadedModelRecord[] = []) {
+const BACKENDS: Record<BackendName, BackendInfo> = {
+  api: { structured_output_mode: 'prompt_retry', native_tool_calling: false, available: true },
+  gguf: { structured_output_mode: 'grammar', native_tool_calling: true, available: true },
+  transformers: { structured_output_mode: 'guided', native_tool_calling: false, available: true },
+}
+
+function renderPlayground(
+  initialEntry: string,
+  chatEvents: object[] | Response,
+  downloadedModels: DownloadedModelRecord[] = [],
+  backends: Record<BackendName, BackendInfo> = BACKENDS,
+) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url === '/api/models/downloaded') return Response.json(downloadedModels)
+    if (url === '/api/backends') return Response.json(backends)
     if (url === '/api/tools') return Response.json([{ name: 'calculator', description: 'Evaluate an arithmetic expression', parameters: {} }])
     if (url === '/api/chat/stream' && init?.method === 'POST') return Array.isArray(chatEvents) ? sseResponse(chatEvents) : chatEvents
     return new Response('not mocked', { status: 500 })
@@ -143,6 +155,31 @@ describe('PlaygroundPage', () => {
     expect(screen.queryByText('fetching…')).not.toBeInTheDocument()
     expect(screen.queryByText('running tool')).not.toBeInTheDocument()
     expect(screen.getAllByText(url)).toHaveLength(1) // one card, not a running copy left behind
+  })
+
+  it('labels capabilities from GET /backends and blocks picking a backend not installed here', async () => {
+    // A transformers download, so switching to it has a model to pick.
+    const snapshot: DownloadedModelRecord = {
+      id: 1,
+      repo_id: 'org/model',
+      model_id: 'org/model',
+      backend: 'transformers',
+      quant: null,
+      local_path: '/models/org-model',
+      size_bytes: 1,
+      downloaded_at: '2024-01-01T00:00:00Z',
+      last_used_at: null,
+      unsupported_reason: null,
+    }
+    renderPlayground('/playground?backend=api', [], [snapshot], { ...BACKENDS, gguf: { ...BACKENDS.gguf, available: false } })
+
+    expect(await screen.findByText('JSON · best-effort')).toBeInTheDocument()
+    expect(screen.getByText('tools · fallback')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'GGUF' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Transformers' }))
+    expect(await screen.findByText('JSON · guaranteed')).toBeInTheDocument()
+    expect(screen.getByText(/Guided generation \(outlines\)/)).toBeInTheDocument()
   })
 
   it('blocks sending when the JSON Schema editor holds invalid JSON', async () => {

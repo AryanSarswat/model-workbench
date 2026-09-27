@@ -4,6 +4,8 @@ import styles from './SegmentedControl.module.css'
 export interface SegmentOption<T extends string> {
   value: T
   label: ReactNode
+  disabled?: boolean
+  title?: string
 }
 
 // A group of aria-pressed toggle buttons (Trending/Recent, backend picker). Name the
@@ -31,6 +33,8 @@ export function SegmentedControl<T extends string>({
           key={option.value}
           type="button"
           aria-pressed={option.value === value}
+          disabled={option.disabled}
+          title={option.title}
           className={[styles.segment, mono && styles.mono].filter(Boolean).join(' ')}
           onClick={() => onChange(option.value)}
         >

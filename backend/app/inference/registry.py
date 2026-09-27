@@ -42,14 +42,14 @@ def get_backend(name: str, model_id: str, hf_api_key: str | None) -> InferenceBa
 
     if name == "gguf":
         path = _resolve_gguf_path(model_id)
-        _require_local(name, "llama_cpp")
+        _require_local(name)
         from app.inference.llama_cpp_backend import LlamaCppBackend
 
         return LlamaCppBackend(path)
 
     if name == "transformers":
         snapshot_dir = _resolve_snapshot_dir(model_id)
-        _require_local(name, "torch", "transformers")
+        _require_local(name)
         from app.inference.transformers_backend import TransformersBackend
 
         return TransformersBackend(snapshot_dir)
@@ -61,11 +61,28 @@ def get_backend(name: str, model_id: str, hf_api_key: str | None) -> InferenceBa
     )
 
 
-def _require_local(backend: str, *modules: str) -> None:
-    """Fail fast with a proper HTTP error when the `local` extra isn't installed.
-    find_spec (not try/except around the import) so a genuine bug inside a backend
-    module still surfaces as a real traceback instead of a misleading install hint."""
-    missing = [m for m in modules if importlib.util.find_spec(m) is None]
+# The `local` extra's modules each local backend imports.
+_LOCAL_MODULES: dict[str, tuple[str, ...]] = {
+    "gguf": ("llama_cpp",),
+    "transformers": ("torch", "transformers"),
+}
+
+
+def is_available(backend: str) -> bool:
+    """Whether `backend` can run in this install (the api backend always can)."""
+    return not _missing_local_modules(backend)
+
+
+def _missing_local_modules(backend: str) -> list[str]:
+    """find_spec (not try/except around the import) so a genuine bug inside a backend
+    module still surfaces as a real traceback instead of a misleading install hint --
+    and so checking never imports the heavy modules."""
+    return [m for m in _LOCAL_MODULES.get(backend, ()) if importlib.util.find_spec(m) is None]
+
+
+def _require_local(backend: str) -> None:
+    """Fail fast with a proper HTTP error when the `local` extra isn't installed."""
+    missing = _missing_local_modules(backend)
     if missing:
         raise WorkbenchError(
             status_code=400,

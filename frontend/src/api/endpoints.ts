@@ -3,6 +3,8 @@ import { apiGet, apiSend } from './client'
 import { postSse } from './sse'
 import type {
   ApiKeyStatus,
+  BackendInfo,
+  BackendName,
   ChatChunk,
   ChatRequest,
   ChatSession,
@@ -78,6 +80,8 @@ export const setHfKey = (apiKey: string) =>
 // --- tools ---
 
 export const listTools = () => apiGet<ToolSpec[]>('/tools')
+
+export const getBackends = () => apiGet<Record<BackendName, BackendInfo>>('/backends')
 
 export const reloadTools = () => apiSend<{ count: number }>('POST', '/tools/reload')
 

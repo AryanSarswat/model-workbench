@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
-import { useDownloadedModels, useTools } from '../../api/hooks'
+import { useBackends, useDownloadedModels, useTools } from '../../api/hooks'
 import type { BackendName } from '../../api/types'
-import { BACKEND_NAMES, BACKENDS } from '../../lib/backends'
-import { NATIVE_TOOL_CALLING } from './capabilities'
+import { BACKEND_NAMES, STRUCTURED_OUTPUT } from '../../lib/backends'
 import { Composer } from './Composer'
 import { modelOptionsFor, pickPrefilledModelId } from './modelOptions'
 import { ModelBar } from './ModelBar'
@@ -34,6 +33,7 @@ export default function PlaygroundPage() {
 
   const downloadedQuery = useDownloadedModels()
   const toolsQuery = useTools()
+  const backendsQuery = useBackends()
 
   const records = useMemo(() => downloadedQuery.data ?? [], [downloadedQuery.data])
   const modelOptions = useMemo(() => modelOptionsFor(backend, records), [backend, records])
@@ -89,8 +89,7 @@ export default function PlaygroundPage() {
     })
   }
 
-  const backendInfo = BACKENDS[backend]
-  const nativeTools = NATIVE_TOOL_CALLING[backend]
+  const structuredOutputMode = backendsQuery.data?.[backend].structured_output_mode
 
   return (
     <div className={styles.page}>
@@ -104,10 +103,7 @@ export default function PlaygroundPage() {
           unloadable={unloadable}
           recordsLoading={downloadedQuery.isPending}
           recordsError={downloadedQuery.error}
-          structuredOutputLabel={backendInfo.guarantee}
-          structuredOutputTone={backendInfo.guarantee === 'guaranteed' ? 'fit' : 'tight'}
-          toolsLabel={nativeTools ? 'native' : 'fallback'}
-          toolsTone={nativeTools ? 'fit' : 'tight'}
+          backends={backendsQuery.data}
           onNewChat={newChat}
         />
         <Transcript turns={turns} />
@@ -129,7 +125,7 @@ export default function PlaygroundPage() {
         schemaText={schemaText}
         onSchemaTextChange={setSchemaText}
         schemaError={schemaError}
-        explanation={backendInfo.explanation}
+        explanation={structuredOutputMode && STRUCTURED_OUTPUT[structuredOutputMode].explanation}
         tools={toolsQuery.data ?? []}
         toolsError={toolsQuery.error}
         selectedTools={selectedTools}

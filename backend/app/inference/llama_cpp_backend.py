@@ -19,6 +19,7 @@ from app.errors import WorkbenchError
 from app.inference.gguf_header import describe_unsupported
 from app.inference.model_cache import LoadedModelCache
 from app.inference.schemas import (
+    BACKEND_CAPABILITIES,
     BackendCapabilities,
     ChatChunk,
     ChatMessage,
@@ -109,7 +110,7 @@ class LlamaCppBackend:
         self._model_path = str(model_path)
 
     def capabilities(self) -> BackendCapabilities:
-        return BackendCapabilities(structured_output_mode="grammar", native_tool_calling=True)
+        return BACKEND_CAPABILITIES["gguf"]
 
     def prevalidate_output_schema(self, schema: dict) -> None:
         """Same grammar compile the generator runs, but pre-stream and model-free.

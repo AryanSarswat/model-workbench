@@ -7,7 +7,7 @@ from llama_cpp import LlamaGrammar
 from app.errors import WorkbenchError
 from app.inference import llama_cpp_backend
 from app.inference.llama_cpp_backend import LlamaCppBackend
-from app.inference.schemas import ChatChunk, ChatMessage
+from app.inference.schemas import BACKEND_CAPABILITIES, ChatChunk, ChatMessage
 from app.tools import get_tool
 from tests.gguf_fixtures import write_gguf
 
@@ -60,13 +60,11 @@ def _run_tool_chat(backend: LlamaCppBackend) -> list[ChatChunk]:
     return asyncio.run(_collect())
 
 
-def test_capabilities_report_grammar_and_native_tool_calling():
+def test_capabilities_are_the_shared_gguf_entry():
+    """GET /backends reports BACKEND_CAPABILITIES; the class must agree with it."""
     backend = LlamaCppBackend("/tmp/fake.gguf")
 
-    capabilities = backend.capabilities()
-
-    assert capabilities.structured_output_mode == "grammar"
-    assert capabilities.native_tool_calling is True
+    assert backend.capabilities() == BACKEND_CAPABILITIES["gguf"]
 
 
 def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):

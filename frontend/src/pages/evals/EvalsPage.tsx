@@ -6,12 +6,12 @@ import { Field } from '../../components/Field'
 import { LiveDot } from '../../components/LiveDot'
 import { PageHeader } from '../../components/PageHeader'
 import { ProgressBar } from '../../components/ProgressBar'
-import type { BackendName } from '../../api/types'
-import { BACKENDS, BACKEND_NAMES, type BackendInfo } from '../../lib/backends'
+import type { BackendName, StructuredOutputMode } from '../../api/types'
+import { BACKENDS, BACKEND_NAMES } from '../../lib/backends'
 import type { ActiveEvalRun } from './activeRun'
 import { aggregateReport, type EvalMatrix, type MatrixCell } from './aggregateReport'
 import styles from './EvalsPage.module.css'
-import { useDownloadedModels } from '../../api/hooks'
+import { useBackends, useDownloadedModels } from '../../api/hooks'
 import { useActiveEvalRun, useDatasetCategories, useEvalReport, useStartEvalRun } from './queries'
 import { buildRunRequest, modelIdSuggestions, sortedCategories, type RunFormState } from './runForm'
 
@@ -185,6 +185,7 @@ function RunningStrip({ activeRun }: { activeRun: ActiveEvalRun }) {
 }
 
 function ComparisonMatrix({ matrix }: { matrix: EvalMatrix }) {
+  const backends = useBackends().data
   if (matrix.rows.length === 0) {
     return <p className="eyebrow">No eval runs yet</p>
   }
@@ -225,7 +226,7 @@ function ComparisonMatrix({ matrix }: { matrix: EvalMatrix }) {
           <div className={styles.overall}>{row.overallPct}%</div>
           <div className={styles.tokValue}>{row.tokensPerSec != null ? row.tokensPerSec.toFixed(1) : '—'}</div>
           <MetricBar value={row.toolCallReliability} />
-          <MetricBar value={row.structuredOutputReliability} modeWord={modeWord(BACKENDS[row.backend].structuredOutputMode)} />
+          <MetricBar value={row.structuredOutputReliability} modeWord={backends && modeWord(backends[row.backend].structured_output_mode)} />
         </div>
       ))}
     </section>
@@ -262,6 +263,6 @@ function MetricBar({ value, modeWord: mode }: { value: number | null; modeWord?:
   )
 }
 
-function modeWord(mode: BackendInfo['structuredOutputMode']): string {
+function modeWord(mode: StructuredOutputMode): string {
   return mode === 'prompt_retry' ? 'retry' : mode
 }

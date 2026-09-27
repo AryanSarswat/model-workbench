@@ -7,7 +7,7 @@ from huggingface_hub.errors import BadRequestError
 
 from app.errors import WorkbenchError
 from app.inference.hf_api_backend import HFInferenceAPIBackend
-from app.inference.schemas import ChatChunk, ChatMessage
+from app.inference.schemas import BACKEND_CAPABILITIES, ChatChunk, ChatMessage
 from app.tools import get_tool
 
 
@@ -57,13 +57,11 @@ def _run_tool_chat(backend: HFInferenceAPIBackend) -> list[ChatChunk]:
     return asyncio.run(_collect())
 
 
-def test_capabilities_report_prompt_retry_and_no_native_tool_calling():
+def test_capabilities_are_the_shared_api_entry():
+    """GET /backends reports BACKEND_CAPABILITIES; the class must agree with it."""
     backend = HFInferenceAPIBackend(api_key="fake-key")
 
-    capabilities = backend.capabilities()
-
-    assert capabilities.structured_output_mode == "prompt_retry"
-    assert capabilities.native_tool_calling is False
+    assert backend.capabilities() == BACKEND_CAPABILITIES["api"]
 
 
 def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
