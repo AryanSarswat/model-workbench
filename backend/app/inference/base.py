@@ -8,7 +8,6 @@ from collections.abc import AsyncIterator
 from typing import Protocol
 
 from app.inference.schemas import BackendCapabilities, ChatChunk, ChatMessage
-from app.inference.structured_output import validate_output_schema
 from app.tools import ToolSpec
 
 
@@ -20,7 +19,6 @@ class InferenceBackend(Protocol):
         mid-stream error). Backends whose generator-time setup can reject a
         dict-shaped schema run that same check here. Sync and model-free.
         """
-        validate_output_schema(schema)
 
     async def stream_chat(
         self,
