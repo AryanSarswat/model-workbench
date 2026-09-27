@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
+import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
@@ -125,9 +126,9 @@ function RunForm({ activeRun }: { activeRun: ActiveEvalRun | null }) {
           placeholder="optional"
         />
       </Field>
-      <button type="submit" className="btn btn-solid" disabled={startRun.isPending || alreadyRunning}>
+      <Button type="submit" variant="solid" disabled={startRun.isPending || alreadyRunning}>
         Run eval
-      </button>
+      </Button>
       {alreadyRunning && <p className={styles.formNote}>A run is already in progress.</p>}
       {startRun.isError && <ErrorNotice error={startRun.error} />}
     </form>

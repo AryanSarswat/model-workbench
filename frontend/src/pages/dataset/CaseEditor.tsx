@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createCase, updateCase, deleteCase } from '../../api/endpoints'
 import { queryKeys } from '../../api/hooks'
 import type { TestCase, ToolSpec } from '../../api/types'
+import { Button } from '../../components/Button'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
 import styles from './DatasetPage.module.css'
@@ -260,19 +261,17 @@ export function CaseEditor({
       {deleteMutation.isError && <ErrorNotice error={deleteMutation.error} className={styles.errorRow} />}
 
       <div className={styles.footer}>
-        <button type="submit" className={['btn', 'btn-solid', styles.saveButton].join(' ')} disabled={saveMutation.isPending}>
+        <Button type="submit" variant="solid" className={styles.saveButton} disabled={saveMutation.isPending}>
           Save
-        </button>
-        <button type="button" className="btn" onClick={() => onDuplicated(duplicateForm(form))}>
-          Duplicate
-        </button>
+        </Button>
+        <Button onClick={() => onDuplicated(duplicateForm(form))}>Duplicate</Button>
         <span className={styles.footerNote}>
           {isNew ? 'Writes data/test_cases/<id>.json' : `Writes data/test_cases/${form.id}.json`}
         </span>
         {!isNew && (
-          <button type="button" className={['btn', styles.deleteButton].join(' ')} onClick={handleDelete}>
+          <Button className={styles.deleteButton} onClick={handleDelete}>
             Delete case
-          </button>
+          </Button>
         )}
       </div>
     </form>

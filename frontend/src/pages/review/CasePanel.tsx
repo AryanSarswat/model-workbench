@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ApiError } from '../../api/client'
 import type { EvalResult, TestCase } from '../../api/types'
+import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import styles from './ReviewPage.module.css'
@@ -198,12 +199,10 @@ export function VerdictForm({
       </label>
       <textarea id="verdict-notes" className={styles.notes} value={notes} onChange={(e) => setNotes(e.target.value)} />
       <div className={styles.verdictActions}>
-        <button type="submit" className="btn btn-solid" disabled={updateResult.isPending}>
+        <Button type="submit" variant="solid" disabled={updateResult.isPending}>
           Save
-        </button>
-        <button type="button" className="btn" onClick={onNextUnreviewed}>
-          Next unreviewed
-        </button>
+        </Button>
+        <Button onClick={onNextUnreviewed}>Next unreviewed</Button>
       </div>
       {updateResult.isError && <ErrorNotice error={updateResult.error} />}
     </form>
