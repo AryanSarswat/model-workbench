@@ -105,7 +105,7 @@ async def run_tool_loop(
         parsed = retrier.parse_tool_call_or_reply(last_text)
         history.append(ChatMessage(role="assistant", content=last_text))
         if isinstance(parsed, TextReply):
-            return LoopResult(text=last_text, tool_calls=tool_calls)
+            return LoopResult(text=parsed.text, tool_calls=tool_calls)
         if parsed is None:
             history.append(ChatMessage(role="user", content=_RETRY_MESSAGE))
             continue

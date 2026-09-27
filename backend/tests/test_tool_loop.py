@@ -26,7 +26,7 @@ def test_tool_call_then_reply_returns_final_text_and_records_result():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), _specs()))
 
-    assert result.text == '{"reply": "5"}'
+    assert result.text == "5"
     assert result.tools_called == ["calculator"]
     assert any("Tool 'calculator' returned: 5" in m.content for m in seen[-1] if m.role == "user")
 
@@ -42,7 +42,7 @@ def test_unknown_tool_name_appends_error_and_continues():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), _specs()))
 
-    assert result.text == '{"reply": "done"}'
+    assert result.text == "done"
     assert result.tools_called == []
     assert any("Tool 'nope' is not available." in m.content for m in seen[-1])
 
@@ -77,7 +77,7 @@ def test_garbage_then_reply_retries():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), _specs()))
 
-    assert result.text == '{"reply": "hi"}'
+    assert result.text == "hi"
     assert result.tools_called == []
     assert any("That was not valid JSON." in m.content for m in seen[-1])
 
@@ -115,7 +115,7 @@ def test_two_different_tools_called_in_sequence_are_both_recorded():
 
     result = asyncio.run(run_tool_loop(generate, _messages(), specs))
 
-    assert result.text == '{"reply": "done"}'
+    assert result.text == "done"
     assert result.tools_called == ["calculator", "web_fetch"]
 
 

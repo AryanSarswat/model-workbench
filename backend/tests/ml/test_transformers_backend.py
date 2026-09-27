@@ -163,7 +163,7 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     started, finished, reply, done = chunks
     assert started.tool_call_started.name == "calculator"
     assert finished.tool_call_finished == done.tool_calls[0]
-    assert reply.delta == '{"reply": "the answer is 5"}'
+    assert reply.delta == "the answer is 5"
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     # The prompt was templated once, and the calculator result fed the next turn.
