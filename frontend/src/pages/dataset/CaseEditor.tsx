@@ -5,10 +5,9 @@ import type { TestCase, ToolSpec } from '../../api/types'
 import { ErrorNotice } from '../../components/ErrorNotice'
 import { Field } from '../../components/Field'
 import styles from './DatasetPage.module.css'
+import { AssertionsEditor } from './AssertionsEditor'
+import { RemoveIcon } from './RemoveIcon'
 import {
-  ASSERTION_TYPES,
-  assertionArgPlaceholder,
-  assertionNeedsArgument,
   duplicateForm,
   formToCase,
   type CaseFormState,
@@ -242,44 +241,12 @@ export function CaseEditor({
         </div>
       </div>
 
-      <fieldset className={styles.assertions}>
-        <legend className={['eyebrow', styles.assertionLegend].join(' ')}>Assertions</legend>
-        {form.assertions.map((assertion, index) => (
-          <div key={index} className={styles.assertionRow}>
-            <select
-              className={[styles.mono, 'field'].filter(Boolean).join(' ')}
-              aria-label={`Assertion ${index + 1} type`}
-              value={assertion.type}
-              onChange={(e) => updateAssertion(index, { type: e.target.value as CaseFormState['assertions'][number]['type'] })}
-            >
-              {ASSERTION_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </select>
-            <input
-              className={[styles.mono, 'field'].filter(Boolean).join(' ')}
-              aria-label={`Assertion ${index + 1} value`}
-              value={assertion.argument}
-              placeholder={assertionArgPlaceholder(assertion.type)}
-              disabled={!assertionNeedsArgument(assertion.type)}
-              onChange={(e) => updateAssertion(index, { argument: e.target.value })}
-            />
-            <button
-              type="button"
-              aria-label={`Remove assertion ${index + 1}`}
-              className={styles.iconButton}
-              onClick={() => removeAssertion(index)}
-            >
-              <RemoveIcon />
-            </button>
-          </div>
-        ))}
-        <button type="button" className={styles.linkButton} onClick={addAssertion}>
-          Add assertion
-        </button>
-      </fieldset>
+      <AssertionsEditor
+        assertions={form.assertions}
+        onUpdate={updateAssertion}
+        onRemove={removeAssertion}
+        onAdd={addAssertion}
+      />
 
       {validationErrors.length > 0 && (
         <div className={styles.errors}>
@@ -308,13 +275,5 @@ export function CaseEditor({
         )}
       </div>
     </form>
-  )
-}
-
-function RemoveIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M4 4l8 8M12 4l-8 8" />
-    </svg>
   )
 }
