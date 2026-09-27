@@ -18,6 +18,7 @@ const downloaded: DownloadedModelRecord = {
   id: 1,
   repo_id: 'Qwen/Qwen3-14B',
   backend: 'gguf',
+  model_id: 'Qwen/Qwen3-14B',
   quant: 'Qwen3-14B-Q4_K_M.gguf',
   local_path: '/models/Qwen3-14B-Q4_K_M.gguf',
   size_bytes: 9 * 1024 ** 3,

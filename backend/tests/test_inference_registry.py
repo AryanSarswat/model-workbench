@@ -8,7 +8,7 @@ from sqlmodel import Session, SQLModel, create_engine, select
 from app.errors import WorkbenchError
 from app.inference import registry
 from app.inference.hf_api_backend import HFInferenceAPIBackend
-from app.inference.registry import get_backend
+from app.inference.registry import get_backend, local_model_ids
 from app.models import DownloadedModelRecord
 
 _test_engine = create_engine(
@@ -125,3 +125,34 @@ def test_get_backend_transformers_records_last_used_on_the_resolved_snapshot():
     last_used = _last_used_by_path()
     assert last_used["/tmp/snapshot"] is not None
     assert last_used["/tmp/other"] is None
+
+
+def _all_records() -> list[DownloadedModelRecord]:
+    with Session(_test_engine) as session:
+        return list(session.exec(select(DownloadedModelRecord)).all())
+
+
+def test_local_model_ids_are_what_the_resolvers_accept():
+    """The ids the listing hands the frontend must resolve back to the same record --
+    bare repo_id for a lone GGUF quant, "repo_id:filename" once a repo has several."""
+    _seed("org/single", "single.Q4_K_M.gguf", "/tmp/single.gguf")
+    _seed("org/multi", "multi.Q4_K_M.gguf", "/tmp/multi-q4.gguf")
+    _seed("org/multi", "multi.Q8_0.gguf", "/tmp/multi-q8.gguf")
+    _seed("org/snap", None, "/tmp/snap", backend="transformers")
+    records = _all_records()
+
+    ids = local_model_ids(records)
+
+    assert ids == [
+        "org/single",
+        "org/multi:multi.Q4_K_M.gguf",
+        "org/multi:multi.Q8_0.gguf",
+        "org/snap",
+    ]
+    for record, model_id in zip(records, ids, strict=True):
+        resolve = (
+            registry._resolve_gguf_path
+            if record.backend == "gguf"
+            else registry._resolve_snapshot_dir
+        )
+        assert resolve(model_id) == record.local_path

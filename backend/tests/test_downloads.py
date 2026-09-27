@@ -55,6 +55,7 @@ def test_list_downloaded_returns_seeded_records():
     assert response.status_code == 200
     [record] = response.json()
     assert record["repo_id"] == "meta-llama/Llama-3-8B"
+    assert record["model_id"] == "meta-llama/Llama-3-8B"  # lone quant: bare repo_id
 
 
 def test_list_downloaded_empty_when_nothing_seeded():

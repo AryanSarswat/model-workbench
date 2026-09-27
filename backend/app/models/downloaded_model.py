@@ -25,6 +25,9 @@ class DownloadedModel(DownloadedModelBase):
     """A record as `GET /models/downloaded` returns it."""
 
     id: int
+    # What to send as a chat/eval request's model_id to run this record
+    # (see app.inference.registry.local_model_ids).
+    model_id: str
     # Why the installed llama.cpp can't load this GGUF; None when it can, and always
     # None for transformers snapshots.
     unsupported_reason: str | None = None
