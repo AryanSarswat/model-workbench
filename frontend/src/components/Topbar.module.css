@@ -82,3 +82,19 @@
 .dotUnset {
   background: var(--bar-accent);
 }
+
+/* Narrow windows: keep the nav whole; the hardware/key summary (also on Library) goes. */
+@media (max-width: 1000px) {
+  .bar {
+    gap: 24px;
+    padding: 0 16px;
+  }
+
+  .nav {
+    gap: 16px;
+  }
+
+  .meta {
+    display: none;
+  }
+}

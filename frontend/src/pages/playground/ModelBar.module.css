@@ -1,5 +1,6 @@
 .bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-end;
   gap: 16px;
   padding: 20px 40px;
@@ -9,6 +10,7 @@
 
 .control {
   width: 300px;
+  max-width: 100%;
   font-family: var(--mono);
 }
 
