@@ -62,6 +62,15 @@ def get_tool(name: str) -> Tool:
         raise WorkbenchError(400, "unknown_tool", f"Unknown tool: {name}") from None
 
 
+def get_enabled_tool(name: str, enabled: list[ToolSpec]) -> Tool:
+    """get_tool limited to the tools a request enabled: any other name, even a
+    registered one, raises the same unknown-tool error, so a model can only run
+    what the caller offered it."""
+    if name not in {spec.name for spec in enabled}:
+        raise WorkbenchError(400, "unknown_tool", f"Unknown tool: {name}")
+    return get_tool(name)
+
+
 def resolve_tool_names(names: list[str] | None) -> list[Tool]:
     if not names:
         return []

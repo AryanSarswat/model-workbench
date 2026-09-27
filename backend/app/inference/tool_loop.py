@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from app.errors import WorkbenchError
 from app.inference.schemas import ChatChunk, ChatMessage, ToolCallRecord, ToolCallStart
 from app.inference.structured_output import PromptJsonRetrier, TextReply
-from app.tools import Tool, ToolSpec, get_tool
+from app.tools import Tool, ToolSpec, get_enabled_tool
 
 _RETRY_MESSAGE = (
     "That was not valid JSON. Reply with exactly one JSON object: "
@@ -110,7 +110,7 @@ async def run_tool_loop(
             history.append(ChatMessage(role="user", content=_RETRY_MESSAGE))
             continue
         try:
-            tool = get_tool(parsed.tool_name)
+            tool = get_enabled_tool(parsed.tool_name, tools)
         except WorkbenchError:
             history.append(
                 ChatMessage(

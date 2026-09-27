@@ -1,6 +1,7 @@
 """Fetch a URL as text. Stdlib urllib only -- httpx is a dev-only dependency and
-must not become a runtime import. Only http(s) (remote pages) and file (local
-fixtures/tests) schemes are allowed; everything else is rejected outright.
+must not become a runtime import. Only http(s) is allowed; everything else is
+rejected outright -- file:// would let a prompt-injected page have the model read
+local secrets (e.g. backend/.env).
 """
 
 from __future__ import annotations
@@ -125,7 +126,7 @@ async def run(args: dict) -> str:
     if not isinstance(url, str) or not url.strip():
         return "Error: missing 'url' string argument"
     scheme = urllib.parse.urlparse(url).scheme.lower()
-    if scheme not in ("http", "https", "file"):
+    if scheme not in ("http", "https"):
         return f"Error: unsupported URL scheme: {scheme or '(none)'}"
     try:
         # to_thread: urlopen blocks, and this runs inside the event loop.
