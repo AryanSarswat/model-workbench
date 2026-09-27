@@ -8,31 +8,30 @@ in the repo, for the transformers backend). Progress for both streams over SSE f
 
 from __future__ import annotations
 
-import importlib.util
-import os
 import shutil
-from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from app.db import get_session
+from app.db import SessionDep
 from app.discovery.hf_client import get_model_detail, get_snapshot_files
 from app.downloads.events import job_events
 from app.downloads.service import run_download, run_snapshot_download
 from app.errors import WorkbenchError
-from app.inference.gguf_header import describe_unsupported
+from app.inference.gguf_header import unsupported_reason
 from app.inference.model_cache import evict_path
 from app.inference.registry import local_model_ids
-from app.models import DownloadedModel, DownloadedModelRecord, DownloadJob
+from app.models import (
+    ACTIVE_DOWNLOAD_STATUSES,
+    DownloadedModel,
+    DownloadedModelRecord,
+    DownloadJob,
+)
 
 router = APIRouter(prefix="/models", tags=["downloads"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 class DownloadRequest(BaseModel):
@@ -52,34 +51,8 @@ def list_downloaded(session: SessionDep) -> list[DownloadedModel]:
     ]
 
 
-def llama_cpp_type_count() -> int | None:
-    """How many ggml types the installed llama.cpp reads; None without the `local`
-    extra (imported lazily -- see app/inference/registry.py)."""
-    if importlib.util.find_spec("llama_cpp") is None:
-        return None
-    import llama_cpp
-
-    return llama_cpp.GGML_TYPE_COUNT
-
-
 def _unsupported_reason(record: DownloadedModelRecord) -> str | None:
-    if record.backend != "gguf":
-        return None
-    type_count = llama_cpp_type_count()
-    if type_count is None:
-        return None
-    try:
-        mtime_ns = os.stat(record.local_path).st_mtime_ns
-    except OSError:
-        return None  # file gone: the listing still works, the load will say why
-    return _scan_header(record.local_path, mtime_ns, type_count)
-
-
-@lru_cache(maxsize=128)
-def _scan_header(path: str, mtime_ns: int, type_count: int) -> str | None:
-    """Cached per file version (mtime_ns is only part of the key), so listing doesn't
-    re-read every header on each call."""
-    return describe_unsupported(path, type_count)
+    return unsupported_reason(record.local_path) if record.backend == "gguf" else None
 
 
 @router.delete("/downloaded/{record_id}", status_code=204)
@@ -108,7 +81,7 @@ def list_download_jobs(session: SessionDep, active: bool = False) -> list[Downlo
     """Every download job, newest first; `active=true` keeps only pending/downloading."""
     query = select(DownloadJob)
     if active:
-        query = query.where(DownloadJob.status.in_(["pending", "downloading"]))
+        query = query.where(DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES))
     query = query.order_by(DownloadJob.created_at.desc(), DownloadJob.id.desc())
     return list(session.exec(query).all())
 
@@ -204,7 +177,7 @@ def _reject_duplicate(session: Session, repo_id: str, kind: str, filename: str |
             DownloadJob.repo_id == repo_id,
             DownloadJob.kind == kind,
             DownloadJob.filename == filename,
-            DownloadJob.status.in_(["pending", "downloading"]),
+            DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES),
         )
     ).first()
     if job is not None:

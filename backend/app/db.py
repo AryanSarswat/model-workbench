@@ -10,11 +10,13 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated
 
+from fastapi import Depends
 from sqlalchemy import Engine
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.models import DownloadJob, EvalRun
+from app.models import ACTIVE_DOWNLOAD_STATUSES, DownloadJob, EvalRun
 
 DB_PATH = Path(__file__).resolve().parents[2] / "data" / "workbench.db"
 engine = create_engine(f"sqlite:///{DB_PATH}")
@@ -31,7 +33,7 @@ def fail_interrupted_jobs(target: Engine = engine) -> None:
     now = datetime.now(UTC)
     with Session(target) as session:
         interrupted_downloads = select(DownloadJob).where(
-            DownloadJob.status.in_(["pending", "downloading"])
+            DownloadJob.status.in_(ACTIVE_DOWNLOAD_STATUSES)
         )
         for job in session.exec(interrupted_downloads):
             job.status = "failed"
@@ -49,3 +51,6 @@ def fail_interrupted_jobs(target: Engine = engine) -> None:
 def get_session() -> Iterator[Session]:
     with Session(engine) as session:
         yield session
+
+
+SessionDep = Annotated[Session, Depends(get_session)]

@@ -1,6 +1,8 @@
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from app.config import (
     GPUInfo,
     HardwareInfo,
@@ -9,6 +11,14 @@ from app.config import (
     get_hardware_info,
     get_memory_usage,
 )
+
+
+@pytest.fixture(autouse=True)
+def _fresh_gpu_detection():
+    # _detect_gpu is cached per process; these tests patch what it detects.
+    _detect_gpu.cache_clear()
+    yield
+    _detect_gpu.cache_clear()
 
 
 def test_detect_nvidia_gpu_returns_none_when_nvidia_smi_missing():
@@ -38,6 +48,19 @@ def test_detect_gpu_falls_back_to_none_without_nvidia_or_apple_silicon():
     ):
         gpu = _detect_gpu()
     assert gpu.kind == "none"
+
+
+def test_gpu_detection_runs_nvidia_smi_once_per_process():
+    # Radar fires a feasibility check per model and every chat turn records memory;
+    # none of them should re-spawn nvidia-smi to rediscover the same GPU.
+    fake_result = subprocess.CompletedProcess(args=[], returncode=0, stdout="RTX 4090, 24564\n")
+    with (
+        patch("app.config._platform_info", return_value=("linux", "x86_64")),
+        patch("app.config.subprocess.run", return_value=fake_result) as run,
+    ):
+        get_hardware_info()
+        get_hardware_info()
+    assert run.call_count == 1
 
 
 def test_get_hardware_info_assembles_real_hardware_snapshot():

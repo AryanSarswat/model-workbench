@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import platform
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 
 import psutil
@@ -69,11 +70,11 @@ def _total_ram_gb() -> float:
     return round(psutil.virtual_memory().total / (1024**3), 1)
 
 
-def _detect_nvidia_gpu() -> GPUInfo | None:
-    """Returns GPUInfo if `nvidia-smi` reports a GPU, else None. No torch dependency."""
+def _nvidia_smi(query: str) -> str | None:
+    """First line of `nvidia-smi --query-gpu=<query>`, or None if nvidia-smi isn't usable."""
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+            ["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -81,13 +82,22 @@ def _detect_nvidia_gpu() -> GPUInfo | None:
         )
     except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
+    return result.stdout.strip().splitlines()[0]
 
-    first_line = result.stdout.strip().splitlines()[0]
-    name, vram_mib = (part.strip() for part in first_line.split(","))
+
+def _detect_nvidia_gpu() -> GPUInfo | None:
+    """Returns GPUInfo if `nvidia-smi` reports a GPU, else None. No torch dependency."""
+    line = _nvidia_smi("name,memory.total")
+    if line is None:
+        return None
+    name, vram_mib = (part.strip() for part in line.split(","))
     return GPUInfo(kind="nvidia", name=name, vram_gb=round(float(vram_mib) / 1024, 1))
 
 
+@lru_cache(maxsize=1)
 def _detect_gpu() -> GPUInfo:
+    """Cached: the GPU can't change while the process runs, and nvidia-smi is a
+    subprocess -- Radar's feasibility checks and every chat turn's metrics ask."""
     system, machine = _platform_info()
     if system == "darwin" and machine == "arm64":
         # Unified memory — no separate VRAM figure; feasibility checks use total_ram_gb.
@@ -116,18 +126,8 @@ class MemoryUsage(BaseModel):
 
 
 def _nvidia_vram_used_gb() -> float | None:
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=True,
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        return None
-    first_line = result.stdout.strip().splitlines()[0]
-    return round(float(first_line.strip()) / 1024, 1)
+    line = _nvidia_smi("memory.used")
+    return None if line is None else round(float(line.strip()) / 1024, 1)
 
 
 def get_memory_usage() -> MemoryUsage:

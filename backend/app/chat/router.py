@@ -9,15 +9,14 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.config import get_settings
-from app.db import get_session
+from app.db import SessionDep
 from app.errors import WorkbenchError
 from app.inference.base import InferenceBackend
 from app.inference.registry import get_backend
@@ -27,8 +26,6 @@ from app.models import ChatMessageRecord, ChatSession
 from app.tools import ToolSpec, resolve_tool_names
 
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-SessionDep = Annotated[Session, Depends(get_session)]
 
 
 class ChatRequest(BaseModel):

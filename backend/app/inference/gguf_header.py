@@ -8,7 +8,10 @@ Format: https://github.com/ggml-org/ggml/blob/master/docs/gguf.md
 
 from __future__ import annotations
 
+import importlib.util
+import os
 import struct
+from functools import lru_cache
 from pathlib import Path
 from typing import BinaryIO
 
@@ -87,3 +90,34 @@ def describe_unsupported(path: str | Path, type_count: int) -> str | None:
         f"0-{type_count - 1}. The file likely needs its publisher's "
         "llama.cpp fork; choose another quantization."
     )
+
+
+def llama_cpp_type_count() -> int | None:
+    """How many ggml types the installed llama.cpp reads; None without the `local`
+    extra (imported lazily -- see app/inference/registry.py)."""
+    if importlib.util.find_spec("llama_cpp") is None:
+        return None
+    import llama_cpp
+
+    return llama_cpp.GGML_TYPE_COUNT
+
+
+def unsupported_reason(path: str) -> str | None:
+    """describe_unsupported against the installed llama.cpp, for the downloads
+    listing: None without the `local` extra or when the file is gone (the listing
+    still works; the load will say why)."""
+    type_count = llama_cpp_type_count()
+    if type_count is None:
+        return None
+    try:
+        mtime_ns = os.stat(path).st_mtime_ns
+    except OSError:
+        return None
+    return _scan_header(path, mtime_ns, type_count)
+
+
+@lru_cache(maxsize=128)
+def _scan_header(path: str, mtime_ns: int, type_count: int) -> str | None:
+    """Cached per file version (mtime_ns is only part of the key), so listing doesn't
+    re-read every header on each call."""
+    return describe_unsupported(path, type_count)
