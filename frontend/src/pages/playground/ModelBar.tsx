@@ -87,7 +87,15 @@ export function ModelBar({
           mono
           value={backend}
           onChange={onBackendChange}
-          options={BACKEND_NAMES.map((name) => ({ value: name, label: BACKENDS[name].label }))}
+          options={BACKEND_NAMES.map((name) => {
+            const unavailable = backends?.[name].available === false
+            return {
+              value: name,
+              label: BACKENDS[name].label,
+              disabled: unavailable,
+              title: unavailable ? 'Not installed here: run cd backend && uv sync --extra local' : undefined,
+            }
+          })}
         />
       </div>
 

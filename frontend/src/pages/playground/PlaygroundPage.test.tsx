@@ -157,7 +157,7 @@ describe('PlaygroundPage', () => {
     expect(screen.getAllByText(url)).toHaveLength(1) // one card, not a running copy left behind
   })
 
-  it('labels capabilities from GET /backends', async () => {
+  it('labels capabilities from GET /backends and blocks picking a backend not installed here', async () => {
     // A transformers download, so switching to it has a model to pick.
     const snapshot: DownloadedModelRecord = {
       id: 1,
@@ -170,10 +170,11 @@ describe('PlaygroundPage', () => {
       last_used_at: null,
       unsupported_reason: null,
     }
-    renderPlayground('/playground?backend=api', [], [snapshot])
+    renderPlayground('/playground?backend=api', [], [snapshot], { ...BACKENDS, gguf: { ...BACKENDS.gguf, available: false } })
 
     expect(await screen.findByText('JSON · best-effort')).toBeInTheDocument()
     expect(screen.getByText('tools · fallback')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'GGUF' })).toBeDisabled()
 
     fireEvent.click(screen.getByRole('button', { name: 'Transformers' }))
     expect(await screen.findByText('JSON · guaranteed')).toBeInTheDocument()
