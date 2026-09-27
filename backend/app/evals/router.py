@@ -1,4 +1,4 @@
-"""POST /evals/run (SSE progress) + GET /evals/runs[/{id}/results] + GET
+"""POST /evals/run (SSE progress) + GET /evals/runs[/{id}[/results]] + GET
 /evals/report + PATCH /evals/results/{id}.
 
 The run streams progress for the lifetime of the request, persisting each case's
@@ -64,6 +64,7 @@ def start_eval_run(request: EvalRunRequest, session: SessionDep) -> StreamingRes
 
 def _event(run: EvalRun, current_case: str | None, done: bool, **extra: str) -> str:
     payload = {
+        "run_id": run.id,
         "completed": run.completed_cases,
         "total": run.total_cases,
         "current_case": current_case,
@@ -120,11 +121,17 @@ def _result_out(result: EvalResult) -> EvalResultOut:
     )
 
 
-@router.get("/runs/{run_id}/results")
-def get_eval_run_results(run_id: int, session: SessionDep) -> list[EvalResultOut]:
+@router.get("/runs/{run_id}")
+def get_eval_run(run_id: int, session: SessionDep) -> EvalRun:
     run = session.get(EvalRun, run_id)
     if run is None:
         raise WorkbenchError(404, "eval_run_not_found", f"No eval run with id {run_id}.")
+    return run
+
+
+@router.get("/runs/{run_id}/results")
+def get_eval_run_results(run_id: int, session: SessionDep) -> list[EvalResultOut]:
+    get_eval_run(run_id, session)  # 404s for an unknown run rather than returning []
     results = session.exec(select(EvalResult).where(EvalResult.run_id == run_id)).all()
     return [_result_out(result) for result in results]
 

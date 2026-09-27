@@ -210,6 +210,12 @@ counts (by `created_at`, then `id`), so re-running a model doesn't double-count 
 `manual_verdict` (`pass`/`fail`) wins when set, otherwise a result passes iff it didn't
 error, all its assertions passed, and any judge score is at least 0.5.
 
+Every progress event of `POST /evals/run` carries the run's `run_id`; `GET
+/evals/runs/{id}` returns the run itself. `GET /evals/runs/{id}/results` and `PATCH
+/evals/results/{id}` return each result with that pass rule already applied (`passed`),
+`tools_called` as a list, and `assertions` as `{type, passed, detail}` objects -- the
+comma-joined and JSON-encoded columns they're stored as never reach the client.
+
 ## Discovery, downloads, and feasibility
 
 - `GET /models/discover?sort=trending|recent` — `recent` sorts by `createdAt` so new
@@ -239,7 +245,7 @@ error, all its assertions passed, and any judge score is at least 0.5.
 | Chat | `POST /chat/stream` (SSE), `POST /chat/sessions`, `GET/DELETE /chat/sessions[/{id}]` |
 | Tools | `GET /tools`, `POST /tools/reload` |
 | Dataset | `GET/POST/PUT/DELETE /dataset/cases` (filterable by `category`) |
-| Evals | `POST /evals/run` (SSE), `GET /evals/runs[/{id}/results]`, `GET /evals/report`, `PATCH /evals/results/{id}` |
+| Evals | `POST /evals/run` (SSE), `GET /evals/runs[/{id}[/results]]`, `GET /evals/report`, `PATCH /evals/results/{id}` |
 | Config | `GET/POST /config/hf-api-key`, `GET /config/hardware` |
 | Health | `GET /health` |
 

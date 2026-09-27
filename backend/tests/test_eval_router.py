@@ -90,16 +90,24 @@ def test_start_eval_run_streams_progress_and_persists_results():
 
     assert response.status_code == 200
     events = _events(response)
-    # One "now running X" event per case, then a final done event.
-    assert events[0] == {"completed": 0, "total": 1, "current_case": case["id"], "done": False}
-    assert events[-1]["done"] is True
-    assert events[-1]["completed"] == 1
-    assert backend.closed is True
-
     with Session(_test_engine) as session:
         runs = list(session.exec(select(EvalRun)).all())
         results = list(session.exec(select(EvalResult)).all())
     assert len(runs) == 1
+    # One "now running X" event per case, then a final done event -- each naming
+    # the run so the client never has to guess which run it started.
+    assert events[0] == {
+        "run_id": runs[0].id,
+        "completed": 0,
+        "total": 1,
+        "current_case": case["id"],
+        "done": False,
+    }
+    assert events[-1]["run_id"] == runs[0].id
+    assert events[-1]["done"] is True
+    assert events[-1]["completed"] == 1
+    assert backend.closed is True
+
     assert runs[0].status == "completed"
     assert runs[0].completed_cases == 1
     assert len(results) == 1
@@ -117,6 +125,25 @@ def test_list_eval_runs_returns_newest_first():
     assert response.status_code == 200
     ids = [r["id"] for r in response.json()]
     assert ids == sorted(ids, reverse=True)
+
+
+def test_get_eval_run_returns_the_run():
+    _seed_case()
+    with patch.object(eval_router, "get_backend", return_value=_FakeBackend()):
+        run_id = _events(client.post("/evals/run", json={"model_id": "some/model"}))[0]["run_id"]
+
+    response = client.get(f"/evals/runs/{run_id}")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == run_id
+    assert response.json()["status"] == "completed"
+
+
+def test_get_eval_run_returns_404_for_missing_run():
+    response = client.get("/evals/runs/9999")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "eval_run_not_found"
 
 
 def test_get_eval_run_results_returns_404_for_missing_run():
@@ -275,6 +302,9 @@ def test_run_with_no_matching_cases_completes_instead_of_hanging_as_running():
             "/evals/run", json={"model_id": "some/model", "backend": "api", "category": "none"}
         )
 
-    assert _events(response) == [{"completed": 0, "total": 0, "current_case": None, "done": True}]
     with Session(_test_engine) as session:
-        assert session.exec(select(EvalRun)).one().status == "completed"
+        run = session.exec(select(EvalRun)).one()
+    assert run.status == "completed"
+    assert _events(response) == [
+        {"run_id": run.id, "completed": 0, "total": 0, "current_case": None, "done": True}
+    ]
