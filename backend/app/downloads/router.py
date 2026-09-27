@@ -27,6 +27,7 @@ from app.downloads.service import run_download, run_snapshot_download
 from app.errors import WorkbenchError
 from app.inference.gguf_header import describe_unsupported
 from app.inference.model_cache import evict_path
+from app.inference.registry import local_model_ids
 from app.models import DownloadedModel, DownloadedModelRecord, DownloadJob
 
 router = APIRouter(prefix="/models", tags=["downloads"])
@@ -41,11 +42,13 @@ class DownloadRequest(BaseModel):
 
 @router.get("/downloaded")
 def list_downloaded(session: SessionDep) -> list[DownloadedModel]:
+    records = list(session.exec(select(DownloadedModelRecord)).all())
     return [
         DownloadedModel.model_validate(
-            record, update={"unsupported_reason": _unsupported_reason(record)}
+            record,
+            update={"model_id": model_id, "unsupported_reason": _unsupported_reason(record)},
         )
-        for record in session.exec(select(DownloadedModelRecord)).all()
+        for record, model_id in zip(records, local_model_ids(records), strict=True)
     ]
 
 

@@ -18,6 +18,7 @@ chat turn, eval run, or eval judge about to run it.
 from __future__ import annotations
 
 import importlib.util
+from collections import Counter
 from datetime import UTC, datetime
 
 from sqlmodel import Session, select
@@ -75,6 +76,18 @@ def _require_local(backend: str, *modules: str) -> None:
                 "run 'cd backend && uv sync --extra local'."
             ),
         )
+
+
+def local_model_ids(records: list[DownloadedModelRecord]) -> list[str]:
+    """The model_id each downloaded record resolves from, in the same order -- the
+    inverse of the two resolvers below, so callers never re-derive the rule."""
+    gguf_rows_per_repo = Counter(r.repo_id for r in records if r.backend == "gguf")
+    return [
+        f"{r.repo_id}:{r.quant}"
+        if r.backend == "gguf" and gguf_rows_per_repo[r.repo_id] > 1
+        else r.repo_id
+        for r in records
+    ]
 
 
 def _resolve_gguf_path(model_id: str) -> str:
