@@ -43,11 +43,15 @@ class Assertion(BaseModel):
 
 
 class TestCaseJudge(BaseModel):
+    __test__ = False  # not a pytest test class, despite the name
+
     criteria: str
 
 
 class TestCase(BaseModel):
     """Mirrors data/test_cases.template.json. Only id/category/messages are required."""
+
+    __test__ = False  # not a pytest test class, despite the name
 
     id: str = Field(pattern=_ID_PATTERN)
     category: str  # free-form, not an enum -- new categories need no code change
