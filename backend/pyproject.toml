@@ -35,7 +35,7 @@ line-length = 100
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "network: hits the real Hugging Face Hub API (excluded by default)",
+    "network: hits a real external service, e.g. the Hugging Face Hub or DuckDuckGo (excluded by default)",
     "ml: local-inference backend tests, run locally via `make test-ml` (excluded from CI)",
 ]
 addopts = "-m 'not network'"
