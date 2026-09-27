@@ -69,7 +69,7 @@ def test_list_downloaded_empty_when_nothing_seeded():
 
 # llama-cpp-python 0.3.35 reads ggml types 0..42. Patched in because CI runs without
 # the `local` extra, where the listing can't know the build and reports nothing.
-_TYPE_COUNT_PATCH = patch("app.downloads.router.llama_cpp_type_count", return_value=43)
+_TYPE_COUNT_PATCH = patch("app.inference.gguf_header.llama_cpp_type_count", return_value=43)
 
 
 def test_list_downloaded_flags_a_gguf_this_llama_cpp_cannot_load(tmp_path):
