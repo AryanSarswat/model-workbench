@@ -146,6 +146,9 @@ def start_download(
             message="Provide either 'filename' (one GGUF file) or 'snapshot: true'.",
         )
 
+    kind = "snapshot" if body.snapshot else "gguf"
+    _reject_duplicate(session, model_id, kind, body.filename)
+
     if body.snapshot:
         files = get_snapshot_files(model_id)
         if not files:
@@ -154,7 +157,7 @@ def start_download(
                 code="no_transformers_snapshot",
                 message=f"'{model_id}' has no non-GGUF files to snapshot.",
             )
-        job = _create_job(session, model_id, kind="snapshot")
+        job = _create_job(session, model_id, kind)
         background_tasks.add_task(run_snapshot_download, job.id, model_id, files)
         return job
 
@@ -168,9 +171,46 @@ def start_download(
             details={"available": sorted(available)},
         )
 
-    job = _create_job(session, model_id, kind="gguf", filename=body.filename)
+    job = _create_job(session, model_id, kind, body.filename)
     background_tasks.add_task(run_download, job.id, model_id, body.filename)
     return job
+
+
+def _reject_duplicate(session: Session, repo_id: str, kind: str, filename: str | None) -> None:
+    """409 when the same file (or snapshot) is already on disk or already downloading.
+    A second copy would give the inference registry two records for one model, which it
+    rejects as ambiguous; re-downloading means deleting the existing one first."""
+    record_query = select(DownloadedModelRecord).where(
+        DownloadedModelRecord.repo_id == repo_id,
+        DownloadedModelRecord.backend == ("transformers" if kind == "snapshot" else "gguf"),
+    )
+    if kind == "gguf":
+        record_query = record_query.where(DownloadedModelRecord.quant == filename)
+    record = session.exec(record_query).first()
+    if record is not None:
+        raise WorkbenchError(
+            status_code=409,
+            code="already_downloaded",
+            message=f"'{repo_id}' ({filename or 'snapshot'}) is already downloaded; "
+            "delete it first to download it again.",
+            details={"downloaded_model_id": record.id},
+        )
+
+    job = session.exec(
+        select(DownloadJob).where(
+            DownloadJob.repo_id == repo_id,
+            DownloadJob.kind == kind,
+            DownloadJob.filename == filename,
+            DownloadJob.status.in_(["pending", "downloading"]),
+        )
+    ).first()
+    if job is not None:
+        raise WorkbenchError(
+            status_code=409,
+            code="download_in_progress",
+            message=f"'{repo_id}' ({filename or 'snapshot'}) is already downloading.",
+            details={"job_id": job.id},
+        )
 
 
 def _create_job(

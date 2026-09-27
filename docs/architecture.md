@@ -213,7 +213,9 @@ error, all its assertions passed, and any judge score is at least 0.5.
   into `models/<repo>/snapshot/`). Both stream directly (not via `hf_hub_download`,
   which has no progress-callback hook) for real byte-level `{status, percent, detail}`
   on the job row -- snapshot percent is aggregate bytes over the summed Hub-reported
-  sizes. Runs as a FastAPI background task.
+  sizes. Runs as a FastAPI background task. A file or snapshot that is already on disk
+  (`already_downloaded`) or already downloading (`download_in_progress`) is rejected
+  with 409 -- re-downloading means deleting it first.
 - `GET /models/downloads/events` (SSE) — sends every active job on connect, then each
   job whenever its row changes, through to its final `completed`/`failed` state; a
   `: ping` comment every 15 s when idle. The download threads only write the table, so

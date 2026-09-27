@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.db import get_session
 from app.discovery.schemas import GgufFile, ModelDetail, SnapshotFile
@@ -220,6 +220,101 @@ def test_start_snapshot_download_with_no_snapshot_files_returns_400():
 
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "no_transformers_snapshot"
+
+
+def _job_count() -> int:
+    with Session(_test_engine) as session:
+        return len(session.exec(select(DownloadJob)).all())
+
+
+def test_start_download_rejects_a_gguf_already_on_disk():
+    """A second record for the same quant makes even `repo:filename` ambiguous in the
+    inference registry, so the model would become unusable."""
+    record_id = _seed()
+
+    with patch("app.downloads.router.get_model_detail", return_value=_detail()):
+        response = client.post(
+            "/models/meta-llama/Llama-3-8B/download",
+            json={"filename": "model.Q4_K_M.gguf"},
+        )
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "already_downloaded"
+    assert error["details"]["downloaded_model_id"] == record_id
+    assert _job_count() == 0
+
+
+def test_start_download_allows_another_quant_of_a_downloaded_repo():
+    _seed(quant="model.Q8_0.gguf")
+
+    with (
+        patch("app.downloads.router.get_model_detail", return_value=_detail()),
+        patch("app.downloads.router.run_download"),
+    ):
+        response = client.post(
+            "/models/meta-llama/Llama-3-8B/download",
+            json={"filename": "model.Q4_K_M.gguf"},
+        )
+
+    assert response.status_code == 202
+
+
+def test_start_snapshot_download_rejects_a_snapshot_already_on_disk():
+    record_id = _seed(repo_id="org/model", backend="transformers", quant=None)
+
+    with patch(
+        "app.downloads.router.get_snapshot_files",
+        return_value=[SnapshotFile(filename="config.json", size_bytes=100)],
+    ):
+        response = client.post("/models/org/model/download", json={"snapshot": True})
+
+    assert response.status_code == 409
+    error = response.json()["error"]
+    assert error["code"] == "already_downloaded"
+    assert error["details"]["downloaded_model_id"] == record_id
+    assert _job_count() == 0
+
+
+def test_start_download_rejects_while_the_same_download_is_in_progress():
+    with (
+        patch("app.downloads.router.get_model_detail", return_value=_detail()),
+        patch("app.downloads.router.run_download"),
+    ):
+        first = client.post(
+            "/models/meta-llama/Llama-3-8B/download",
+            json={"filename": "model.Q4_K_M.gguf"},
+        )
+        second = client.post(
+            "/models/meta-llama/Llama-3-8B/download",
+            json={"filename": "model.Q4_K_M.gguf"},
+        )
+
+    assert first.status_code == 202  # run_download is patched out, so it stays pending
+    assert second.status_code == 409
+    error = second.json()["error"]
+    assert error["code"] == "download_in_progress"
+    assert error["details"]["job_id"] == first.json()["id"]
+    assert _job_count() == 1
+
+
+def test_start_download_allows_retrying_after_a_failed_job():
+    with Session(_test_engine) as session:
+        session.add(
+            DownloadJob(repo_id="org/model", kind="snapshot", status="failed", error="boom")
+        )
+        session.commit()
+
+    with (
+        patch(
+            "app.downloads.router.get_snapshot_files",
+            return_value=[SnapshotFile(filename="config.json", size_bytes=100)],
+        ),
+        patch("app.downloads.router.run_snapshot_download"),
+    ):
+        response = client.post("/models/org/model/download", json={"snapshot": True})
+
+    assert response.status_code == 202
 
 
 def test_start_download_rejects_filename_combined_with_snapshot():
