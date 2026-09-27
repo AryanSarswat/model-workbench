@@ -202,6 +202,16 @@ describe('PlaygroundPage', () => {
     expect(body).toMatchObject({ model_id: 'Qwen/Qwen3-14B', backend: 'gguf' })
   })
 
+  it('shows the empty-backend hint instead of crashing when switching to a backend with nothing downloaded', async () => {
+    renderPlayground('/playground', [])
+    await screen.findByText('calculator')
+
+    fireEvent.click(screen.getByRole('button', { name: 'GGUF' }))
+
+    expect(await screen.findByText(/No gguf models downloaded/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+  })
+
   it('flags a downloaded gguf this llama.cpp build cannot load and blocks sending before any message', async () => {
     const reason = "unsupported quantization: tensor 'output.weight' in Ternary-Bonsai-2-27B-PQ2_0.gguf uses ggml type 142"
     const fetchMock = renderPlayground('/playground?backend=gguf', [], [
