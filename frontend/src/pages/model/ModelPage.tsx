@@ -1,9 +1,9 @@
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
+import { useMutation, useQuery, type UseQueryResult } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router'
 import { ApiError } from '../../api/client'
-import { getEvalReport, getModel, listDownloaded, startDownload } from '../../api/endpoints'
-import { isActiveJob, useDownloadJobs } from '../../api/hooks'
+import { getEvalReport, getModel, startDownload } from '../../api/endpoints'
+import { isActiveJob, useDownloadedModels, useDownloadJobs } from '../../api/hooks'
 import type {
   DownloadJob,
   DownloadRequest,
@@ -58,17 +58,15 @@ export default function ModelPage() {
 }
 
 function ModelPageBody({ modelId }: { modelId: string }) {
-  const queryClient = useQueryClient()
 
   const modelQuery = useQuery({ queryKey: ['models', modelId], queryFn: () => getModel(modelId) })
   const feasibilityQuery = useQuery(feasibilityQueryOptions(modelId))
-  const downloadedQuery = useQuery({ queryKey: ['models', 'downloaded'], queryFn: listDownloaded })
+  const downloadedQuery = useDownloadedModels()
   const evalReportQuery = useQuery({ queryKey: ['evals', 'report'], queryFn: getEvalReport })
 
-  // A completed job flips its row to "on disk"; a failed one stays listed with its error.
-  const allJobs = useDownloadJobs((job) => {
-    if (job.status === 'completed') void queryClient.invalidateQueries({ queryKey: ['models', 'downloaded'] })
-  })
+  // useDownloadJobs refreshes the downloaded list when a job completes, flipping its row
+  // to "on disk"; a failed one stays listed with its error.
+  const allJobs = useDownloadJobs()
   const modelJobs = useMemo(() => allJobs.filter((job) => job.repo_id === modelId), [allJobs, modelId])
   const modelActiveJobs = useMemo(() => modelJobs.filter(isActiveJob), [modelJobs])
   const failedDownloads = useMemo<FailedDownload[]>(

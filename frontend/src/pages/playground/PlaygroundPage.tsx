@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
-import { listDownloaded, listTools } from '../../api/endpoints'
+import { useDownloadedModels, useTools } from '../../api/hooks'
 import type { BackendName } from '../../api/types'
 import { BACKEND_NAMES, BACKENDS } from '../../lib/backends'
 import { NATIVE_TOOL_CALLING } from './capabilities'
@@ -33,8 +32,8 @@ export default function PlaygroundPage() {
   const [selectedTools, setSelectedTools] = useState<Set<string>>(new Set())
   const [draft, setDraft] = useState('')
 
-  const downloadedQuery = useQuery({ queryKey: ['playground', 'downloaded-models'], queryFn: listDownloaded })
-  const toolsQuery = useQuery({ queryKey: ['playground', 'tools'], queryFn: listTools })
+  const downloadedQuery = useDownloadedModels()
+  const toolsQuery = useTools()
 
   const records = useMemo(() => downloadedQuery.data ?? [], [downloadedQuery.data])
   const modelOptions = useMemo(() => modelOptionsFor(backend, records), [backend, records])

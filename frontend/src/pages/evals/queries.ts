@@ -1,6 +1,6 @@
 // Queries and the run-starting mutation used by EvalsPage.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { getEvalReport, listCases, listDownloaded } from '../../api/endpoints'
+import { getEvalReport, listCases } from '../../api/endpoints'
 import type { EvalRunRequest } from '../../api/types'
 import { activeRunKey, reportKey, startEvalRun, type ActiveEvalRun } from './activeRun'
 
@@ -13,13 +13,6 @@ export function useDatasetCategories() {
   return useQuery({
     queryKey: ['evals', 'dataset-categories'] as const,
     queryFn: async () => (await listCases()).map((testCase) => testCase.category),
-  })
-}
-
-export function useDownloadedModels() {
-  return useQuery({
-    queryKey: ['evals', 'downloaded-models'] as const,
-    queryFn: listDownloaded,
   })
 }
 
