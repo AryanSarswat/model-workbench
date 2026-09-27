@@ -4,6 +4,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import type { DownloadJob, DownloadedModelRecord, FeasibilityReport, HardwareInfo, ModelDetail } from '../../api/types'
 import { routes } from '../../routes'
+import { sseStream } from '../../test/sseStream'
 
 const hardware: HardwareInfo = {
   platform: 'darwin',
@@ -82,6 +83,23 @@ function renderModel(responses: Record<string, Response>) {
   )
 }
 
+// An event stream that sends `jobs` and then stays open, like the real endpoint.
+function jobsStream(...jobs: DownloadJob[]): Response {
+  const stream = sseStream()
+  jobs.forEach(stream.send)
+  return stream.response
+}
+
+function renderWithFetch(fetchImpl: (url: string) => Promise<Response>) {
+  vi.stubGlobal('fetch', vi.fn(fetchImpl))
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={createMemoryRouter(routes, { initialEntries: ['/models/Qwen/Qwen3-14B'] })} />
+    </QueryClientProvider>,
+  )
+}
+
 const commonResponses = {
   '/api/config/hardware': () => Response.json(hardware),
   '/api/config/hf-api-key': () => Response.json({ is_set: false }),
@@ -101,7 +119,7 @@ describe('ModelPage', () => {
     renderModel(
       withCommon({
         '/api/models/downloaded': Response.json([downloadedRecord]),
-        '/api/models/downloads?active=true': Response.json([activeJob]),
+        '/api/models/downloads/events': jobsStream(activeJob),
       }),
     )
 
@@ -125,7 +143,7 @@ describe('ModelPage', () => {
       }
       const responses = withCommon({
         '/api/models/downloaded': Response.json([]),
-        '/api/models/downloads?active=true': Response.json([]),
+        '/api/models/downloads/events': jobsStream(),
       })
       return responses[url] ?? new Response('not mocked', { status: 500 })
     })
@@ -149,63 +167,39 @@ describe('ModelPage', () => {
     )
   })
 
-  it('flips a row to On disk · Chat once its active job drops out of the active list', async () => {
-    let activePolls = 0
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url === '/api/models/downloads?active=true') {
-        activePolls += 1
-        return activePolls === 1 ? Response.json([activeJob]) : Response.json([])
-      }
-      if (url === '/api/models/downloads/7') {
-        return Response.json({ ...activeJob, status: 'completed', percent: 100 })
-      }
+  it('flips a row to On disk · Chat when the stream reports its job completed', async () => {
+    const stream = sseStream()
+    let downloadedCalls = 0
+    renderWithFetch(async (url: string) => {
+      if (url === '/api/models/downloads/events') return stream.response
       if (url === '/api/models/downloaded') {
-        return activePolls < 2 ? Response.json([]) : Response.json([downloadedRecord])
+        downloadedCalls += 1
+        return Response.json(downloadedCalls === 1 ? [] : [downloadedRecord])
       }
-      const responses = withCommon({})
-      return responses[url] ?? new Response('not mocked', { status: 500 })
+      return withCommon({})[url] ?? new Response('not mocked', { status: 500 })
     })
-    vi.stubGlobal('fetch', fetchMock)
 
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={createMemoryRouter(routes, { initialEntries: ['/models/Qwen/Qwen3-14B'] })} />
-      </QueryClientProvider>,
-    )
-
+    stream.send(activeJob)
     expect(await screen.findByText('Downloading 62%')).toBeInTheDocument()
 
-    // The job disappears from the next 1s poll; the page asks for its final status and,
-    // since it completed, invalidates the downloaded list so the row flips over.
-    expect(
-      await screen.findByRole('link', { name: /On disk · Chat/ }, { timeout: 3000 }),
-    ).toHaveAttribute('href', '/playground?model=Qwen%2FQwen3-14B&backend=gguf&quant=Qwen3-14B-Q4_K_M.gguf')
+    // Completion refetches the downloaded list, so the row flips over.
+    stream.send({ ...activeJob, status: 'completed', percent: 100 })
+    expect(await screen.findByRole('link', { name: /On disk · Chat/ })).toHaveAttribute(
+      'href',
+      '/playground?model=Qwen%2FQwen3-14B&backend=gguf&quant=Qwen3-14B-Q4_K_M.gguf',
+    )
   })
 
-  it('surfaces a failed download error once the job drops out of the active list', async () => {
-    let activePolls = 0
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url === '/api/models/downloads?active=true') {
-        activePolls += 1
-        return activePolls === 1 ? Response.json([activeJob]) : Response.json([])
-      }
-      if (url === '/api/models/downloads/7') {
-        return Response.json({ ...activeJob, status: 'failed', percent: 40, error: 'Disk full' })
-      }
-      const responses = withCommon({ '/api/models/downloaded': Response.json([]) })
-      return responses[url] ?? new Response('not mocked', { status: 500 })
+  it('surfaces a failed download error from the stream', async () => {
+    const stream = sseStream()
+    renderWithFetch(async (url: string) => {
+      if (url === '/api/models/downloads/events') return stream.response
+      return withCommon({ '/api/models/downloaded': Response.json([]) })[url] ?? new Response('not mocked', { status: 500 })
     })
-    vi.stubGlobal('fetch', fetchMock)
 
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={createMemoryRouter(routes, { initialEntries: ['/models/Qwen/Qwen3-14B'] })} />
-      </QueryClientProvider>,
-    )
-
+    stream.send(activeJob)
     expect(await screen.findByText('Downloading 62%')).toBeInTheDocument()
-    expect(await screen.findByText(/Disk full/, undefined, { timeout: 3000 })).toBeInTheDocument()
+    stream.send({ ...activeJob, status: 'failed', percent: 40, error: 'Disk full' })
+    expect(await screen.findByText(/Disk full/)).toBeInTheDocument()
   })
 })
