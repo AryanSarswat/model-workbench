@@ -163,6 +163,11 @@ async def run_tool_loop(
     """
     retrier = PromptJsonRetrier()
     retry_message = _RETRY_MESSAGE if output_schema is None else _SCHEMA_RETRY_MESSAGE
+    final_answer = (
+        'a {"reply": ...} object'
+        if output_schema is None
+        else "the final answer as a JSON object conforming to the schema"
+    )
     history = list(messages)
     last_text = ""
     tool_calls: list[ToolCallRecord] = []
@@ -186,8 +191,7 @@ async def run_tool_loop(
                     role="user",
                     content=(
                         f"Tool '{parsed.tool_name}' is not available. Reply with "
-                        "exactly one JSON object using an available tool or a "
-                        '{"reply": ...} object.'
+                        f"exactly one JSON object using an available tool or {final_answer}."
                     ),
                 )
             )

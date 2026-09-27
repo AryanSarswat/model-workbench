@@ -248,8 +248,9 @@ class TransformersBackend:
             yield ChatChunk(done=True, error=f"failed to load {self._snapshot_dir}: {e}")
             return
         if tools:
-            # Guided setup failures (bad schema, missing outlines) raise
-            # pre-stream; everything else is a terminal chunk, never raised.
+            # Guided setup failures (bad schema, missing outlines) raise as a
+            # WorkbenchError -- the router's prevalidation normally catches a bad
+            # schema first; everything else is a terminal chunk, never raised.
             async for chunk in stream_tool_turn(
                 lambda on_event: self._run_fallback_tool_loop(
                     model, tokenizer, messages, tools, output_schema, on_event

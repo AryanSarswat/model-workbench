@@ -121,6 +121,22 @@ def test_schema_conforming_turn_is_the_final_reply():
     assert '"reply"' not in retry
 
 
+def test_unavailable_tool_feedback_asks_for_the_schema_answer():
+    schema = {"type": "object", "required": ["answer"]}
+    seen: list[list[ChatMessage]] = []
+    turns = ['{"tool": "nope", "arguments": {}}', '{"answer": 5}']
+
+    async def generate(history: list[ChatMessage]) -> str:
+        seen.append(list(history))
+        return turns.pop(0)
+
+    asyncio.run(run_tool_loop(generate, _messages(), _specs(), output_schema=schema))
+
+    (feedback,) = [m.content for m in seen[-1] if "is not available" in m.content]
+    assert "conforming to the schema" in feedback
+    assert '"reply"' not in feedback
+
+
 def test_always_tool_calls_stops_after_max_iterations():
     calls: list[list[ChatMessage]] = []
 
