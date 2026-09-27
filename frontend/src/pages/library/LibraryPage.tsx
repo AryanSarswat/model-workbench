@@ -1,14 +1,20 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router'
 import {
   deleteDownloaded,
-  listDownloaded,
-  listTools,
   reloadTools,
   setHfKey,
 } from '../../api/endpoints'
-import { isActiveJob, queryKeys, useDownloadJobs, useHardware, useHfKeyStatus } from '../../api/hooks'
+import {
+  isActiveJob,
+  queryKeys,
+  useDownloadedModels,
+  useDownloadJobs,
+  useHardware,
+  useHfKeyStatus,
+  useTools,
+} from '../../api/hooks'
 import type { DownloadedModelRecord } from '../../api/types'
 import { Button } from '../../components/Button'
 import { Chip } from '../../components/Chip'
@@ -19,18 +25,13 @@ import { formatGb, formatRelative } from '../../lib/format'
 import styles from './LibraryPage.module.css'
 import { chatPath, formatChip, gpuLabel, summarizeParams } from './libraryFormat'
 
-const DOWNLOADED_KEY = ['library', 'downloaded']
-const TOOLS_KEY = ['library', 'tools']
 
 export default function LibraryPage() {
   const queryClient = useQueryClient()
 
-  const downloadedQuery = useQuery({ queryKey: DOWNLOADED_KEY, queryFn: listDownloaded })
-  // A completed job changed the downloaded-models table underneath this page.
-  const allJobs = useDownloadJobs((job) => {
-    if (job.status === 'completed') void queryClient.invalidateQueries({ queryKey: DOWNLOADED_KEY })
-  })
-  const toolsQuery = useQuery({ queryKey: TOOLS_KEY, queryFn: listTools })
+  const downloadedQuery = useDownloadedModels()
+  const allJobs = useDownloadJobs()
+  const toolsQuery = useTools()
 
   const downloaded = downloadedQuery.data ?? []
   const jobs = allJobs.filter(isActiveJob)
@@ -41,7 +42,7 @@ export default function LibraryPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteDownloaded,
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: DOWNLOADED_KEY }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.downloadedModels }),
   })
 
   function handleDelete(record: DownloadedModelRecord) {
@@ -54,7 +55,7 @@ export default function LibraryPage() {
     mutationFn: reloadTools,
     onSuccess: (result) => {
       setReloadStatus(`Reloaded ${result.count} tool${result.count === 1 ? '' : 's'}`)
-      void queryClient.invalidateQueries({ queryKey: TOOLS_KEY })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.tools })
     },
   })
 

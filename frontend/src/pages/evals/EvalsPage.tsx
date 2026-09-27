@@ -11,7 +11,8 @@ import { BACKENDS, BACKEND_NAMES, type BackendInfo } from '../../lib/backends'
 import type { ActiveEvalRun } from './activeRun'
 import { aggregateReport, type EvalMatrix, type MatrixCell } from './aggregateReport'
 import styles from './EvalsPage.module.css'
-import { useActiveEvalRun, useDatasetCategories, useDownloadedModels, useEvalReport, useStartEvalRun } from './queries'
+import { useDownloadedModels } from '../../api/hooks'
+import { useActiveEvalRun, useDatasetCategories, useEvalReport, useStartEvalRun } from './queries'
 import { buildRunRequest, modelIdSuggestions, sortedCategories, type RunFormState } from './runForm'
 
 export default function EvalsPage() {
