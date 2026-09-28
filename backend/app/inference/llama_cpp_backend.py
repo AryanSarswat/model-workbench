@@ -48,6 +48,10 @@ _SENTINEL = object()
 # instructions plus a fetched page, and 8k overflowed after two page fetches; a model's
 # trained maximum (32k-128k+) can need gigabytes of KV cache for a large model.
 N_CTX = 16384
+# Offload every layer to the GPU (Metal on Apple Silicon). llama-cpp-python's default (0)
+# keeps them all on the CPU even when Metal is available; a llama.cpp build or machine
+# without a GPU backend just keeps them on the CPU.
+N_GPU_LAYERS = -1
 
 
 def _parse_usage(usage_dict: dict | None) -> TokenUsage | None:
@@ -135,7 +139,13 @@ class LlamaCppBackend:
 
     def _get_llama(self) -> Llama:
         return _CACHE.get_or_load(
-            self._model_path, lambda: Llama(model_path=self._model_path, n_ctx=N_CTX, verbose=False)
+            self._model_path,
+            lambda: Llama(
+                model_path=self._model_path,
+                n_ctx=N_CTX,
+                n_gpu_layers=N_GPU_LAYERS,
+                verbose=False,
+            ),
         )
 
     async def _run_native_tool_loop(
