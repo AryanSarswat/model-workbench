@@ -10,11 +10,13 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 
 from huggingface_hub import AsyncInferenceClient
 
+from app.inference.context import build_context_report
 from app.inference.schemas import (
     BACKEND_CAPABILITIES,
     BackendCapabilities,
     ChatChunk,
     ChatMessage,
+    ContextReport,
     TokenUsage,
     combine_usage,
 )
@@ -38,6 +40,13 @@ _SCHEMA_RETRY_MESSAGE = (
     "That was not valid JSON conforming to the required schema. "
     "Reply with exactly one JSON object and nothing else."
 )
+
+
+def _context_report(
+    request: list[ChatMessage], sent: list[ChatMessage] | None = None
+) -> ContextReport:
+    """No local tokenizer and no known window: the meter shows usage.prompt_tokens alone."""
+    return build_context_report(request, count_tokens=None, window=None, sent=sent)
 
 
 class HFInferenceAPIBackend:
@@ -112,8 +121,11 @@ class HFInferenceAPIBackend:
         """The tool loop (with tools), then schema turns unless its reply already
         conforms to output_schema."""
         usages: list[TokenUsage] = []
+        sent: list[ChatMessage] = []
 
         async def _generate(history: list[ChatMessage]) -> str:
+            nonlocal sent
+            sent = list(history)
             text, usage = await self._generate_text(model_id, history)
             if usage is not None:
                 usages.append(usage)
@@ -139,6 +151,7 @@ class HFInferenceAPIBackend:
             LoopResult(text=final, tool_calls=loop_result.tool_calls),
             combine_usage(usages),
             retries,
+            _context_report(messages, sent),
         )
 
     async def stream_chat(
@@ -182,6 +195,10 @@ class HFInferenceAPIBackend:
                         prompt_tokens=completion_chunk.usage.prompt_tokens,
                         completion_tokens=completion_chunk.usage.completion_tokens,
                     )
-            yield ChatChunk(done=True, usage=usage)
+            yield ChatChunk(
+                done=True,
+                usage=usage,
+                context=_context_report(messages),
+            )
         except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
             yield ChatChunk(done=True, error=str(e))
