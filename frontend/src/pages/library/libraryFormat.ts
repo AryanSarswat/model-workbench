@@ -8,9 +8,12 @@ export function formatChip(record: DownloadedModelRecord): string {
   if (record.backend === 'transformers') return 'transformers snapshot'
   const quant = record.quant ?? ''
   const withoutExt = quant.replace(/\.gguf$/i, '')
-  const repoName = record.repo_id.split('/').pop() ?? ''
+  // "Org/Model-GGUF" repos usually name files "model-<quant>", in any case.
+  const modelName = (record.repo_id.split('/').pop() ?? '').replace(/-gguf$/i, '')
   const stripped =
-    repoName && withoutExt.startsWith(repoName) ? withoutExt.slice(repoName.length).replace(/^[-_.]+/, '') : withoutExt
+    modelName && withoutExt.toLowerCase().startsWith(modelName.toLowerCase())
+      ? withoutExt.slice(modelName.length).replace(/^[-_.]+/, '')
+      : withoutExt
   return `GGUF · ${stripped || withoutExt}`
 }
 

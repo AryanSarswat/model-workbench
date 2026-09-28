@@ -67,6 +67,16 @@
   text-decoration: none;
 }
 
+/* Long quant names end in an ellipsis instead of spilling into the size column. */
+.formatChip {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 22px;
+  vertical-align: middle;
+}
+
 .size {
   font-family: var(--mono);
   font-size: 13px;
