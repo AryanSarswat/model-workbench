@@ -117,7 +117,8 @@ Three implementations: `HFInferenceAPIBackend` (remote, via
 `huggingface_hub.AsyncInferenceClient` — genuinely async, so a slow provider response
 doesn't block the event loop; which `model_id`s actually work depends on HF routing to an
 enabled provider, surfaced as a normal 4xx rather than a crash). `LlamaCppBackend` (GGUF via
-llama-cpp-python, runs on any hardware) resolves its file from the downloaded-models table
+llama-cpp-python, runs on any hardware: every layer is offloaded to the GPU backend
+llama.cpp was built with -- Metal on Apple Silicon -- and stays on the CPU without one) resolves its file from the downloaded-models table
 in the registry (`repo_id`, or `repo_id:filename` when several quants are on disk) and
 keeps the loaded model in a `LoadedModelCache` (`model_cache.py`) that holds one model
 per local backend: loading another path drops the previous one, and
