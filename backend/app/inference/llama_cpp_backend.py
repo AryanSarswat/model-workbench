@@ -14,6 +14,7 @@ from pathlib import Path
 
 import llama_cpp
 from llama_cpp import Llama, LlamaGrammar
+from llama_cpp.llama_chat_format import Jinja2ChatFormatter
 
 from app.errors import WorkbenchError
 from app.inference.context import build_context_report
@@ -61,18 +62,39 @@ def _parse_usage(usage_dict: dict | None) -> TokenUsage | None:
     )
 
 
+def _count_prompt_tokens(llama: Llama, messages: list[ChatMessage]) -> int:
+    """Tokens of the prompt as create_chat_completion renders it: the GGUF's own chat
+    template (the same Jinja2ChatFormatter llama-cpp-python applies), else -- for a
+    model without one -- a newline-joined transcript as an approximation."""
+    template = llama.metadata.get("tokenizer.chat_template")
+    if template is None:
+        text = "\n".join(m.content for m in messages)
+        return len(llama.tokenize(text.encode("utf-8"), special=True))
+
+    def token_text(token: int) -> str:
+        return llama.detokenize([token], special=True).decode("utf-8", errors="ignore")
+
+    formatter = Jinja2ChatFormatter(
+        template=template,
+        eos_token=token_text(llama.token_eos()),
+        bos_token=token_text(llama.token_bos()),
+    )
+    rendered = formatter(messages=[m.model_dump() for m in messages])
+    return len(
+        llama.tokenize(
+            rendered.prompt.encode("utf-8"), add_bos=not rendered.added_special, special=True
+        )
+    )
+
+
 def _estimate_streaming_usage(
     llama: Llama, messages: list[ChatMessage], completion_text: str
 ) -> TokenUsage | None:
-    """Approximate usage for the plain streaming path, whose chunks carry no usage.
-
-    Prompt tokens count a newline-joined transcript, not the exact chat-template
-    rendering (not exposed by llama-cpp-python) -- fine for relative tokens/sec.
+    """Usage for the plain streaming path, whose chunks carry none: counted locally.
     Returns None rather than failing a turn that already streamed.
     """
     try:
-        prompt_text = "\n".join(m.content for m in messages)
-        prompt_tokens = len(llama.tokenize(prompt_text.encode("utf-8")))
+        prompt_tokens = _count_prompt_tokens(llama, messages)
         completion_tokens = len(llama.tokenize(completion_text.encode("utf-8"), add_bos=False))
     except Exception:  # noqa: BLE001 -- see above
         return None
@@ -202,7 +224,7 @@ class LlamaCppBackend:
                     return ToolTurn(
                         LoopResult(text=content, tool_calls=executed),
                         combine_usage(usages),
-                        context=_context_report(llama, messages, sent),
+                        context=await asyncio.to_thread(_context_report, llama, messages, sent),
                     )
                 history.append(dict(message))
                 result = await _run_tool(
@@ -230,7 +252,7 @@ class LlamaCppBackend:
         return ToolTurn(
             LoopResult(text=last_content, tool_calls=executed),
             combine_usage(usages),
-            context=_context_report(llama, messages, sent),
+            context=await asyncio.to_thread(_context_report, llama, messages, sent),
         )
 
     async def aclose(self) -> None:
@@ -276,7 +298,7 @@ class LlamaCppBackend:
                 yield ChatChunk(
                     done=True,
                     usage=_parse_usage(response.get("usage")),
-                    context=_context_report(llama, messages),
+                    context=await asyncio.to_thread(_context_report, llama, messages),
                 )
                 return
             stream = llama.create_chat_completion(
@@ -295,8 +317,10 @@ class LlamaCppBackend:
             completion_text = "".join(parts)
             yield ChatChunk(
                 done=True,
-                usage=_estimate_streaming_usage(llama, messages, completion_text),
-                context=_context_report(llama, messages),
+                usage=await asyncio.to_thread(
+                    _estimate_streaming_usage, llama, messages, completion_text
+                ),
+                context=await asyncio.to_thread(_context_report, llama, messages),
             )
         except Exception as e:  # noqa: BLE001 -- failures are a terminal chunk, never raised
             yield ChatChunk(done=True, error=str(e))

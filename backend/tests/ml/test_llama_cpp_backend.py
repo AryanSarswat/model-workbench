@@ -1,5 +1,6 @@
 import asyncio
 import json
+from typing import ClassVar
 
 import pytest
 from llama_cpp import LlamaGrammar
@@ -22,6 +23,8 @@ def _clear_cache():
 
 
 class _FakeLlama:
+    metadata: ClassVar[dict] = {}  # no chat template unless a test sets one
+
     def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
         self.model_path = model_path
         self._n_ctx = n_ctx
@@ -29,10 +32,16 @@ class _FakeLlama:
     def n_ctx(self) -> int:
         return self._n_ctx
 
-    def n_ctx(self) -> int:
-        return 4096
+    def token_eos(self) -> int:
+        return 0
 
-    def tokenize(self, data: bytes, add_bos: bool = True) -> list[int]:
+    def token_bos(self) -> int:
+        return 0
+
+    def detokenize(self, tokens: list[int], special: bool = False) -> bytes:
+        return b""
+
+    def tokenize(self, data: bytes, add_bos: bool = True, special: bool = False) -> list[int]:
         # One "token" per whitespace-separated word -- good enough to test the
         # wiring, not a real tokenizer.
         return data.decode().split()
@@ -145,7 +154,7 @@ class _FakeToolLlama(_FakeLlama):
     """First non-streamed turn requests a calculator call, the second answers."""
 
     def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, verbose)
+        super().__init__(model_path, n_ctx, verbose)
         self.seen: list[list[dict]] = []
 
     def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
@@ -190,7 +199,7 @@ def test_stream_chat_with_tools_executes_the_call_and_streams_the_final_text(mon
     assert tool_messages == [{"role": "tool", "tool_call_id": "call_1", "content": "5"}]
     # The context is that last turn's messages, against the loaded window.
     assert [m.kind for m in done.context.messages] == ["user", "assistant", "tool"]
-    assert done.context.window == 4096
+    assert done.context.window == llama_cpp_backend.N_CTX
     assert done.context.messages[0].tokens == 5  # "What is 2 + 3?" in the fake's words
 
 
@@ -222,7 +231,7 @@ class _FakeUnknownToolLlama(_FakeLlama):
     tool_name = "nonexistent_tool"
 
     def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, verbose)
+        super().__init__(model_path, n_ctx, verbose)
         self.seen: list[list[dict]] = []
 
     def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
@@ -286,7 +295,7 @@ class _FakePlainTextToolLlama(_FakeLlama):
     """Small models emit the tool attempt as plain-text <tool_call> JSON."""
 
     def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, verbose)
+        super().__init__(model_path, n_ctx, verbose)
         self.seen: list[list[dict]] = []
 
     def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
@@ -346,7 +355,7 @@ class _FakeSchemaLlama(_FakeLlama):
     streaming (no-schema) and non-streamed (schema) call shapes."""
 
     def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, verbose)
+        super().__init__(model_path, n_ctx, verbose)
         self.seen_kwargs: dict = {}
 
     def create_chat_completion(self, messages, stream=True, **kwargs):
@@ -431,7 +440,7 @@ class _FakeSchemaToolLlama(_FakeLlama):
     """One native tool turn, then a final answer -- every turn must carry grammar."""
 
     def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, verbose)
+        super().__init__(model_path, n_ctx, verbose)
         self.grammars: list = []
         self.turns = 0
 
@@ -475,6 +484,25 @@ def test_stream_chat_with_tools_and_schema_constrains_every_turn(monkeypatch):
     assert chunks[-1].done is True
     assert chunks[-1].error is None
     assert chunks[-1].tools_called == ["calculator"]
+
+
+def test_streamed_prompt_tokens_count_the_rendered_chat_template(monkeypatch):
+    """Streamed chunks carry no usage, so prompt tokens are counted locally -- from the
+    prompt as the GGUF's chat template renders it, or the context meter would miss the
+    template's tokens and understate how full the window is."""
+
+    class _TemplatedLlama(_FakeLlama):
+        metadata: ClassVar[dict] = {
+            "tokenizer.chat_template": (
+                "{% for m in messages %}<|{{ m.role }}|> {{ m.content }} {% endfor %}<|assistant|>"
+            )
+        }
+
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _TemplatedLlama)
+
+    chunks = _run_stream_chat(LlamaCppBackend("/tmp/fake.gguf"))
+
+    assert chunks[-1].usage.prompt_tokens == 3  # "<|user|> hi <|assistant|>"
 
 
 def test_stream_chat_reports_approximate_usage_from_tokenize(monkeypatch):
