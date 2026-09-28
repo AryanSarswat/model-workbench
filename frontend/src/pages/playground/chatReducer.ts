@@ -1,4 +1,4 @@
-import type { BackendName, ChatMessage, TokenUsage, ToolCallRecord, ToolCallStart } from '../../api/types'
+import type { BackendName, ChatMessage, ContextReport, TokenUsage, ToolCallRecord, ToolCallStart } from '../../api/types'
 
 export interface TurnMetrics {
   ttftMs: number | null // request start -> first non-empty delta
@@ -18,6 +18,7 @@ export interface ChatTurn {
   retries: number
   usage: TokenUsage | null
   metrics: TurnMetrics | null
+  context: ContextReport | null // what the model was given, from the done chunk
   hadSchema: boolean // this request carried an output_schema
   modelId: string // the model/backend this turn was actually sent with, for the header
   backend: BackendName // (so switching backend mid-chat doesn't relabel earlier turns)
@@ -28,7 +29,15 @@ export type ChatAction =
   | { type: 'delta'; id: string; text: string }
   | { type: 'toolStarted'; id: string; call: ToolCallStart }
   | { type: 'toolFinished'; id: string; call: ToolCallRecord }
-  | { type: 'done'; id: string; usage: TokenUsage | null; toolCalls: ToolCallRecord[]; retries: number; metrics: TurnMetrics }
+  | {
+      type: 'done'
+      id: string
+      usage: TokenUsage | null
+      toolCalls: ToolCallRecord[]
+      retries: number
+      metrics: TurnMetrics
+      context?: ContextReport | null
+    }
   | { type: 'error'; id: string; error: unknown }
   | { type: 'stop'; id: string }
   | { type: 'reset' }
@@ -54,6 +63,7 @@ function newTurn(
     retries: 0,
     usage: null,
     metrics: null,
+    context: null,
     hadSchema,
     modelId,
     backend,
@@ -90,6 +100,7 @@ export function chatReducer(state: ChatTurn[], action: ChatAction): ChatTurn[] {
               toolCalls: action.toolCalls,
               retries: action.retries,
               metrics: action.metrics,
+              context: action.context ?? null,
             }
           : turn,
       )

@@ -8,6 +8,7 @@ import { toolCallingChip } from '../../lib/backends'
 import { cx } from '../../lib/cx'
 import { formatMs, formatSeconds, formatTokensPerSec } from '../../lib/format'
 import type { ChatTurn } from './chatReducer'
+import { ContextMeter } from './ContextMeter'
 import { backendDisplayLabel, shortModelName } from './modelOptions'
 import { parseSchemaJson } from './requestBuilder'
 import styles from './Transcript.module.css'
@@ -98,6 +99,8 @@ function AssistantTurn({ turn }: { turn: ChatTurn }) {
           <span>{formatSeconds(turn.metrics?.totalMs ?? null)}</span>
         </div>
       )}
+
+      {settled && turn.context && <ContextMeter context={turn.context} usage={turn.usage} />}
 
       {turn.error != null && <ErrorNotice error={turn.error} />}
     </article>
