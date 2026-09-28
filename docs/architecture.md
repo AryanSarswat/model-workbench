@@ -176,6 +176,15 @@ terminal error chunk. The terminal chunk's `tool_calls` still lists every record
 eval engine records whether a result used native tool calling (`native_tool_calling` on
 each eval result).
 
+**Context report:** every successful done chunk carries `context` (`ContextReport`,
+built by `inference/context.py`): each message the turn's last generation was given,
+labelled `system | instructions | user | assistant | tool` (`instructions` = the
+workbench's tool-protocol prompt and retry feedback) with its token count, plus the
+model's window — `max_position_embeddings` for transformers, the loaded `n_ctx` for
+llama.cpp, unknown (`null`, and no per-message counts) for the HF API. The Playground's
+context meter reads it; `usage.prompt_tokens` minus the counted messages is chat-template
+markup (and llama.cpp's injected tool schemas).
+
 ## Shared tools directory
 
 `backend/app/tools/` is the single source of truth for available tools — no database to

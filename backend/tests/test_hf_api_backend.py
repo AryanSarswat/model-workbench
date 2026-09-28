@@ -159,6 +159,11 @@ def test_stream_chat_with_tools_runs_the_fallback_loop(monkeypatch):
     assert chunks[-1].error is None
     # The real calculator ran and its result reached the model on the next turn.
     assert any("Tool 'calculator' returned: 5" in m["content"] for m in sent_messages[-1])
+    # The context is that last turn's messages; a remote model has no local
+    # tokenizer or known window.
+    context = done.context
+    assert [m.kind for m in context.messages] == ["instructions", "user", "assistant", "tool"]
+    assert (context.window, context.messages[0].tokens) == (None, None)
 
 
 def test_stream_chat_with_tools_converts_hf_error_to_a_terminal_error_chunk(monkeypatch):
