@@ -25,9 +25,12 @@ def _clear_cache():
 class _FakeLlama:
     metadata: ClassVar[dict] = {}  # no chat template unless a test sets one
 
-    def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
+    def __init__(
+        self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+    ) -> None:
         self.model_path = model_path
         self._n_ctx = n_ctx
+        self.n_gpu_layers = n_gpu_layers
 
     def n_ctx(self) -> int:
         return self._n_ctx
@@ -93,6 +96,16 @@ def test_model_loads_with_room_for_tool_results(monkeypatch):
     assert llama.n_ctx() == 16384
 
 
+def test_model_offloads_every_layer_to_the_gpu(monkeypatch):
+    """llama-cpp-python defaults to n_gpu_layers=0, which ran every GGUF on the CPU even
+    with Metal available; -1 offloads all layers, and CPU-only builds keep them on CPU."""
+    monkeypatch.setattr(llama_cpp_backend, "Llama", _FakeLlama)
+
+    llama = LlamaCppBackend("/tmp/fake.gguf")._get_llama()
+
+    assert llama.n_gpu_layers == -1
+
+
 def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
     monkeypatch.setattr(llama_cpp_backend, "Llama", _FakeLlama)
     backend = LlamaCppBackend("/tmp/fake.gguf")
@@ -123,7 +136,9 @@ def test_stream_chat_converts_generation_error_to_a_terminal_error_chunk(monkeyp
 
 def test_stream_chat_names_the_model_when_loading_fails(monkeypatch):
     class _MissingLlama(_FakeLlama):
-        def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
+        def __init__(
+            self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+        ) -> None:
             raise OSError("file does not exist")
 
     monkeypatch.setattr(llama_cpp_backend, "Llama", _MissingLlama)
@@ -153,8 +168,10 @@ def _tool_call_message(call_id: str, name: str, arguments) -> dict:
 class _FakeToolLlama(_FakeLlama):
     """First non-streamed turn requests a calculator call, the second answers."""
 
-    def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, n_ctx, verbose)
+    def __init__(
+        self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+    ) -> None:
+        super().__init__(model_path, n_ctx, n_gpu_layers, verbose)
         self.seen: list[list[dict]] = []
 
     def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
@@ -230,8 +247,10 @@ class _FakeUnknownToolLlama(_FakeLlama):
 
     tool_name = "nonexistent_tool"
 
-    def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, n_ctx, verbose)
+    def __init__(
+        self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+    ) -> None:
+        super().__init__(model_path, n_ctx, n_gpu_layers, verbose)
         self.seen: list[list[dict]] = []
 
     def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
@@ -294,8 +313,10 @@ def test_stream_chat_with_tools_returns_empty_when_turns_run_out(monkeypatch):
 class _FakePlainTextToolLlama(_FakeLlama):
     """Small models emit the tool attempt as plain-text <tool_call> JSON."""
 
-    def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, n_ctx, verbose)
+    def __init__(
+        self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+    ) -> None:
+        super().__init__(model_path, n_ctx, n_gpu_layers, verbose)
         self.seen: list[list[dict]] = []
 
     def create_chat_completion(self, messages, stream=True, tools=None, tool_choice=None):
@@ -354,8 +375,10 @@ class _FakeSchemaLlama(_FakeLlama):
     """Records kwargs so tests can assert on the grammar kwarg and serves both the
     streaming (no-schema) and non-streamed (schema) call shapes."""
 
-    def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, n_ctx, verbose)
+    def __init__(
+        self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+    ) -> None:
+        super().__init__(model_path, n_ctx, n_gpu_layers, verbose)
         self.seen_kwargs: dict = {}
 
     def create_chat_completion(self, messages, stream=True, **kwargs):
@@ -439,8 +462,10 @@ def test_prevalidate_output_schema_accepts_valid_schema():
 class _FakeSchemaToolLlama(_FakeLlama):
     """One native tool turn, then a final answer -- every turn must carry grammar."""
 
-    def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
-        super().__init__(model_path, n_ctx, verbose)
+    def __init__(
+        self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+    ) -> None:
+        super().__init__(model_path, n_ctx, n_gpu_layers, verbose)
         self.grammars: list = []
         self.turns = 0
 
@@ -517,7 +542,9 @@ def test_stream_chat_reports_approximate_usage_from_tokenize(monkeypatch):
 
 
 class _FailingLlama:
-    def __init__(self, model_path: str, n_ctx: int = 512, verbose: bool = False) -> None:
+    def __init__(
+        self, model_path: str, n_ctx: int = 512, n_gpu_layers: int = 0, verbose: bool = False
+    ) -> None:
         raise ValueError(f"Failed to load model from file: {model_path}")
 
 
