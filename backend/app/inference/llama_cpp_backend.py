@@ -45,9 +45,9 @@ from app.tools import ToolSpec, get_enabled_tool
 _CACHE: LoadedModelCache[Llama] = LoadedModelCache()
 _SENTINEL = object()
 # Context window to load with. llama-cpp-python's default (512) can't hold the tool
-# instructions plus a fetched page; a model's trained maximum (32k-128k+) can need
-# gigabytes of KV cache for a large model.
-N_CTX = 8192
+# instructions plus a fetched page, and 8k overflowed after two page fetches; a model's
+# trained maximum (32k-128k+) can need gigabytes of KV cache for a large model.
+N_CTX = 16384
 
 
 def _parse_usage(usage_dict: dict | None) -> TokenUsage | None:

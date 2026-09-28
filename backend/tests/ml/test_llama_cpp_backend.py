@@ -78,7 +78,7 @@ def test_model_loads_with_room_for_tool_results(monkeypatch):
 
     llama = LlamaCppBackend("/tmp/fake.gguf")._get_llama()
 
-    assert llama.n_ctx() == 8192
+    assert llama.n_ctx() == 16384
 
 
 def test_stream_chat_yields_deltas_then_a_terminal_done_chunk(monkeypatch):
